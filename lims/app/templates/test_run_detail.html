@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}{{ tr.test_run_no }}{% endblock %}
+{% block content %}
+<div x-data="trPage()">
+<section class="hero">
+  <div class="crumb small mono muted"><a href="/test-runs">시험런</a> › {{ tr.test_type }} › {{ tr.test_run_no }}</div>
+  <h1 class="mono" style="font-size:24px;margin-top:6px">{{ tr.test_run_no }} <span class="sub" style="font-size:15px;color:var(--ink-3)">{{ tpl.name }}</span></h1>
+  <div class="meta">
+    <span class="chip st-{{ tr.status }}"><span class="dot"></span>{{ tr.status }}</span>
+    <span class="chip">템플릿 <b>{{ tpl.code }} v{{ tpl.version }}</b></span>
+    {% if tr.equipment %}<span class="chip">설비 <b>{{ tr.equipment }}</b></span>{% endif %}
+    <span class="chip">시작 <b>{{ tr.start_date|d }}</b></span>{% if tr.end_date %}<span class="chip">종료 <b>{{ tr.end_date|d }}</b></span>{% endif %}
+    {% for c in tpl.condition_schema or [] %}{% set v = (tr.conditions or {}).get(c.key) %}{% if v is not none %}<span class="chip">{{ c.label }} <b>{{ v }}{{ c.unit or '' }}</b></span>{% endif %}{% endfor %}
+    <span class="chip">기본 {{ tpl.default_cycles }}회{% if tpl.default_interval_days %}, {{ tpl.default_interval_days }}일 간격{% endif %}</span>
+    <span class="chip">빈칸 <b>{{ empty }}</b></span>
+  </div>
+  <div class="acts">
+    <button class="btn" @click="bd.open=true">{{ icon('scan', 16) }} 시편 탑승</button>
+    <button class="btn" @click="ps.open=true">{{ icon('paste', 16) }} 엑셀 붙여넣기</button>
+    <a class="btn" href="/api/test-runs/{{ tr.test_run_no }}/export.xlsx">{{ icon('download', 16) }} Excel 내보내기</a>
+    <a class="btn" href="/api/test-runs/{{ tr.test_run_no }}/report.pptx">{{ icon('download', 16) }} PPT</a>
+    <a class="btn" href="/api/labels/print.pdf?test_run={{ tr.test_run_no }}" target="_blank">{{ icon('label', 16) }} 시험런 라벨</a>
+    {% if tr.status == 'RUNNING' %}<button class="btn danger" @click="finish()">{{ icon('check', 16) }} 종료 (전체 회수)</button>{% endif %}
+  </div>
+</section>
+
+<div class="drop" id="tr-drop" style="margin-bottom:16px">{{ icon('upload', 24) }}
+  <div><b>사진 폴더를 여기로 끌어 놓으세요</b> — 파일명이 <code>26P4-C0102_W03_front.jpg</code> 형식이면 시편·회차 셀에 자동 배치합니다. 매칭되지 않은 파일은 내 미분류함으로 갑니다.
+  <ul class="upl-list" id="tr-upl"></ul></div></div>
+
+<div class="grid-wrap">
+  <section class="card">
+    <header><h2>{{ icon('test') }}결과 그리드</h2><span class="meta mono">총 {{ rows|length }} 시편 × {{ cols|length }} 회차 ({{ rows|length * cols|length }} 셀) · <b style="color:var(--ink)">{{ empty }} 셀 미입력</b> · 표시: {% for f in tpl.grid_fields %}{{ f.label }}{% if f.unit %}({{ f.unit }}){% endif %}{% endfor %}</span>
+      <div class="r"><button class="btn sm" @click="cycles(-1)" title="마지막 빈 열 삭제">− 열</button><button class="btn sm" @click="cycles(1)">{{ icon('plus', 14) }} 열</button></div></header>
+    <div class="tablewrap" style="max-height:70vh">
+      <table class="rgrid">
+        <thead><tr><th class="spec">시편 \ 회차</th>
+          {% for c in cols %}<th data-col="{{ c.n }}">{{ c.label }}{% if c.day %}<small>{{ c.day }}{% if c.date %} · {{ c.date.strftime('%m-%d') }}{% endif %}</small>{% endif %}</th>{% endfor %}
+          <th>+열</th></tr></thead>
+        <tbody>
+        {% for b in rows %}{% set s = b.specimen %}
+          <tr class="{{ 'off' if b.unloaded_at }}" data-row="{{ loop.index0 }}">
+            <td class="spec"><a href="/specimens/{{ s.short_id }}"><b>{{ s.short_id }}</b></a>
+              <small>{% if b.slot %}Slot {{ b.slot }} · {% endif %}{{ s.condition_code or '' }}{% if b.unloaded_at %} · 회수 {{ b.unloaded_at.strftime('%m-%d') }}{% endif %}</small></td>
+            {% for c in cols %}{% set cell = cells.get((s.id, c.n)) %}
+            <td><button class="cell {{ 'empty' if not cell }}" id="c-{{ s.short_id }}-{{ c.n }}"
+                 hx-get="/test-runs/{{ tr.test_run_no }}/cell/{{ s.short_id }}/{{ c.n }}" hx-target="#cell-editor" hx-swap="innerHTML"
+                 @click="select($el)" title="{{ s.short_id }} · {{ c.label }}">
+              {% if cell %}
+                {% if cell.photos and cell.photos[0].thumb_path %}<img loading="lazy" src="/files/{{ cell.photos[0].id }}/thumb" alt="">{% elif cell.photos %}<span class="ph">{{ cell.photos[0].kind }}</span>{% endif %}
+                <span><span class="v {{ 'pos' if cell.hot }}">{{ cell.text }}</span>{% if cell.photos|length > 1 %}<br><span class="pc">사진 {{ cell.photos|length }}</span>{% endif %}</span>
+              {% endif %}
+            </button></td>
+            {% endfor %}
+            <td class="add">{% if not b.unloaded_at and tr.status == 'RUNNING' %}<button class="btn ghost sm" title="회수" @click="unload('{{ s.short_id }}')">회수</button>{% endif %}</td>
+          </tr>
+        {% else %}
+          <tr><td class="spec" colspan="{{ cols|length + 2 }}"><div class="empty-note">탑승한 시편이 없습니다. [시편 탑승]으로 추가하세요.</div></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="body small muted">빈 셀은 옅은 회색으로만 보입니다 — 누락을 드러내는 유일한 장치입니다(예정일·알림 없음). · 키보드: 방향키 셀 이동 · Enter 입력 · Ctrl+S 저장</div>
+  </section>
+  <aside class="side">
+    <section class="card" id="cell-editor"><div class="empty-note">셀을 누르면 사진과 빠른 입력 폼이 여기에 열립니다.</div></section>
+  </aside>
+</div>
+
+<!-- 시편 탑승 -->
+<div class="modal" x-show="bd.open" style="display:none" x-transition.opacity>
+  <div class="dlg" @click.outside="bd.open=false">
+    <header><h3>시편 탑승 — {{ tr.test_run_no }}</h3><button class="btn ghost sm x" @click="bd.open=false">{{ icon('x', 16) }}</button></header>
+    <div class="body form">
+      <label class="f">약식번호 스캔 후 Enter (슬롯은 공백 뒤에: <span class="mono">26P4-C0104 A-05</span>)
+        <input class="in mono" x-model="bd.scan" @keydown.enter.prevent="bd.list.push(bd.scan.trim()); bd.scan=''"></label>
+      <ul class="upl-list"><template x-for="(x,i) in bd.list" :key="i"><li class="mono" x-text="x"></li></template></ul>
+    </div>
+    <footer><button class="btn" @click="bd.open=false">취소</button><button class="btn primary" @click="board()">탑승 저장</button></footer>
+  </div>
+</div>
+
+<!-- 엑셀 붙여넣기 (P4) -->
+<div class="modal" x-show="ps.open" style="display:none" x-transition.opacity>
+  <div class="dlg wide" @click.outside="ps.open=false">
+    <header><h3>엑셀 붙여넣기 — 미리보기 후 일괄 저장</h3><button class="btn ghost sm x" @click="ps.open=false">{{ icon('x', 16) }}</button></header>
+    <div class="body form">
+      <p class="small muted" style="margin:0">형식 ① 시편 × 회차: 첫 행 <span class="mono">시편 W00 W01 …</span> → 값은 그리드 필드({{ tpl.grid_fields[0].label if tpl.grid_fields else '' }})에 저장.
+        형식 ② 시편 · 회차 · 필드: 첫 행 <span class="mono">시편 회차 {% for f in tpl.field_schema %}{{ f.key }} {% endfor %}</span> (라벨도 가능). 템플릿에 없는 항목은 저장하지 않습니다.</p>
+      <textarea class="in" rows="9" x-model="ps.text" placeholder="엑셀에서 복사한 표를 붙여 넣으세요"></textarea>
+      <div x-show="ps.preview">
+        <div class="flash err" x-show="ps.errors.length" x-text="ps.errors.join(' / ')"></div>
+        <div class="flash warn" x-show="ps.warnings.length" x-text="ps.warnings.join(' / ')"></div>
+        <div class="tablewrap" style="max-height:220px"><table class="t"><tr><th>시편</th><th>회차</th><th>값</th></tr>
+          <template x-for="(it,i) in ps.items" :key="i"><tr><td class="mono" x-text="it.short_id"></td><td class="mono" x-text="'W' + String(it.cycle).padStart(2,'0')"></td><td class="mono small" x-text="JSON.stringify(it.metrics)"></td></tr></template>
+        </table></div>
+      </div>
+    </div>
+    <footer><button class="btn" @click="pastePreview()">미리보기</button><button class="btn primary" :disabled="!ps.items.length || ps.errors.length" @click="pasteSave()">일괄 저장</button></footer>
+  </div>
+</div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const TR = "{{ tr.test_run_no }}";
+function trPage() {
+  return {
+    bd: {open: false, scan: "", list: []},
+    ps: {open: false, text: "", items: [], errors: [], warnings: [], preview: false},
+    select(el) {
+      document.querySelectorAll(".rgrid .sel, .rgrid .selrow, .rgrid .selcol").forEach(c => c.classList.remove("sel", "selrow", "selcol"));
+      el.classList.add("sel");
+      const tr = el.closest("tr"), col = el.id.split("-").pop();
+      tr.classList.add("selrow");
+      const th = document.querySelector(`.rgrid th[data-col="${col}"]`); if (th) th.classList.add("selcol");
+      window.__selCell = el;
+    },
+    async cycles(d) { try { await LIMS.api("POST", `/api/test-runs/${TR}/cycles`, {delta: d}); location.reload(); } catch (e) { LIMS.fail(e); } },
+    async unload(sid) { if (!confirm(`${sid}를 회수할까요? (상태 AVAILABLE)`)) return; try { await LIMS.api("POST", `/api/test-runs/${TR}/unload`, {short_id: sid}); location.reload(); } catch (e) { LIMS.fail(e); } },
+    async finish() { if (!confirm("시험런을 종료하고 모든 시편을 회수할까요?")) return; try { await LIMS.api("POST", `/api/test-runs/${TR}/finish`); location.reload(); } catch (e) { LIMS.fail(e); } },
+    async board() {
+      const rows = this.bd.list.filter(Boolean).map(x => { const [sid, slot] = x.split(/\s+/); return {short_id: sid.toUpperCase(), slot: slot || null}; });
+      if (this.bd.scan.trim()) { const [sid, slot] = this.bd.scan.trim().split(/\s+/); rows.push({short_id: sid.toUpperCase(), slot: slot || null}); }
+      try { await LIMS.api("POST", `/api/test-runs/${TR}/board`, rows); location.reload(); } catch (e) { LIMS.fail(e); }
+    },
+    async pastePreview() {
+      try { const r = await LIMS.api("POST", `/api/test-runs/${TR}/paste`, {text: this.ps.text, dry_run: true});
+        Object.assign(this.ps, {items: r.items, errors: r.errors, warnings: r.warnings || [], preview: true}); } catch (e) { LIMS.fail(e); }
+    },
+    async pasteSave() {
+      try { const r = await LIMS.api("POST", `/api/test-runs/${TR}/paste`, {text: this.ps.text});
+        if (r.errors.length) { this.ps.errors = r.errors; return; }
+        LIMS.toast(`${r.saved}건 저장`, "ok"); setTimeout(() => location.reload(), 500); } catch (e) { LIMS.fail(e); }
+    },
+  };
+}
+async function saveCell(form) {
+  const fd = new FormData(form), metrics = {};
+  for (const [k, v] of fd.entries()) if (k !== "_sid" && k !== "_cycle" && k !== "_date") metrics[k] = v;
+  const sid = fd.get("_sid"), cyc = fd.get("_cycle");
+  try {
+    const r = await LIMS.api("PUT", `/api/test-runs/${TR}/results/${sid}/${cyc}`, {metrics, eval_date: fd.get("_date") || null});
+    const cell = document.getElementById(`c-${sid}-${cyc}`);
+    if (cell) { cell.classList.remove("empty"); let v = cell.querySelector(".v"); if (!v) { const w = document.createElement("span"); v = document.createElement("span"); v.className = "v"; w.appendChild(v); cell.appendChild(w); } v.textContent = r.text; }
+    (r.warnings || []).forEach(w => LIMS.toast(w));
+    LIMS.toast(`${sid} · W${String(cyc).padStart(2, "0")} 저장`, "ok");
+  } catch (e) { LIMS.fail(e); }
+  return false;
+}
+/* 방향키 셀 이동 (Stitch 시안) */
+document.addEventListener("keydown", (e) => {
+  const cur = window.__selCell; if (!cur) return;
+  const t = e.target; if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT")) return;
+  const td = cur.closest("td"), tr = td.closest("tr"); let nxt = null;
+  if (e.key === "ArrowRight") nxt = td.nextElementSibling; else if (e.key === "ArrowLeft") nxt = td.previousElementSibling;
+  else if (e.key === "ArrowDown" || e.key === "ArrowUp") { const row = e.key === "ArrowDown" ? tr.nextElementSibling : tr.previousElementSibling; if (row) nxt = row.children[td.cellIndex]; }
+  else if (e.key === "Enter") { const i = document.querySelector("#cell-editor input:not([type=hidden]):not([type=file])"); if (i) { e.preventDefault(); i.focus(); } return; }
+  const btn = nxt && nxt.querySelector("button.cell"); if (btn) { e.preventDefault(); btn.click(); btn.focus(); }
+});
+document.addEventListener("keydown", (e) => { if ((e.ctrlKey || e.metaKey) && e.key === "s") { const f = document.querySelector("#cell-editor form"); if (f) { e.preventDefault(); f.requestSubmit(); } } });
+/* 태블릿 촬영: 파일명을 규칙대로 바꿔 올리면 이 셀에 바로 붙습니다 */
+async function captureCell(input, sid, cyc, side) {
+  const f = input.files[0]; if (!f) return;
+  const ext = (f.name.split(".").pop() || "jpg").toLowerCase();
+  const stamp = new Date().toISOString().replace(/\D/g, "").slice(2, 14);
+  const fd = new FormData();
+  fd.append("files", f, `${sid}_W${String(cyc).padStart(2, "0")}_${side}_${stamp}.${ext}`);
+  fd.append("test_run_no", TR);
+  try { const r = await fetch("/api/files", {method: "POST", body: fd}); const d = await r.json(); if (!r.ok) throw new Error(LIMS.errText(d));
+    const x = d.results[0]; LIMS.toast(x.status === "matched" ? "사진을 셀에 붙였습니다" : x.message, x.status === "matched" ? "ok" : "err");
+    htmx.ajax("GET", `/test-runs/${TR}/cell/${sid}/${cyc}`, {target: "#cell-editor", swap: "innerHTML"}); }
+  catch (e) { LIMS.fail(e); }
+}
+LIMS.uploader(document.getElementById("tr-drop"), {testRun: TR, list: document.getElementById("tr-upl"), onDone: () => setTimeout(() => location.reload(), 1500)});
+</script>
+{% endblock %}

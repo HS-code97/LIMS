@@ -1,0 +1,2 @@
+{% if items %}<div class="suggest">{% for it in items %}<a href="{{ it.href }}"><b>{{ it.label }}</b><span>{{ it.sub }}</span></a>{% endfor %}</div>
+{% elif q %}<div class="suggest"><a href="/search?q={{ q }}"><b>{{ q }}</b><span>일치 없음 — 검색 화면에서 찾기</span></a></div>{% endif %}

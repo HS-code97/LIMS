@@ -1,0 +1,12 @@
+{
+  "code": "CW_MEASURE", "version": 1, "name": "도금 부착량 측정", "test_type": "CW", "team": "도금 품질",
+  "default_cycles": 1, "default_interval_days": null,
+  "condition_schema": [],
+  "field_schema": [
+    {"key": "cw_top", "label": "부착량 윗면", "unit": "g/m²", "type": "number", "min": 0, "max": 500, "grid": true, "maps_to": "out.cw_top"},
+    {"key": "cw_bottom", "label": "부착량 아랫면", "unit": "g/m²", "type": "number", "min": 0, "max": 500, "maps_to": "out.cw_bottom"},
+    {"key": "method", "label": "방법", "type": "select", "options": ["중량법", "XRF"]},
+    {"key": "n_points", "label": "측정점 수", "type": "number", "min": 1},
+    {"key": "note", "label": "비고", "type": "text"}
+  ]
+}

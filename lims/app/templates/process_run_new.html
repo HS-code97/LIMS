@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}공정런 등록{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/hmi/hmi.css?v=2.2.0">{% endblock %}
+{% block content %}
+<div class="hmi">
+<div class="page-head">
+  <div><div class="crumb"><a href="/process-runs">공정런</a> › 등록 (HMI 기록 모드)</div><h1 style="font-family:var(--f-body)">공정런 등록</h1></div>
+  <div class="acts small muted">CGL 모사장치 HMI와 같은 화면입니다. "PLC로 전송" 대신 [저장]으로 공정런과 원판을 만듭니다. 사전 <span class="mono">{{ dictionary.dict_version }}</span></div>
+</div>
+
+{# Stitch 시안 design/stitch/04_process_run_new.png: 과제·원소재·일자·프리셋 한 줄 #}
+<section class="card">
+  <div class="body pr-top">
+    <label class="f">과제<select class="in mono" id="project">
+      {% for p in projects %}<option value="{{ p.project_code }}">{{ p.project_code }}{% if p.company_project_no %} = {{ p.company_project_no }}{% endif %} · {{ p.project_name[:20] }}</option>{% endfor %}</select></label>
+    <label class="f">원소재<span style="display:flex;gap:6px"><select class="in mono" id="material" style="flex:1"><option value="">(선택 안 함)</option>
+      {% for m in materials %}<option value="{{ m.id }}">{{ m.label }}</option>{% endfor %}</select><a class="btn" href="/admin?tab=materials" title="원소재 등록">+</a></span></label>
+    <label class="f">일자<input class="in" type="date" id="run_date" value="{{ today().isoformat() }}"></label>
+    <div class="f">프리셋<div class="seg" id="pub-presets" role="group" aria-label="공용 프리셋"></div></div>
+  </div>
+  <div class="body presetbar" style="border-top:1px solid var(--line-2);padding-top:10px;padding-bottom:10px">
+    <select class="in" id="my-presets" style="min-width:180px"><option value="">내·팀 프리셋 ▼</option></select>
+    <select class="in" id="clone-runs" style="min-width:220px"><option value="">지난 공정런 복제 ▼</option>
+      {% for r in recent %}<option value="{{ loop.index0 }}">{{ r.run_no }} · {{ r.run_date }} · {{ r.code }} · {{ r.coating_weight_target|num }} g/m²</option>{% endfor %}</select>
+    <span class="small muted" id="recipe-src"></span>
+  </div>
+</section>
+
+<div class="hmi-grid">
+  <div class="stack">
+    <section class="card">
+      <header><h2>라인 개요</h2><span class="meta">설비를 눌러 조건을 수정합니다 · 프리셋 대비 바뀐 값은 굵게 + ●</span><span class="r mono small muted" id="line-status"></span></header>
+      <div class="zstrip" id="zstrip" role="group" aria-label="구간 요약"></div>
+      <div class="tablewrap"><svg id="mimic" viewBox="0 0 1200 430" width="100%" style="min-width:860px;display:block" role="img" aria-label="CGL 라인 미믹"></svg></div>
+    </section>
+    <section class="card">
+      <header><h2>열사이클 (시편 온도–시간)</h2><span class="meta">입력값으로 자동 생성 · 구간을 누르면 해당 설비 선택</span><span class="r mono small" id="totalt"></span></header>
+      <div class="tablewrap" style="padding:6px 10px 10px"><svg id="chart" viewBox="0 0 900 300" width="100%" style="min-width:640px;display:block" role="img" aria-label="열사이클"></svg></div>
+    </section>
+  </div>
+  <div class="stack">
+    <section class="card" id="panel"></section>
+    <section class="card"><header><h2>점검</h2><span class="meta" id="acount"></span></header>
+      <ul class="alist" id="alarms"></ul>
+      <p class="small muted" style="margin:0;padding:0 16px 12px">점검은 경고만 표시하고 저장을 막지 않습니다. 허용 범위 밖 값만 저장 전 한 번 확인합니다.</p></section>
+  </div>
+</div>
+
+<section class="card" style="margin-top:16px">
+  <header><h2>원판 생성</h2><span class="meta">원판은 공정런의 과제·원소재·조건을 상속합니다</span></header>
+  <div class="body savebar">
+    <label class="f">목표 부착량(단면)<span class="sfx"><input class="in num mono" id="cw" type="number" min="10" max="300" value="60" style="width:96px"><em>g/m²</em></span></label>
+    <label class="f">원판 매수<input class="in num mono" id="count" type="number" min="1" max="200" value="5" style="width:96px"></label>
+    <label class="f">시작 번호<span class="sfx"><em style="font-weight:700;color:var(--ink)">P</em><input class="in num mono" id="start" type="number" min="0" max="9999" value="1" style="width:110px"></span></label>
+    <button class="btn" id="btn-series">시리즈 설정…</button>
+  </div>
+  <div class="body" style="padding-top:0">
+    <div class="flash err hidden" id="conflicts"></div>
+    <div class="small mono" id="series-summary"></div>
+  </div>
+  <div class="body" style="padding-top:0">
+    <div class="pr-commit">
+      <div class="codeprev"><small>조건부 미리보기 (목표 기준 · 각인 라벨)</small><span id="code">-----</span><span class="small mono" id="range"></span></div>
+      <input class="in" id="note" placeholder="메모 입력… (실험 목적·특이사항)">
+      <button class="btn" id="btn-mypreset">내 프리셋으로 저장</button>
+      <button class="btn primary lg" id="btn-save">{{ icon('check', 18) }} 저장</button>
+    </div>
+  </div>
+</section>
+
+<!-- 시리즈 설정 (6.9절) -->
+<div class="modal hidden" id="dlg-series">
+  <div class="dlg wide">
+    <header><h3>시리즈 설정 — 원판마다 목표를 다르게 (의도된 변화 ◆)</h3></header>
+    <div class="body form">
+      <p class="small muted" style="margin:0">키는 둘까지 조합할 수 있습니다. 원판 수만큼 값을 쉼표로 넣으세요. 기본 레시피와 같은 값은 원판별 목표 변경에 저장하지 않습니다.</p>
+      <div class="row" id="series-rows"></div>
+      <div class="tablewrap"><table class="t" id="series-preview"></table></div>
+    </div>
+    <footer><button class="btn" id="series-clear">시리즈 없음</button><button class="btn" id="series-cancel">닫기</button><button class="btn primary" id="series-ok">적용</button></footer>
+  </div>
+</div>
+
+<!-- 저장 결과 -->
+<div class="modal hidden" id="dlg-done">
+  <div class="dlg">
+    <header><h3 id="done-title">저장 완료</h3></header>
+    <div class="body" id="done-body"></div>
+    <footer><a class="btn" id="done-csv">{{ icon('csv', 16) }} 각인 CSV</a><a class="btn" id="done-label" target="_blank">{{ icon('label', 16) }} 라벨 출력</a>
+      <a class="btn" id="done-actuals">실측 입력</a><a class="btn primary" id="done-open">공정런 열기</a></footer>
+  </div>
+</div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+window.LIMS_HMI = {
+  dict: {{ dictionary|tojson }},
+  presets: {{ presets|tojson }},
+  recent: {{ recent|tojson }},
+  clone: {{ clone|tojson }},
+  userTeam: {{ (user.team_id or 0)|tojson }},
+};
+</script>
+<script src="/static/hmi/hmi-core.js?v=2.2.0"></script>
+<script src="/static/hmi/hmi-lims.js?v=2.2.0"></script>
+{% endblock %}

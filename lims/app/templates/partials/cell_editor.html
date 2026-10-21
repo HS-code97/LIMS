@@ -1,0 +1,50 @@
+{% from "_icons.html" import icon %}
+{# Stitch 시안(design/stitch/03_test_run_grid.png)의 셀 편집기: 회차·D+일 칩, 앞/뒷면 사진, 단위 붙은 2열 입력, 하단 고정 저장 #}
+<header style="flex-wrap:wrap">
+  <h2 class="mono" style="font-size:16px">{{ spec.short_id }} · W{{ '%02d' % cycle }}</h2>
+  {% if day is not none %}<span class="chip st-IN_TEST"><b>D+{{ day }}</b>{% if when %} · {{ when.strftime('%m-%d') }}{% endif %}</span>{% endif %}
+  <div class="r"><button class="btn ghost sm" title="닫기" onclick="document.getElementById('cell-editor').innerHTML='<div class=&quot;empty-note&quot;>셀을 누르면 사진과 빠른 입력 폼이 여기에 열립니다.</div>'">{{ icon('x', 16) }}</button></div>
+  <div class="small muted" style="flex-basis:100%">{% if slot %}Slot {{ slot }} · {% endif %}{{ spec.condition_code or '' }} · {{ spec.stage_name }} · <a href="/specimens/{{ spec.short_id }}">시편 상세</a></div>
+</header>
+<div class="body">
+  <div class="small muted mono" style="letter-spacing:.04em;margin-bottom:6px">검사 이미지 (FRONT / BACK)</div>
+  <div class="ce-photos">
+    {% for side in ['front', 'back'] %}{% set a = pics.get(side) %}
+    <div class="ce-ph">
+      {% if a %}
+        <a href="/files/{{ a.id }}" target="_blank" title="원본 열기">{% if a.thumb_path %}<img src="/files/{{ a.id }}/thumb?size=l" alt="">{% else %}<span class="ph">{{ a.kind }}</span>{% endif %}</a>
+        <span class="tag">{{ side|capitalize }}</span><span class="zoom">{{ icon('search', 14) }}</span>
+        <small class="mono">{{ a.original_name }}</small>
+      {% else %}
+        <label class="ce-empty" title="태블릿·휴대폰은 카메라가 열립니다">{{ icon('image', 20) }}<span>{{ '앞면' if side == 'front' else '뒷면' }} 촬영·선택</span>
+          <input type="file" accept="image/*" capture="environment" hidden onchange="captureCell(this, '{{ spec.short_id }}', {{ cycle }}, '{{ side }}')"></label>
+        <small class="mono muted">{{ spec.short_id }}_W{{ '%02d' % cycle }}_{{ side }}.jpg</small>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% if photos|length > 2 %}<div class="small muted" style="margin:-4px 0 10px">외 사진 {{ photos|length - 2 }}장</div>{% endif %}
+
+  <form class="ce-form" onsubmit="return saveCell(this), false">
+    <input type="hidden" name="_sid" value="{{ spec.short_id }}"><input type="hidden" name="_cycle" value="{{ cycle }}">
+    {% set m = res.metrics if res and res.metrics else {} %}
+    {% for f in tpl.field_schema %}
+      <label class="f {{ 'wide' if f.type == 'text' }}">
+        <span>{% if 'red' in f.key %}<i class="dot" style="background:var(--dev)"></i>{% elif 'white' in f.key %}<i class="dot" style="background:var(--ink-3)"></i>{% endif %}{{ f.label }}{% if f.unit %} ({{ f.unit }}){% endif %}
+          {% if f.maps_to %}<span class="bdg b-test" title="저장하면 공정 실측 {{ f.maps_to }}에 자동 반영">→ 실측</span>{% endif %}</span>
+        {% if f.type == 'select' %}
+          <select class="in" name="{{ f.key }}"><option value=""></option>{% for o in f.options %}<option {% if m.get(f.key) == o %}selected{% endif %}>{{ o }}</option>{% endfor %}</select>
+        {% elif f.type == 'number' %}
+          <span class="unit-in"><input class="in num mono" name="{{ f.key }}" inputmode="decimal" value="{{ m.get(f.key, '')|num }}">{% if f.unit %}<em>{{ f.unit }}</em>{% endif %}</span>
+        {% else %}
+          <textarea class="in" name="{{ f.key }}" rows="2" style="font-family:var(--f-body);font-size:13px">{{ m.get(f.key, '') }}</textarea>
+        {% endif %}
+      </label>
+    {% endfor %}
+    <label class="f wide">평가일<input class="in" type="date" name="_date" value="{{ (res.eval_date if res and res.eval_date else (when or today())).isoformat() }}"></label>
+    <div class="ce-save">
+      <button class="btn primary lg" style="width:100%;justify-content:center">{{ icon('check', 18) }} 저장 (Ctrl + S)</button>
+      <p class="small muted" style="margin:6px 0 0;text-align:center">모든 항목은 선택 입력입니다 · 템플릿 {{ tpl.code }} v{{ tpl.version }}{% if res and res.inspector %} · 최종 {{ res.inspector.name }}{% endif %}</p>
+    </div>
+  </form>
+</div>

@@ -1,0 +1,12 @@
+{
+  "code": "CUP_DRAW", "version": 1, "name": "원통 컵 드로잉", "test_type": "CUP", "team": "가공",
+  "default_cycles": 1, "default_interval_days": null,
+  "condition_schema": [
+    {"key": "ldr", "label": "드로잉비", "type": "number", "default": 2.0}
+  ],
+  "field_schema": [
+    {"key": "peel_grade", "label": "박리 등급", "type": "number", "min": 0, "max": 5, "grid": true},
+    {"key": "crack", "label": "크랙 유무", "type": "select", "options": ["없음", "미세", "있음"]},
+    {"key": "note", "label": "비고", "type": "text"}
+  ]
+}

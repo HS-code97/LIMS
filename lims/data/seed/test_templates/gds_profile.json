@@ -1,0 +1,12 @@
+{
+  "code": "GDS_PROFILE", "version": 1, "name": "GDS 깊이 프로파일", "test_type": "GDS", "team": "도금 품질",
+  "default_cycles": 1, "default_interval_days": null,
+  "condition_schema": [],
+  "field_schema": [
+    {"key": "layer_thickness_um", "label": "도금층 두께", "unit": "µm", "type": "number", "min": 0, "grid": true},
+    {"key": "fe_pct", "label": "도금층 Fe", "unit": "wt%", "type": "number", "min": 0, "max": 100, "maps_to": "out.fe_pct"},
+    {"key": "al_peak_pct", "label": "Al 피크", "unit": "wt%", "type": "number", "min": 0, "max": 100},
+    {"key": "mg_peak_pct", "label": "Mg 피크", "unit": "wt%", "type": "number", "min": 0, "max": 100},
+    {"key": "note", "label": "비고", "type": "text"}
+  ]
+}

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}목표–실측 산점도{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="crumb"><a href="/search">검색·비교</a> › 목표–실측 산점도</div><h1 style="font-family:var(--f-body)">목표–실측 산점도</h1></div>
+  <div class="acts"><a class="btn" href="/viewer">{{ icon('image', 16) }} 사진 비교 뷰어</a></div></div>
+<form class="card body" method="get" style="display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin-bottom:16px">
+  <label class="f">파라미터<select class="in" name="key" onchange="this.form.submit()">{% for k, l in keys %}<option value="{{ k }}" {% if k == key %}selected{% endif %}>{{ l }}</option>{% endfor %}</select></label>
+  <label class="f">과제<select class="in" name="project" onchange="this.form.submit()"><option value="">전체</option>{% for pr in projects %}<option value="{{ pr.project_code }}" {% if pr.project_code == project %}selected{% endif %}>{{ pr.label }}</option>{% endfor %}</select></label>
+  <span class="small muted">점 = 그 시편에서 직접 잰 실측(상속 제외) · 대각선 = 목표와 같음 · 띠 = 허용편차{% if cfg.tol is defined %} ±{{ cfg.tol|num }} {{ p.u }}{% elif cfg.tol_pct is defined %} ±{{ cfg.tol_pct|num }}%{% endif %}</span>
+</form>
+<div class="grid2">
+  <section class="card"><header><h2>{{ icon('gauge') }}{{ p.section_nm }} {{ p.l }} ({{ p.u }})</h2><span class="meta">{{ pts|length }}점 · <span class="mk-dev">●</span> 허용편차 밖</span></header>
+    <div class="body"><svg id="sc" viewBox="0 0 640 480" width="100%" role="img" aria-label="목표-실측 산점도"></svg>
+      <div class="small mono muted" id="tip" style="min-height:18px"></div></div></section>
+  <section class="card"><header><h2>점 목록</h2></header>
+    <div class="tablewrap" style="max-height:540px"><table class="t"><tr><th>시편</th><th class="n">목표</th><th class="n">실측</th><th class="n">편차</th><th>출처</th></tr>
+      {% for x in pts|sort(attribute='dev', reverse=true) %}<tr class="{{ 'dev' if x.oot }}"><td><a class="mono" href="/specimens/{{ x.sid }}">{{ x.sid }}</a></td><td class="n">{{ x.x|num }}</td><td class="n dv">{{ x.y|num }}</td><td class="n dv">{{ x.dev|signed }}</td><td><span class="bdg b-actual">{{ x.badge }}</span></td></tr>
+      {% else %}<tr class="empty-row"><td colspan="5">실측이 있는 시편이 없습니다.</td></tr>{% endfor %}</table></div></section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const P = {{ pts|tojson }}, TOL = {{ (cfg.tol if cfg.tol is defined else none)|tojson }}, TOLP = {{ (cfg.tol_pct if cfg.tol_pct is defined else none)|tojson }};
+  const svg = document.getElementById("sc"), W = 640, H = 480, L = 56, R = 16, T = 16, B = 44;
+  if (!P.length) { svg.innerHTML = `<text x="320" y="240" text-anchor="middle" fill="#727781">데이터 없음</text>`; return; }
+  const vs = P.flatMap(p => [p.x, p.y]);
+  let lo = Math.min(...vs), hi = Math.max(...vs); const pad = (hi - lo || Math.abs(hi) || 1) * 0.12; lo -= pad; hi += pad;
+  const X = v => L + (W - L - R) * (v - lo) / (hi - lo), Y = v => T + (H - T - B) * (1 - (v - lo) / (hi - lo));
+  const band = v => TOL != null ? TOL : (TOLP != null ? Math.abs(v) * TOLP / 100 : 0);
+  let h = "";
+  const ticks = 6;
+  for (let i = 0; i <= ticks; i++) { const v = lo + (hi - lo) * i / ticks, t = +v.toPrecision(3);
+    h += `<line x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}" stroke="#e4e8ef"/><text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end" font-size="11" fill="#727781" font-family="JetBrains Mono">${t}</text>`;
+    h += `<text x="${X(v)}" y="${H - B + 16}" text-anchor="middle" font-size="11" fill="#727781" font-family="JetBrains Mono">${t}</text>`; }
+  const pts = [lo, hi];
+  h += `<polygon points="${X(lo)},${Y(lo + band(lo))} ${X(hi)},${Y(hi + band(hi))} ${X(hi)},${Y(hi - band(hi))} ${X(lo)},${Y(lo - band(lo))}" fill="rgba(47,107,168,.08)"/>`;
+  h += `<line x1="${X(lo)}" y1="${Y(lo)}" x2="${X(hi)}" y2="${Y(hi)}" stroke="#2f6ba8" stroke-dasharray="5 4"/>`;
+  h += `<text x="${(L + W - R) / 2}" y="${H - 6}" text-anchor="middle" font-size="12" fill="#414750">목표</text><text x="14" y="${(T + H - B) / 2}" text-anchor="middle" font-size="12" fill="#414750" transform="rotate(-90 14 ${(T + H - B) / 2})">실측</text>`;
+  P.forEach((p, i) => { h += `<circle data-i="${i}" cx="${X(p.x)}" cy="${Y(p.y)}" r="6" fill="${p.oot ? "#ac3400" : "#2f6ba8"}" fill-opacity=".8" stroke="#fff" style="cursor:pointer"/>`; });
+  svg.innerHTML = h;
+  const tip = document.getElementById("tip");
+  svg.querySelectorAll("circle").forEach(c => {
+    const p = P[+c.dataset.i];
+    c.onmouseenter = () => tip.textContent = `${p.sid} · ${p.code || ""} · 목표 ${p.x} → 실측 ${p.y} (${p.dev > 0 ? "+" : ""}${+p.dev.toPrecision(3)})`;
+    c.onclick = () => location.href = `/specimens/${p.sid}`;
+  });
+})();
+</script>
+{% endblock %}

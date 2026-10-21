@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}검색·비교{% endblock %}
+{% block content %}
+<div x-data="srch()">
+<div class="page-head"><div><div class="crumb">검색·비교</div><h1 style="font-family:var(--f-body)">검색·비교</h1></div>
+  <div class="acts"><a class="btn" href="/analysis/scatter">{{ icon('gauge', 16) }} 목표–실측 산점도</a><a class="btn" href="/viewer">{{ icon('image', 16) }} 사진 비교 뷰어</a>{% if searched %}<a class="btn" href="/api/export/xlsx?{{ qs }}">{{ icon('download', 16) }} Excel 내보내기</a>{% endif %}</div></div>
+
+<form class="card" method="get" id="sform" style="margin-bottom:16px">
+  <div class="body form">
+    <div class="row">
+      <label class="f">약식번호·코일·공정런·조건부<input class="in mono" name="q" value="{{ qy.q }}" placeholder="26P4-C01 / POS-26 / M206"></label>
+      <label class="f">과제<select class="in" name="project"><option value="">전체</option>{% for p in projects %}<option value="{{ p.project_code }}" {% if p.project_code == qy.project %}selected{% endif %}>{{ p.label }}</option>{% endfor %}</select></label>
+      <label class="f">단계<select class="in" name="stage"><option value="">전체</option>{% for s in 'PCS' %}<option {% if s == qy.stage %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></label>
+      <label class="f">시험 종류<select class="in" name="test_type"><option value="">전체</option>{% for t in types %}<option {% if t == qy.test_type %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>
+      <label class="f">조건부 (접두·? 한 글자)<input class="in mono" name="code" value="{{ qy.code }}" placeholder="M2?? / M206"></label>
+    </div>
+    <div>
+      <div class="small muted" style="margin-bottom:6px">수치 조건 (공정 파라미터 · 최대 5개)</div>
+      <template x-for="(p, i) in params" :key="i">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+          <select class="in" :name="'k' + (i+1)" x-model="p.k" style="min-width:240px"><option value="">(파라미터)</option>
+            {% for k in numeric_keys %}{% set pp = pdict.param(k) %}<option value="{{ k }}">{{ pp.section_nm }} {{ pp.l }} ({{ pp.u }})</option>{% endfor %}</select>
+          <input class="in num mono" :name="'lo' + (i+1)" x-model="p.lo" placeholder="최소" style="width:100px"> ~
+          <input class="in num mono" :name="'hi' + (i+1)" x-model="p.hi" placeholder="최대" style="width:100px">
+          <button type="button" class="btn ghost sm" @click="params.splice(i,1)">{{ icon('x', 14) }}</button>
+        </div>
+      </template>
+      <button type="button" class="btn sm" @click="params.push({k:'',lo:'',hi:''})" x-show="params.length < 5">{{ icon('plus', 14) }} 수치 조건</button>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">
+      <span class="small muted">기준</span>
+      <div class="seg">{% for b, lbl in basis_labels.items() %}<label style="display:contents"><input type="radio" name="basis" value="{{ b }}" {% if b == qy.basis %}checked{% endif %} hidden onchange="this.form.submit()"><a class="{{ 'on' if b == qy.basis }}" onclick="this.previousElementSibling.click()">{{ lbl }}</a></label>{% endfor %}</div>
+      <div class="grow"></div>
+      <a class="btn" href="/search">초기화</a><button class="btn primary">{{ icon('search', 16) }} 검색</button>
+    </div>
+  </div>
+</form>
+
+{% if cmp_specs %}
+<section class="card" style="margin-bottom:16px">
+  <header><h2>{{ icon('copy') }}나란히 보기 ({{ cmp_specs|length }})</h2><span class="meta">값 = 대표값(실측 우선) · 배지 = 출처</span>
+    <div class="r">{% if cmp_specs|length >= 2 %}<a class="btn sm" href="/viewer?a={{ cmp_specs[0].short_id }}&b={{ cmp_specs[1].short_id }}">사진 나란히</a>{% endif %}<a class="btn sm" href="/api/export/xlsx?ids={{ cmp_specs|map(attribute='short_id')|join(',') }}">Excel</a></div></header>
+  <div class="tablewrap"><table class="t">
+    <tr><th>파라미터</th>{% for s in cmp_specs %}<th class="n"><a class="mono" href="/specimens/{{ s.short_id }}">{{ s.short_id }}</a><br><span class="small muted mono">{{ s.display_id[:5] }}</span></th>{% endfor %}</tr>
+    {% set allkeys = [] %}{% for s in cmp_specs %}{% for k in (cmp_params.get(s.id) or {}).keys() %}{% if k not in allkeys and k != 'out.cw' %}{% set _ = allkeys.append(k) %}{% endif %}{% endfor %}{% endfor %}
+    {% for k in allkeys %}{% set p = pdict.param(k) %}
+    <tr><td>{{ p.section_nm }} {{ p.l }} <span class="muted small">{{ p.u }}</span></td>
+      {% for s in cmp_specs %}{% set e = (cmp_params.get(s.id) or {}).get(k) %}
+      <td class="n {{ 'mk-dev' if e and e.out_of_tol }}">{% if e %}{{ e.effective|num }}{% if e.out_of_tol %} ●{% endif %} <span class="bdg {{ badge_class(e.source, e.level, e.inherited_from) }}">{{ e.badge }}</span>{% endif %}</td>{% endfor %}</tr>
+    {% endfor %}
+  </table></div>
+</section>
+{% endif %}
+
+{% if searched %}
+<section class="card">
+  <header><h2>{{ icon('spec') }}결과 {{ specs|length }}건</h2><span class="meta">기준: {{ basis_labels[qy.basis] }}{% if specs|length >= qy.limit %} · 최대 {{ qy.limit }}건까지 표시{% endif %}</span>
+    <div class="r"><button class="btn sm" @click="compare()" :disabled="sel.length < 2">선택 비교 (<span x-text="sel.length"></span>/5)</button></div></header>
+  <div class="tablewrap" style="max-height:65vh"><table class="t">
+    <tr><th></th><th>약식번호</th><th>정식번호</th><th>상태</th>
+      {% for k in keys %}{% set p = pdict.param(k) %}<th class="n">{{ p.l }}<br><span class="small muted">{{ p.u }}</span></th>{% endfor %}</tr>
+    {% for s in specs %}
+    <tr><td><input type="checkbox" value="{{ s.short_id }}" x-model="sel" :disabled="sel.length >= 5 && !sel.includes('{{ s.short_id }}')"></td>
+      <td><a class="mono" href="/specimens/{{ s.short_id }}"><b>{{ s.short_id }}</b></a></td><td class="mono small">{{ s.display_id }}</td>
+      <td><span class="chip st-{{ s.status }}">{{ s.status }}</span></td>
+      {% for k in keys %}{% set e = emap.get((s.id, k)) %}
+      <td class="n nowrap {{ 'mk-dev' if e and e.out_of_tol }}">{% if e %}{% set v = e.target if qy.basis == 'target' else (e.actual if qy.basis == 'actual' else e.effective) %}{{ v|num }}{% if e.out_of_tol and qy.basis != 'target' %} ●{% endif %}
+        {% if qy.basis != 'target' %}<span class="bdg {{ badge_class(e.source, e.level, e.inherited_from) }}">{{ badge_text(e.source, e.level, e.inherited_from) }}</span>{% endif %}{% endif %}</td>{% endfor %}
+    </tr>
+    {% else %}<tr class="empty-row"><td colspan="{{ 4 + keys|length }}">조건에 맞는 시편이 없습니다.</td></tr>{% endfor %}
+  </table></div>
+</section>
+{% else %}
+<div class="card"><div class="empty-note">조건을 넣고 검색하세요. 예: 부착량 윗면 50~55 g/m² (대표값) — 실측이 있으면 실측, 없으면 목표로 찾습니다.</div></div>
+{% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const INIT_PARAMS = {{ qy_params|tojson }};
+function srch() {
+  return {
+    params: INIT_PARAMS.length ? INIT_PARAMS.map(p => ({k: p.key, lo: p.lo ?? "", hi: p.hi ?? ""})) : [{k: "", lo: "", hi: ""}],
+    sel: {{ cmp_specs|map(attribute='short_id')|list|tojson }},
+    compare() {
+      const u = new URL(location.href); u.searchParams.delete("cmp"); this.sel.forEach(s => u.searchParams.append("cmp", s)); location.href = u.toString();
+    },
+  };
+}
+</script>
+{% endblock %}

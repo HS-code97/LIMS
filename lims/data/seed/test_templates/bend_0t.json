@@ -1,0 +1,12 @@
+{
+  "code": "BEND_0T", "version": 1, "name": "0T 굽힘", "test_type": "BEND", "team": "가공",
+  "default_cycles": 1, "default_interval_days": null,
+  "condition_schema": [
+    {"key": "bend_t", "label": "굽힘 두께", "unit": "T", "type": "number", "default": 0}
+  ],
+  "field_schema": [
+    {"key": "crack", "label": "크랙 유무", "type": "select", "options": ["없음", "미세", "있음"], "grid": true},
+    {"key": "peel_grade", "label": "박리 등급", "type": "number", "min": 0, "max": 5},
+    {"key": "note", "label": "비고", "type": "text"}
+  ]
+}

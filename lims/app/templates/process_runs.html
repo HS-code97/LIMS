@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}공정런{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="crumb">공정런</div><h1 style="font-family:var(--f-body)">공정런 (도금 1회 = 원판 N매)</h1></div>
+  <div class="acts"><a class="btn primary" href="/process-runs/new">{{ icon('plus', 16) }} 공정런 등록</a></div></div>
+<form class="card body" style="display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin-bottom:16px" method="get">
+  <label class="f">과제<select class="in" name="project"><option value="">전체</option>{% for p in projects %}<option value="{{ p.project_code }}" {% if p.project_code == project %}selected{% endif %}>{{ p.label }}</option>{% endfor %}</select></label>
+  <label class="small" style="display:flex;gap:6px;align-items:center;height:34px"><input type="checkbox" name="mine" value="1" {% if mine %}checked{% endif %}> 내 공정런만</label>
+  <button class="btn primary">조회</button>
+</form>
+<section class="card"><div class="tablewrap"><table class="t">
+  <tr><th>공정런</th><th>일자</th><th>과제</th><th>프리셋</th><th>조건부</th><th class="n">목표 부착량</th><th class="n">원판</th><th>원소재</th><th>작업자</th><th>사전</th><th></th></tr>
+  {% for r in runs %}
+  <tr><td><a class="mono" href="/process-runs/{{ r.run_no }}"><b>{{ r.run_no }}</b></a></td><td class="mono">{{ r.run_date|d }}</td>
+    <td class="mono">{{ r.project_code }}</td><td>{{ r.preset.name if r.preset else '복제' }}</td><td class="mono"><b>{{ r.base_condition_code }}</b></td>
+    <td class="n">{{ r.coating_weight_target|num }} g/m²</td><td class="n">{{ r.panels|length }}</td>
+    <td class="mono small">{{ r.material.coil_no if r.material else '' }}</td><td class="small">{{ r.operator.name if r.operator else '' }}</td>
+    <td class="mono small muted">{{ r.dict_version }}</td>
+    <td class="nowrap"><a class="btn sm" href="/process-runs/{{ r.run_no }}?tab=actuals">실측</a> <a class="btn sm" href="/process-runs/new?clone={{ r.run_no }}">복제</a></td></tr>
+  {% else %}<tr class="empty-row"><td colspan="11">공정런이 없습니다. <a href="/process-runs/new">첫 공정런 등록</a></td></tr>{% endfor %}
+</table></div></section>
+{% endblock %}

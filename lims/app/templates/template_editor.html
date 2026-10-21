@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}템플릿 편집{% endblock %}
+{% block content %}
+<div x-data="tplEd()">
+<div class="page-head">
+  <div><div class="crumb"><a href="/admin?tab=templates">관리 › 시험 템플릿</a> › 편집</div>
+    <h1 style="font-family:var(--f-body)">{% if data.version %}{{ data.code }} v{{ data.version }} → v{{ data.version + 1 }}{% else %}새 시험 템플릿{% endif %}</h1></div>
+  <div class="acts small muted">저장하면 새 버전이 생깁니다. 기존 결과는 저장 당시 버전으로 해석합니다(9.1절). 모든 필드는 선택 입력입니다.</div>
+</div>
+<div class="stack">
+  <div class="stack">
+    <section class="card"><header><h2>{{ icon('test') }}기본 정보</h2></header>
+      <div class="body form">
+        <div class="row">
+          <label class="f">코드<input class="in mono" x-model="d.code" {% if data.version %}readonly{% endif %} placeholder="CCT_STD"></label>
+          <label class="f">시험 종류<input class="in mono" x-model="d.test_type" placeholder="CCT"></label>
+          <label class="f">팀<select class="in" x-model.number="d.team_id"><option value="">공통</option>{% for t in teams %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}</select></label>
+        </div>
+        <label class="f">이름<input class="in" x-model="d.name" placeholder="복합부식시험 표준"></label>
+        <div class="row">
+          <label class="f">그리드 기본 열 수<input class="in num" type="number" min="1" x-model.number="d.default_cycles"></label>
+          <label class="f">열 간격 표시 (일, 강제 아님)<input class="in num" type="number" min="0" x-model.number="d.default_interval_days"></label>
+        </div>
+      </div></section>
+
+    <template x-for="grp in ['field_schema','condition_schema']" :key="grp">
+      <section class="card"><header><h2 x-text="grp==='field_schema' ? '결과 필드' : '운전조건 필드'"></h2>
+        <span class="meta" x-text="grp==='field_schema' ? '★ 그리드 표시 · → maps_to 공정 실측 자동 반영(D-33)' : '시험런 생성 시 기본값으로 채움'"></span>
+        <div class="r"><button class="btn sm" @click="add(grp)">{{ icon('plus', 14) }} 필드</button></div></header>
+        <div class="tablewrap"><table class="t">
+          <tr><th>키</th><th>라벨</th><th>형식</th><th>단위</th><th>최소</th><th>최대</th><th>선택지 / 기본값</th><th x-show="grp==='field_schema'">★</th><th x-show="grp==='field_schema'">maps_to</th><th></th></tr>
+          <template x-for="(f, i) in d[grp]" :key="i">
+            <tr>
+              <td><input class="in mono" style="width:130px" x-model="f.key"></td>
+              <td><input class="in" style="width:120px" x-model="f.label"></td>
+              <td><select class="in" x-model="f.type"><option>number</option><option>select</option><option>text</option><option>bool</option></select></td>
+              <td><input class="in" style="width:64px" x-model="f.unit"></td>
+              <td><input class="in num" style="width:64px" x-model="f.min" :disabled="f.type!=='number'"></td>
+              <td><input class="in num" style="width:64px" x-model="f.max" :disabled="f.type!=='number'"></td>
+              <td><input class="in" style="width:140px" x-show="f.type==='select'" x-model="f.optText" placeholder="없음, 미세, 있음">
+                  <input class="in" style="width:140px" x-show="f.type!=='select' && grp==='condition_schema'" x-model="f.default" placeholder="기본값"></td>
+              <td x-show="grp==='field_schema'"><input type="checkbox" x-model="f.grid"></td>
+              <td x-show="grp==='field_schema'"><select class="in" x-model="f.maps_to" :disabled="f.type!=='number'"><option value="">-</option>
+                {% for k in dict_keys %}<option value="{{ k.key }}">{{ k.label }}</option>{% endfor %}</select></td>
+              <td class="nowrap"><button class="btn ghost sm" @click="move(grp,i,-1)">↑</button><button class="btn ghost sm" @click="d[grp].splice(i,1)">{{ icon('x', 14) }}</button></td>
+            </tr>
+          </template>
+        </table></div></section>
+    </template>
+  </div>
+  <div class="stack">
+    <section class="card"><header><h2>저장</h2></header>
+      <div class="body form">
+        <div class="flash err" x-show="errors.length" style="white-space:pre-line" x-text="errors.join('\n')"></div>
+        <p class="small muted" style="margin:0">미리보기 — 결과 셀 입력 폼은 아래 순서로 나타납니다.</p>
+        <template x-for="f in d.field_schema"><div class="small"><b x-text="f.label || f.key"></b> <span class="muted mono" x-text="f.unit ? '(' + f.unit + ')' : ''"></span> <span x-show="f.grid">★</span> <span class="bdg b-test" x-show="f.maps_to" x-text="'→ ' + f.maps_to"></span></div></template>
+        <button class="btn primary lg" @click="save()" :disabled="busy">{{ icon('check', 18) }} 새 버전으로 저장</button>
+        <a class="btn" href="/admin?tab=templates">취소</a>
+      </div></section>
+  </div>
+</div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const DATA = {{ data|tojson }};
+function tplEd() {
+  const prep = (fs) => (fs || []).map(f => Object.assign({unit: "", min: "", max: "", grid: false, maps_to: "", default: ""}, f, {optText: (f.options || []).join(", ")}));
+  return {
+    d: Object.assign({}, DATA, {field_schema: prep(DATA.field_schema), condition_schema: prep(DATA.condition_schema)}),
+    errors: [], busy: false,
+    add(g) { this.d[g].push({key: "", label: "", type: "number", unit: "", min: "", max: "", grid: false, maps_to: "", default: "", optText: ""}); },
+    move(g, i, k) { const a = this.d[g]; if (i + k < 0) return; [a[i], a[i + k]] = [a[i + k], a[i]]; },
+    out(fs) {
+      return fs.map(f => ({key: f.key.trim(), label: f.label.trim() || f.key.trim(), type: f.type, unit: f.unit || null,
+        min: f.min === "" || f.min == null ? null : Number(f.min), max: f.max === "" || f.max == null ? null : Number(f.max),
+        options: f.type === "select" ? f.optText.split(",").map(s => s.trim()).filter(Boolean) : null,
+        grid: !!f.grid, maps_to: f.maps_to || null, default: f.default === "" ? null : (f.type === "number" && f.default != null ? Number(f.default) : f.default)}));
+    },
+    async save() {
+      this.busy = true; this.errors = [];
+      try {
+        const r = await LIMS.api("POST", "/api/test-templates", {code: this.d.code, name: this.d.name, test_type: this.d.test_type,
+          team_id: this.d.team_id || null, default_cycles: this.d.default_cycles || 1, default_interval_days: this.d.default_interval_days || null,
+          field_schema: this.out(this.d.field_schema), condition_schema: this.out(this.d.condition_schema)});
+        LIMS.toast(`${r.code} v${r.version} 저장`, "ok"); setTimeout(() => location.href = "/admin?tab=templates", 600);
+      } catch (e) { this.errors = (e.data && e.data.detail && e.data.detail.errors) || [e.message]; }
+      this.busy = false;
+    },
+  };
+}
+</script>
+{% endblock %}

@@ -1,0 +1,14 @@
+{
+  "code": "SEM_SECTION", "version": 1, "name": "SEM 단면 관찰", "test_type": "SEM", "team": "표면·전기화학",
+  "default_cycles": 1, "default_interval_days": null,
+  "condition_schema": [
+    {"key": "kv", "label": "가속전압", "unit": "kV", "type": "number", "default": 15}
+  ],
+  "field_schema": [
+    {"key": "magnification", "label": "배율", "unit": "x", "type": "number", "min": 1, "grid": true},
+    {"key": "detector", "label": "검출기", "type": "select", "options": ["SE", "BSE", "EDS"]},
+    {"key": "region", "label": "관찰 부위", "type": "text"},
+    {"key": "layer_thickness_um", "label": "도금층 두께", "unit": "µm", "type": "number", "min": 0},
+    {"key": "note", "label": "비고", "type": "text"}
+  ]
+}

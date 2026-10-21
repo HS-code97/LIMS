@@ -1,0 +1,13 @@
+{
+  "code": "ECHEM_POL", "version": 1, "name": "동전위 분극", "test_type": "ECHEM", "team": "표면·전기화학",
+  "default_cycles": 1, "default_interval_days": null,
+  "condition_schema": [
+    {"key": "electrolyte", "label": "전해액", "type": "text", "default": "5% NaCl"},
+    {"key": "scan_rate", "label": "주사 속도", "unit": "mV/s", "type": "number", "default": 1}
+  ],
+  "field_schema": [
+    {"key": "e_corr_mv", "label": "E_corr", "unit": "mV(SCE)", "type": "number", "grid": true},
+    {"key": "i_corr_ua_cm2", "label": "i_corr", "unit": "µA/cm²", "type": "number", "min": 0},
+    {"key": "note", "label": "비고", "type": "text"}
+  ]
+}

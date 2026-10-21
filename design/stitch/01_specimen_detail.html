@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+
+<html lang="ko"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>STEEL-LIMS R&amp;D - 시편 상세 26P4-C0102</title>
+<!-- Google Fonts: IBM Plex Sans & JetBrains Mono -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "background": "#f7f9ff",
+            "primary-fixed-dim": "#a0c9ff",
+            "tertiary-fixed-dim": "#96d5a2",
+            "surface-dim": "#d6dae1",
+            "on-primary-fixed": "#001c37",
+            "error-container": "#ffdad6",
+            "on-background": "#171c21",
+            "surface-container-lowest": "#ffffff",
+            "on-secondary": "#ffffff",
+            "tertiary-fixed": "#b1f2bd",
+            "primary": "#05528e",
+            "on-secondary-container": "#5d1900",
+            "on-primary": "#ffffff",
+            "outline-variant": "#c1c7d1",
+            "tertiary-container": "#38744a",
+            "secondary-fixed": "#ffdbd0",
+            "on-surface": "#171c21",
+            "on-error-container": "#93000a",
+            "secondary": "#ac3400",
+            "surface-bright": "#f7f9ff",
+            "on-secondary-fixed": "#390c00",
+            "on-secondary-fixed-variant": "#832600",
+            "on-surface-variant": "#414750",
+            "on-tertiary-container": "#b6f7c2",
+            "on-tertiary": "#ffffff",
+            "surface-container-highest": "#dee3ea",
+            "on-primary-container": "#ddeaff",
+            "surface-container-high": "#e4e8ef",
+            "inverse-primary": "#a0c9ff",
+            "surface-container-low": "#f0f4fb",
+            "primary-container": "#2f6ba8",
+            "on-error": "#ffffff",
+            "inverse-surface": "#2c3136",
+            "on-tertiary-fixed-variant": "#12512b",
+            "on-primary-fixed-variant": "#00497f",
+            "on-tertiary-fixed": "#00210c",
+            "outline": "#727781",
+            "tertiary": "#1e5b33",
+            "surface-variant": "#dee3ea",
+            "surface-tint": "#21619d",
+            "primary-fixed": "#d2e4ff",
+            "secondary-fixed-dim": "#ffb59d",
+            "secondary-container": "#fd6b36",
+            "inverse-on-surface": "#edf1f8",
+            "surface": "#f7f9ff",
+            "surface-container": "#eaeef5",
+            "error": "#ba1a1a"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.125rem",
+            "lg": "0.25rem",
+            "xl": "0.5rem",
+            "full": "0.75rem"
+          },
+          "spacing": {
+            "space-md": "1rem",
+            "space-xs": "0.25rem",
+            "space-lg": "1.5rem",
+            "space-sm": "0.5rem",
+            "margin": "1rem",
+            "space-xl": "2rem",
+            "gutter": "1rem"
+          },
+          "fontFamily": {
+            "body-sm": ["IBM Plex Sans"],
+            "headline-lg": ["IBM Plex Sans"],
+            "headline-sm": ["IBM Plex Sans"],
+            "code-md": ["JetBrains Mono"],
+            "card-title": ["IBM Plex Sans"],
+            "code-sm": ["JetBrains Mono"],
+            "body-md": ["IBM Plex Sans"]
+          },
+          "fontSize": {
+            "body-sm": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+            "headline-lg": ["20px", { "lineHeight": "28px", "fontWeight": "600" }],
+            "headline-sm": ["16px", { "lineHeight": "22px", "fontWeight": "600" }],
+            "code-md": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+            "card-title": ["13px", { "lineHeight": "18px", "letterSpacing": "0.02em", "fontWeight": "700" }],
+            "code-sm": ["11px", { "lineHeight": "14px", "fontWeight": "500" }],
+            "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 20;
+      font-size: 18px;
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1;
+    }
+    /* Custom scrollbar for dense data panels */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f0f4fb;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #c1c7d1;
+      border-radius: 2px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #727781;
+    }
+  </style>
+</head>
+<body class="bg-surface font-body-sm text-on-surface antialiased overflow-x-hidden selection:bg-primary selection:text-white">
+<!-- ================= TOP APP BAR (Shared Components JSON execution) ================= -->
+<header class="fixed top-0 left-0 w-full z-40 flex items-center justify-between px-space-md border-b border-outline-variant bg-surface-container-lowest h-14">
+<!-- Brand & Barcode Search Cluster -->
+<div class="flex items-center gap-space-md flex-1 max-w-2xl">
+<div class="flex items-center gap-2 pr-space-md border-r border-outline-variant">
+<span class="material-symbols-outlined text-primary text-[22px]">layers</span>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm font-bold text-primary tracking-tight">STEEL-LIMS R&amp;D</span>
+<span class="font-code-sm text-[10px] text-on-surface-variant leading-none">포항 표면처리연구그룹 No.2</span>
+</div>
+</div>
+<!-- Global Barcode & Keyword Scan Input -->
+<div class="relative flex-1">
+<div class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-outline">
+<span class="material-symbols-outlined text-base">qr_code_scanner</span>
+</div>
+<input class="w-full pl-9 pr-16 py-1.5 bg-surface-container-low border border-outline-variant rounded-lg font-body-sm text-on-surface placeholder:text-outline focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary h-8" placeholder="약식번호·코일번호·시험런 검색 (스캐너 입력 가능)" type="text" value="26P4-C0102"/>
+<div class="absolute inset-y-0 right-0 pr-2 flex items-center">
+<kbd class="font-code-sm text-[10px] bg-surface-container-high text-on-surface-variant px-1.5 py-0.5 rounded border border-outline-variant">F2</kbd>
+</div>
+</div>
+</div>
+<!-- Right Quick Actions & Lab Operator Session -->
+<div class="flex items-center gap-space-sm pl-space-md">
+<button class="inline-flex items-center gap-1 bg-surface-container-low hover:bg-surface-container border border-outline-variant text-on-surface font-body-sm px-2.5 py-1 rounded-lg transition-colors duration-150 h-8" type="button">
+<span class="material-symbols-outlined text-sm text-primary">add</span>
+<span>+공정런</span>
+</button>
+<button class="inline-flex items-center gap-1 bg-primary hover:bg-primary-container text-white font-body-sm font-medium px-2.5 py-1 rounded-lg transition-colors duration-150 h-8" type="button">
+<span class="material-symbols-outlined text-sm">add</span>
+<span>+시험런</span>
+</button>
+<div class="h-4 w-px bg-outline-variant mx-1"></div>
+<!-- Icon Actions -->
+<button class="p-1.5 text-on-surface-variant hover:bg-surface-container rounded-lg transition-colors duration-150" title="QR 코드 스캐너 모드" type="button">
+<span class="material-symbols-outlined">qr_code_scanner</span>
+</button>
+<button class="relative p-1.5 text-on-surface-variant hover:bg-surface-container rounded-lg transition-colors duration-150" title="알림 (2건)" type="button">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-1 right-1 w-2 h-2 bg-error rounded-full ring-2 ring-surface-container-lowest"></span>
+</button>
+<button class="p-1.5 text-on-surface-variant hover:bg-surface-container rounded-lg transition-colors duration-150" title="연구 설정" type="button">
+<span class="material-symbols-outlined">tune</span>
+</button>
+<div class="h-4 w-px bg-outline-variant mx-1"></div>
+<!-- Operator Profile -->
+<div class="flex items-center gap-2 pl-1">
+<div class="w-7 h-7 rounded-full bg-primary-fixed flex items-center justify-center text-primary font-code-sm font-semibold">
+          황
+        </div>
+<div class="flex flex-col text-left">
+<div class="flex items-center gap-1">
+<span class="font-body-sm font-medium text-on-surface leading-tight">황현석 책임</span>
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary" title="Lab Session Online"></span>
+</div>
+<span class="font-code-sm text-[10px] text-on-surface-variant leading-tight">표면연구그룹</span>
+</div>
+</div>
+</div>
+</header>
+<!-- ================= SIDE NAVIGATION RAIL (Shared Components JSON execution) ================= -->
+<aside class="fixed left-0 top-14 bottom-0 z-30 flex flex-col justify-between py-space-md px-space-sm w-60 border-r border-outline-variant bg-surface-container-low">
+<div class="flex flex-col gap-1">
+<!-- Section Mini Header -->
+<div class="px-space-sm pb-2 mb-1 border-b border-outline-variant flex items-center justify-between">
+<div>
+<h2 class="font-card-title text-card-title font-bold text-on-surface leading-snug">표면처리연구그룹</h2>
+<p class="font-code-sm text-[10px] text-on-surface-variant">포항연구소 No.2 LIMS</p>
+</div>
+<span class="font-code-sm text-[10px] px-1.5 py-0.5 rounded bg-surface-container-high text-primary font-semibold border border-outline-variant">GI·CR</span>
+</div>
+<!-- Nav Items: "시편 관리" IS ACTIVE FOR SPECIMEN DETAIL -->
+<!-- 1. 내 작업 -->
+<a class="flex items-center gap-2.5 text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm px-space-sm py-space-xs rounded-lg hover:bg-surface-container transition-colors duration-150" href="#">
+<span class="material-symbols-outlined">biotech</span>
+<span>내 작업</span>
+</a>
+<!-- 2. 공정런 -->
+<a class="flex items-center gap-2.5 text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm px-space-sm py-space-xs rounded-lg hover:bg-surface-container transition-colors duration-150" href="#">
+<span class="material-symbols-outlined">precision_manufacturing</span>
+<span>공정런</span>
+</a>
+<!-- 3. 시편 관리 (ACTIVE) -->
+<a class="flex items-center justify-between bg-primary-container text-white font-body-sm text-body-sm rounded-lg px-space-sm py-space-xs font-semibold shadow-sm" href="#">
+<div class="flex items-center gap-2.5">
+<span class="material-symbols-outlined text-white">layers</span>
+<span>시편 관리</span>
+</div>
+<span class="font-code-sm text-[10px] bg-white/20 text-white px-1.5 py-0.2 rounded">ACTIVE</span>
+</a>
+<!-- 4. 시험런 -->
+<a class="flex items-center gap-2.5 text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm px-space-sm py-space-xs rounded-lg hover:bg-surface-container transition-colors duration-150" href="#">
+<span class="material-symbols-outlined">science</span>
+<span>시험런</span>
+</a>
+<!-- 5. 검색·비교 -->
+<a class="flex items-center gap-2.5 text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm px-space-sm py-space-xs rounded-lg hover:bg-surface-container transition-colors duration-150" href="#">
+<span class="material-symbols-outlined">search_insights</span>
+<span>검색·비교</span>
+</a>
+<!-- 6. 시스템 관리 -->
+<a class="flex items-center gap-2.5 text-on-surface-variant hover:text-on-surface font-body-sm text-body-sm px-space-sm py-space-xs rounded-lg hover:bg-surface-container transition-colors duration-150" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span>시스템 관리</span>
+</a>
+</div>
+<!-- Left Rail Bottom Widgets -->
+<div class="flex flex-col gap-2 pt-2 border-t border-outline-variant">
+<!-- Quick Barcode CTA from JSON Blueprint -->
+<button class="w-full flex items-center justify-center gap-2 bg-surface-container-lowest hover:bg-surface-container border border-outline-variant rounded-lg py-1.5 text-on-surface font-body-sm font-medium transition-colors duration-150 shadow-none" type="button">
+<span class="material-symbols-outlined text-primary text-base">barcode_scanner</span>
+<span>시편 바코드 입력</span>
+</button>
+<!-- Footer Sub Tabs from JSON Blueprint -->
+<div class="flex items-center justify-between px-1 text-on-surface-variant">
+<a class="flex items-center gap-1.5 text-body-sm hover:text-on-surface py-1" href="#">
+<span class="material-symbols-outlined text-base">folder_open</span>
+<span>문서고</span>
+</a>
+<a class="flex items-center gap-1.5 text-body-sm hover:text-on-surface py-1" href="#">
+<span class="material-symbols-outlined text-base">terminal</span>
+<span>터미널</span>
+</a>
+</div>
+</div>
+</aside>
+<!-- ================= MAIN CONTENT CANVAS ================= -->
+<main class="ml-60 mt-14 p-space-md min-h-[calc(100vh-3.5rem)] bg-surface text-on-surface space-y-space-md">
+<!-- 1. TOP SPECIMEN IDENTIFIER & ACTION HEADER -->
+<section class="bg-surface-container-lowest border border-outline-variant rounded-lg p-space-md">
+<!-- Breadcrumb Navigation -->
+<nav class="flex items-center gap-1.5 text-on-surface-variant font-code-sm text-[11px] mb-2">
+<a class="hover:text-primary transition-colors" href="#">시편 관리</a>
+<span class="material-symbols-outlined text-xs">chevron_right</span>
+<a class="hover:text-primary transition-colors" href="#">도금 강판</a>
+<span class="material-symbols-outlined text-xs">chevron_right</span>
+<a class="hover:text-primary transition-colors" href="#">26P4</a>
+<span class="material-symbols-outlined text-xs">chevron_right</span>
+<span class="text-on-surface font-semibold">26P4-C0102</span>
+</nav>
+<div class="flex flex-wrap items-start justify-between gap-space-md">
+<!-- Specimen Code Cluster -->
+<div class="space-y-1">
+<div class="flex items-baseline gap-3">
+<h1 class="font-code-md text-2xl font-bold tracking-tight text-on-surface">26P4-C0102</h1>
+<span class="font-code-md text-sm text-outline tracking-normal">M206K-26P4-C0102</span>
+</div>
+<!-- Metadata Chips Row -->
+<div class="flex flex-wrap items-center gap-2 pt-1">
+<!-- Stage Badge -->
+<span class="inline-flex items-center gap-1 font-code-sm text-[11px] px-2 py-0.5 rounded bg-surface-container border border-outline text-on-surface font-semibold">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+              시험편 (C)
+            </span>
+<!-- Status Badge: IN_TEST with Live Pulse Indicator -->
+<span class="inline-flex items-center gap-1.5 font-code-sm text-[11px] px-2 py-0.5 rounded bg-primary-fixed text-primary font-semibold border border-primary/20">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+</span>
+              IN_TEST
+            </span>
+<!-- Project Chip -->
+<span class="inline-flex items-center gap-1 font-body-sm text-[11px] px-2 py-0.5 rounded bg-surface-container-low border border-outline-variant text-on-surface-variant">
+<span class="text-outline">과제:</span>
+<strong class="font-code-sm text-on-surface">26P4</strong>
+<span class="text-[10px] text-outline">(2026P1234)</span>
+</span>
+<!-- Owner Chip -->
+<span class="inline-flex items-center gap-1 font-body-sm text-[11px] px-2 py-0.5 rounded bg-surface-container-low border border-outline-variant text-on-surface-variant">
+<span class="text-outline">담당:</span>
+<span class="text-on-surface font-medium">황현석 책임연구원</span>
+</span>
+<!-- Sample Specs -->
+<span class="inline-flex items-center gap-1 font-body-sm text-[11px] px-2 py-0.5 rounded bg-surface-container-high border border-outline-variant text-on-surface font-medium">
+              GI (용융아연도금) · SPCC 0.8T
+            </span>
+</div>
+<!-- Micro Note Line -->
+<div class="flex items-center gap-3 text-on-surface-variant font-code-sm text-[11px] pt-1">
+<span>각인: <span class="text-on-surface font-medium">M206K</span></span>
+<span class="text-outline-variant">|</span>
+<span>실측 기준: <span class="text-on-surface font-medium">M205K</span></span>
+<span class="text-outline-variant">|</span>
+<span>등록일시: <span class="text-on-surface">2026-10-22 14:30:15 KST</span></span>
+</div>
+</div>
+<!-- Action Button Group -->
+<div class="flex items-center gap-2">
+<!-- Primary Action: Branch -->
+<button class="inline-flex items-center gap-1.5 bg-primary hover:bg-primary-container text-white px-3 py-1.5 rounded-lg font-body-sm font-semibold transition-colors duration-150 h-9" type="button">
+<span class="material-symbols-outlined text-sm">fork_right</span>
+<span>[분기] 자식 시편 생성</span>
+</button>
+<!-- Secondary Actions -->
+<button class="inline-flex items-center gap-1 bg-surface-container-lowest hover:bg-surface-container border border-outline-variant text-on-surface px-2.5 py-1.5 rounded-lg font-body-sm transition-colors duration-150 h-9" type="button">
+<span class="material-symbols-outlined text-sm text-outline">playlist_add</span>
+<span>이벤트 추가</span>
+</button>
+<button class="inline-flex items-center gap-1 bg-surface-container-lowest hover:bg-surface-container border border-outline-variant text-on-surface px-2.5 py-1.5 rounded-lg font-body-sm transition-colors duration-150 h-9" type="button">
+<span class="material-symbols-outlined text-sm text-outline">download</span>
+<span>각인 CSV</span>
+</button>
+<button class="inline-flex items-center gap-1 bg-surface-container-lowest hover:bg-surface-container border border-outline-variant text-on-surface px-2.5 py-1.5 rounded-lg font-body-sm transition-colors duration-150 h-9" type="button">
+<span class="material-symbols-outlined text-sm text-outline">print</span>
+<span>라벨 출력 (QR)</span>
+</button>
+</div>
+</div>
+</section>
+<!-- 2. CARD 1: GENEALOGY CHAIN (계보 추적 노드) -->
+<section class="bg-surface-container-lowest border border-outline-variant rounded-lg p-space-md">
+<div class="flex items-center justify-between pb-3 mb-3 border-b border-outline-variant">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-base">account_tree</span>
+<h2 class="font-card-title text-card-title font-bold text-on-surface uppercase">계보 (Genealogy Chain)</h2>
+<span class="font-code-sm text-[11px] text-on-surface-variant">포항 No.2 CGL 코팅 라인 추적</span>
+</div>
+<div class="flex items-center gap-2">
+<button class="inline-flex items-center gap-1 text-on-surface-variant hover:text-primary font-body-sm text-body-sm transition-colors" type="button">
+<span class="material-symbols-outlined text-sm">filter_center_focus</span>
+<span>트리 전체보기</span>
+</button>
+</div>
+</div>
+<!-- Horizontal Node Chain -->
+<div class="overflow-x-auto pb-1">
+<div class="flex items-center min-w-[900px] gap-2 py-1">
+<!-- Node 1: 원소재 (POSCO Coil) -->
+<div class="flex-1 min-w-[170px] bg-surface-container-low border border-outline-variant rounded p-2.5 flex flex-col justify-between">
+<div class="flex items-center justify-between mb-1">
+<span class="font-code-sm text-[10px] text-outline font-semibold">1. 원소재 코일</span>
+<span class="material-symbols-outlined text-xs text-outline">radio_button_checked</span>
+</div>
+<div class="font-code-md text-xs font-bold text-on-surface">POS-26-8891</div>
+<div class="font-body-sm text-[11px] text-on-surface-variant truncate mt-0.5" title="원소재 SPCC 0.8T (포스코 광양 1열연)">
+              원소재 SPCC 0.8T (포스코 코일)
+            </div>
+<div class="font-code-sm text-[10px] text-outline mt-1">2026-10-20 입고</div>
+</div>
+<!-- Connector Arrow -->
+<div class="flex items-center justify-center text-outline-variant px-1">
+<span class="material-symbols-outlined text-sm">trending_flat</span>
+</div>
+<!-- Node 2: 공정런 -->
+<div class="flex-1 min-w-[170px] bg-surface-container-low border border-outline-variant rounded p-2.5 flex flex-col justify-between">
+<div class="flex items-center justify-between mb-1">
+<span class="font-code-sm text-[10px] text-outline font-semibold">2. 공정런 실행</span>
+<span class="material-symbols-outlined text-xs text-outline">tune</span>
+</div>
+<div class="font-code-md text-xs font-bold text-on-surface">PR-26-0137</div>
+<div class="font-body-sm text-[11px] text-on-surface-variant truncate mt-0.5" title="공정런 (2026-10-21) #2 CGL 시험생산">
+              공정런 (2026-10-21) #2 CGL
+            </div>
+<div class="font-code-sm text-[10px] text-outline mt-1">GI 합금화 460°C</div>
+</div>
+<!-- Connector Arrow -->
+<div class="flex items-center justify-center text-outline-variant px-1">
+<span class="material-symbols-outlined text-sm">trending_flat</span>
+</div>
+<!-- Node 3: 원판 (Mother Sheet) -->
+<div class="flex-1 min-w-[170px] bg-surface-container-low border border-outline-variant rounded p-2.5 flex flex-col justify-between">
+<div class="flex items-center justify-between mb-1">
+<span class="font-code-sm text-[10px] text-outline font-semibold">3. 모판 시편 (P)</span>
+<span class="material-symbols-outlined text-xs text-outline">crop_free</span>
+</div>
+<div class="font-code-md text-xs font-bold text-on-surface">26P4-P0102</div>
+<div class="font-body-sm text-[11px] text-on-surface-variant truncate mt-0.5" title="원판 (Mother Sheet 1000x800)">
+              원판 (Mother Sheet 1000x800)
+            </div>
+<div class="font-code-sm text-[10px] text-outline mt-1">부착량 54/58 g/m²</div>
+</div>
+<!-- Connector Arrow -->
+<div class="flex items-center justify-center text-primary px-1">
+<span class="material-symbols-outlined text-base">arrow_forward</span>
+</div>
+<!-- Node 4: 현재 시편 (CURRENT - Highlighted Industrial Blue) -->
+<div class="flex-1 min-w-[200px] bg-primary text-white border-2 border-primary rounded p-2.5 flex flex-col justify-between shadow-sm relative">
+<div class="flex items-center justify-between mb-1">
+<span class="font-code-sm text-[10px] font-bold text-primary-fixed uppercase tracking-wider">4. 현재 시편 (C)</span>
+<span class="font-code-sm text-[9px] bg-white text-primary px-1.5 py-0.2 rounded font-extrabold uppercase">CURRENT</span>
+</div>
+<div class="font-code-md text-sm font-bold text-white tracking-wide">26P4-C0102</div>
+<div class="font-body-sm text-[11px] text-surface-container-low truncate mt-0.5" title="현재 시편 (150x70 시험편) - CCT 복합부식">
+              현재 시편 (150x70 시험편)
+            </div>
+<div class="flex items-center justify-between font-code-sm text-[10px] text-primary-fixed-dim mt-1">
+<span>CCT Slot A-03</span>
+<span>12/60 Cycle</span>
+</div>
+</div>
+<!-- Connector Arrow -->
+<div class="flex items-center justify-center text-outline-variant px-1">
+<span class="material-symbols-outlined text-sm">east</span>
+</div>
+<!-- Node 5: 자식 시편 (Planned Daughter Coupon - Dashed Border) -->
+<div class="flex-1 min-w-[170px] bg-surface-container-lowest border-2 border-dashed border-outline-variant rounded p-2.5 flex flex-col justify-between opacity-85">
+<div class="flex items-center justify-between mb-1">
+<span class="font-code-sm text-[10px] text-outline font-semibold">5. 자식 시편 (예정)</span>
+<span class="material-symbols-outlined text-xs text-outline">pending</span>
+</div>
+<div class="font-code-md text-xs font-semibold text-on-surface">26P4-S0102</div>
+<div class="font-body-sm text-[11px] text-on-surface-variant truncate mt-0.5" title="자식 시편 (단면분석용 쿠폰 20x15)">
+              자식 시편 (단면분석용 쿠폰)
+            </div>
+<div class="font-code-sm text-[10px] text-outline mt-1">60 Cycle 후 절단예정</div>
+</div>
+</div>
+</div>
+</section>
+<!-- 3. MAIN DENSE TECHNICAL GRID (2-Column Layout) -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-md">
+<!-- LEFT COLUMN: PROCESS CONDITIONS & ACTIVE TEST RUNS (7 cols) -->
+<div class="lg:col-span-7 space-y-space-md">
+<!-- CARD 2: 공정 조건 (목표 → 실측 비교 분석 테이블) -->
+<section class="bg-surface-container-lowest border border-outline-variant rounded-lg p-space-md">
+<div class="flex flex-wrap items-center justify-between pb-2 mb-2 border-b border-outline-variant gap-2">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-base">thermostat</span>
+<h2 class="font-card-title text-card-title font-bold text-on-surface">공정 조건 (목표 → 실측)</h2>
+</div>
+<div class="flex items-center gap-3">
+<!-- Mode Toggle Button Group -->
+<div class="inline-flex rounded border border-outline-variant p-0.5 bg-surface-container-low">
+<button class="px-2 py-0.5 font-body-sm text-[11px] font-semibold bg-surface-container-lowest text-primary rounded shadow-none" type="button">대표값 기준</button>
+<button class="px-2 py-0.5 font-body-sm text-[11px] text-on-surface-variant hover:text-on-surface" type="button">목표 기준</button>
+</div>
+<span class="font-code-sm text-[10px] text-outline">동기화: 2026-10-22 16:05</span>
+</div>
+</div>
+<!-- Process Parameter Table -->
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container text-on-surface-variant font-code-sm text-[11px] uppercase tracking-wider border-b border-outline-variant">
+<th class="py-1.5 px-2 font-semibold">파라미터</th>
+<th class="py-1.5 px-2 text-right font-semibold">목표값</th>
+<th class="py-1.5 px-2 text-right font-semibold">실측 / 대표값</th>
+<th class="py-1.5 px-2 text-right font-semibold">편차(Δ)</th>
+<th class="py-1.5 px-2 text-center font-semibold">공차 상태</th>
+<th class="py-1.5 px-2 text-center font-semibold">데이터 출처</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/60 font-body-sm">
+<!-- Row 1: Zinc Pot Temp -->
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-2 px-2 font-medium text-on-surface">욕온 (Zinc Pot Temp)</td>
+<td class="py-2 px-2 text-right font-code-md text-xs">460 °C</td>
+<td class="py-2 px-2 text-right font-code-md text-xs font-semibold">458.5 °C</td>
+<td class="py-2 px-2 text-right font-code-md text-xs text-on-surface-variant">-1.5 °C</td>
+<td class="py-2 px-2 text-center">
+<span class="inline-flex items-center gap-1 font-body-sm text-[11px] text-tertiary">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> 정상
+                    </span>
+</td>
+<td class="py-2 px-2 text-center">
+<span class="font-code-sm text-[10px] px-1.5 py-0.5 rounded bg-tertiary-fixed text-on-tertiary-fixed-variant font-semibold">세션</span>
+</td>
+</tr>
+<!-- Row 2: Dew Point (OUT OF SPEC - WARNING) -->
+<tr class="bg-secondary-fixed/20 hover:bg-secondary-fixed/30 transition-colors">
+<td class="py-2 px-2 font-medium text-on-surface">이슬점 (Dew Point)</td>
+<td class="py-2 px-2 text-right font-code-md text-xs">-40 °C</td>
+<td class="py-2 px-2 text-right font-code-md text-xs font-semibold text-secondary">-36.0 °C</td>
+<td class="py-2 px-2 text-right font-code-md text-xs font-bold text-secondary">+4.0 °C</td>
+<td class="py-2 px-2 text-center">
+<span class="inline-flex items-center gap-1 font-code-sm text-[10px] px-2 py-0.5 rounded bg-secondary-fixed text-on-secondary-fixed font-bold border border-secondary/30">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span> ● 초과
+                    </span>
+</td>
+<td class="py-2 px-2 text-center">
+<span class="font-code-sm text-[10px] px-1.5 py-0.5 rounded bg-tertiary-fixed text-on-tertiary-fixed-variant font-semibold">세션</span>
+</td>
+</tr>
+<!-- Row 3: Peak Metal Temp (Inherited Actual) -->
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-2 px-2 font-medium text-on-surface">최고판온 (Peak Metal Temp)</td>
+<td class="py-2 px-2 text-right font-code-md text-xs">800 °C</td>
+<td class="py-2 px-2 text-right font-code-md text-xs font-semibold">802.0 °C</td>
+<td class="py-2 px-2 text-right font-code-md text-xs text-on-surface-variant">+2.0 °C</td>
+<td class="py-2 px-2 text-center">
+<span class="inline-flex items-center gap-1 font-body-sm text-[11px] text-tertiary">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> 정상
+                    </span>
+</td>
+<td class="py-2 px-2 text-center">
+<span class="font-code-sm text-[10px] px-1.5 py-0.5 rounded border border-dashed border-tertiary text-tertiary font-semibold">실측·P0102</span>
+</td>
+</tr>
+<!-- Row 4: Air Knife Pressure (Target Source) -->
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-2 px-2 font-medium text-on-surface">에어나이프 압력</td>
+<td class="py-2 px-2 text-right font-code-md text-xs">30.0 kPa</td>
+<td class="py-2 px-2 text-right font-code-md text-xs font-semibold">30.0 kPa</td>
+<td class="py-2 px-2 text-right font-code-md text-xs text-on-surface-variant">0.0 kPa</td>
+<td class="py-2 px-2 text-center">
+<span class="font-body-sm text-[11px] text-on-surface-variant">기준</span>
+</td>
+<td class="py-2 px-2 text-center">
+<span class="font-code-sm text-[10px] px-1.5 py-0.5 rounded bg-surface-container-high text-outline font-semibold border border-outline-variant">목표</span>
+</td>
+</tr>
+<!-- Row 5: Coating Wt Top (CRITICAL DEFECT - UNDER SPEC) -->
+<tr class="bg-secondary-fixed/20 hover:bg-secondary-fixed/30 transition-colors">
+<td class="py-2 px-2 font-medium text-on-surface">부착량 윗면 (Coating Wt Top)</td>
+<td class="py-2 px-2 text-right font-code-md text-xs">60.0 g/m²</td>
+<td class="py-2 px-2 text-right font-code-md text-xs font-semibold text-secondary">54.0 g/m²</td>
+<td class="py-2 px-2 text-right font-code-md text-xs font-bold text-secondary">-6.0 (-10%)</td>
+<td class="py-2 px-2 text-center">
+<span class="inline-flex items-center gap-1 font-code-sm text-[10px] px-2 py-0.5 rounded bg-secondary-fixed text-on-secondary-fixed font-bold border border-secondary/30">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span> ● 기준미달
+                    </span>
+</td>
+<td class="py-2 px-2 text-center">
+<span class="font-code-sm text-[10px] px-1.5 py-0.5 rounded bg-primary-fixed text-primary font-semibold border border-primary/20">시험(XRF)</span>
+</td>
+</tr>
+<!-- Row 6: Coating Wt Bot -->
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-2 px-2 font-medium text-on-surface">부착량 아랫면 (Coating Wt Bot)</td>
+<td class="py-2 px-2 text-right font-code-md text-xs">60.0 g/m²</td>
+<td class="py-2 px-2 text-right font-code-md text-xs font-semibold">58.2 g/m²</td>
+<td class="py-2 px-2 text-right font-code-md text-xs text-on-surface-variant">-1.8 (-3%)</td>
+<td class="py-2 px-2 text-center">
+<span class="inline-flex items-center gap-1 font-body-sm text-[11px] text-tertiary">
+<span class="w-1.5 h-1.5 rounded-full bg-tertiary"></span> 정상
+                    </span>
+</td>
+<td class="py-2 px-2 text-center">
+<span class="font-code-sm text-[10px] px-1.5 py-0.5 rounded bg-primary-fixed text-primary font-semibold border border-primary/20">시험(XRF)</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Micro Tolerance Footer Note -->
+<div class="mt-2.5 pt-2 border-t border-outline-variant flex items-center justify-between text-outline font-code-sm text-[10px]">
+<span>※ 허용 공차 범위: 욕온 ±3°C, 이슬점 ±2°C, 도금량 ±5% (사내 규격 ES-CGL-08)</span>
+<span class="text-secondary font-medium">편차 발생 파라미터 2건 플래그됨</span>
+</div>
+</section>
+<!-- CARD 3: 시험 이력 (TEST RUNS) -->
+<section class="bg-surface-container-lowest border border-outline-variant rounded-lg p-space-md">
+<div class="flex items-center justify-between pb-2 mb-2 border-b border-outline-variant">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-base">science</span>
+<h2 class="font-card-title text-card-title font-bold text-on-surface">시험 이력 (Test Runs)</h2>
+<span class="font-code-sm text-[11px] bg-surface-container px-1.5 py-0.2 rounded text-outline font-semibold">2건 등록</span>
+</div>
+<button class="inline-flex items-center gap-1 text-primary hover:text-primary-container font-body-sm text-body-sm font-semibold" type="button">
+<span class="material-symbols-outlined text-sm">add_circle</span>
+<span>시험런 연결</span>
+</button>
+</div>
+<div class="space-y-2">
+<!-- Test Row 1: 복합부식시험 (ACTIVE CCT) -->
+<div class="p-2.5 bg-surface-container-low border border-outline-variant rounded-lg hover:border-primary transition-colors">
+<div class="flex flex-wrap items-center justify-between gap-1 mb-1.5">
+<div class="flex items-center gap-2">
+<span class="font-code-md text-xs font-bold text-primary">TR-CCT-26001</span>
+<span class="font-body-sm font-semibold text-on-surface">복합부식시험 (CCT 1호기)</span>
+<span class="font-code-sm text-[10px] bg-surface-container-high px-1.5 py-0.5 rounded text-on-surface-variant">Slot: A-03</span>
+</div>
+<!-- Status Pill -->
+<span class="inline-flex items-center gap-1.5 font-code-sm text-[11px] px-2 py-0.5 rounded-full bg-primary-fixed text-primary font-bold">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+                  진행 중 (Cycle 12/60)
+                </span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-2 font-code-sm text-[11px] text-on-surface-variant bg-surface-container-lowest p-2 rounded border border-outline-variant/50">
+<div>
+<span class="text-outline">시작일시:</span> <span class="text-on-surface">2026-10-23 09:00</span>
+</div>
+<div>
+<span class="text-outline">최근측정:</span> <span class="text-secondary font-semibold">W03 적청률 1.0% (허용치 &lt; 3%)</span>
+</div>
+<div class="text-right">
+<span class="text-outline">담당:</span> <span class="text-on-surface font-medium">김민재 연구원</span>
+</div>
+</div>
+</div>
+<!-- Test Row 2: 0T 가공성 밀착시험 (COMPLETED) -->
+<div class="p-2.5 bg-surface-container-low border border-outline-variant rounded-lg hover:border-primary transition-colors">
+<div class="flex flex-wrap items-center justify-between gap-1 mb-1.5">
+<div class="flex items-center gap-2">
+<span class="font-code-md text-xs font-bold text-on-surface">TR-BEND-26014</span>
+<span class="font-body-sm font-semibold text-on-surface">0T 가공성 밀착시험</span>
+<span class="font-code-sm text-[10px] bg-surface-container-high px-1.5 py-0.5 rounded text-on-surface-variant">Slot: Lab-B Bench 2</span>
+</div>
+<!-- Status Pill -->
+<span class="inline-flex items-center gap-1.5 font-code-sm text-[11px] px-2 py-0.5 rounded-full bg-tertiary-fixed text-tertiary font-bold">
+<span class="material-symbols-outlined text-xs">check_circle</span>
+                  완료 (합격)
+                </span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-2 font-code-sm text-[11px] text-on-surface-variant bg-surface-container-lowest p-2 rounded border border-outline-variant/50">
+<div>
+<span class="text-outline">시작일시:</span> <span class="text-on-surface">2026-10-22 16:30</span>
+</div>
+<div>
+<span class="text-outline">최근측정:</span> <span class="text-tertiary font-semibold">박리 없음 (Grade 0)</span>
+</div>
+<div class="text-right">
+<span class="text-outline">담당:</span> <span class="text-on-surface font-medium">황현석 책임</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- CARD 4: 공정 이벤트 & 특이사항 (PROCESS EVENTS) -->
+<section class="bg-surface-container-lowest border border-outline-variant rounded-lg p-space-md">
+<div class="flex items-center justify-between pb-2 mb-2 border-b border-outline-variant">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-base">history</span>
+<h2 class="font-card-title text-card-title font-bold text-on-surface">공정 이벤트 &amp; 특이사항 (Process Events)</h2>
+</div>
+<button class="text-xs text-on-surface-variant hover:text-primary" type="button">최신순 정렬</button>
+</div>
+<div class="relative pl-4 space-y-3 before:absolute before:left-1.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-outline-variant">
+<!-- Event 1 -->
+<div class="relative">
+<span class="absolute -left-[19px] top-1 w-2.5 h-2.5 rounded-full bg-primary ring-4 ring-surface-container-lowest"></span>
+<div class="flex items-baseline gap-2">
+<span class="font-code-sm text-[11px] text-outline">2026-10-22 15:45</span>
+<span class="font-code-sm text-[10px] px-1.5 py-0.2 rounded bg-surface-container-high text-on-surface font-semibold border border-outline-variant">POST_TREAT</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface mt-0.5">
+                Cr-free 화성처리 도포 완료 (Roll Coater #1, 건조 120°C 규격 완료)
+              </p>
+</div>
+<!-- Event 2 -->
+<div class="relative">
+<span class="absolute -left-[19px] top-1 w-2.5 h-2.5 rounded-full bg-outline ring-4 ring-surface-container-lowest"></span>
+<div class="flex items-baseline gap-2">
+<span class="font-code-sm text-[11px] text-outline">2026-10-22 14:10</span>
+<span class="font-code-sm text-[10px] px-1.5 py-0.2 rounded bg-surface-container-high text-on-surface font-semibold border border-outline-variant">SAMPLING</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface mt-0.5">
+                CGL 라인 3번 코일 테일부 50m 지점 채취 및 레이저 마킹 (각인 ID: <span class="font-code-sm font-semibold">M206K</span>)
+              </p>
+</div>
+<!-- Event 3 -->
+<div class="relative">
+<span class="absolute -left-[19px] top-1 w-2.5 h-2.5 rounded-full bg-outline ring-4 ring-surface-container-lowest"></span>
+<div class="flex items-baseline gap-2">
+<span class="font-code-sm text-[11px] text-outline">2026-10-21 18:20</span>
+<span class="font-code-sm text-[10px] px-1.5 py-0.2 rounded bg-surface-container-high text-on-surface font-semibold border border-outline-variant">ANNEALING</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface mt-0.5">
+                환원소둔로 분위기 가스 수소 농도 5.2% 유지 및 노압 안정 상태 확인
+              </p>
+</div>
+</div>
+</section>
+</div>
+<!-- RIGHT COLUMN: HIGH-DENSITY IMAGE & FILE GALLERY (5 cols) -->
+<div class="lg:col-span-5 space-y-space-md">
+<!-- CARD 5: 사진·파일 갤러리 (CARD 5 GALLERY) -->
+<section class="bg-surface-container-lowest border border-outline-variant rounded-lg p-space-md flex flex-col justify-between h-full">
+<div>
+<!-- Gallery Header -->
+<div class="flex items-center justify-between pb-2 mb-2 border-b border-outline-variant">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-base">photo_library</span>
+<h2 class="font-card-title text-card-title font-bold text-on-surface">사진·파일 갤러리</h2>
+<span class="font-code-sm text-[11px] text-outline">(검사이력 및 미세조직)</span>
+</div>
+<span class="font-code-sm text-[10px] text-outline">총 8개 자산</span>
+</div>
+<!-- Tab / Filter Bar -->
+<div class="flex items-center gap-1 pb-2 border-b border-outline-variant/40 mb-3 overflow-x-auto text-on-surface-variant font-body-sm text-[12px]">
+<button class="px-2 py-1 font-semibold text-primary border-b-2 border-primary bg-primary-fixed/20 rounded-t" type="button">
+                전체 (8)
+              </button>
+<button class="px-2 py-1 hover:text-on-surface transition-colors" type="button">
+                부식평가 (4)
+              </button>
+<button class="px-2 py-1 hover:text-on-surface transition-colors" type="button">
+                단면·SEM (2)
+              </button>
+<button class="px-2 py-1 hover:text-on-surface transition-colors" type="button">
+                성적서 (2)
+              </button>
+</div>
+<!-- 8 High-Density Thumbnail Cards (2 cols grid) -->
+<div class="grid grid-cols-2 gap-2">
+<!-- Thumbnail 1: W00 Front -->
+<div class="group border border-outline-variant rounded overflow-hidden bg-surface-container-low hover:border-primary transition-all">
+<div class="relative h-24 bg-surface-dim overflow-hidden">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" data-alt="Close-up macro industrial laboratory photography of a fresh galvanized steel coupon sheet surface showing pristine zinc spangles, crystalline metallic texture under neutral cool white diffuse laboratory illumination, high precision quality inspection focus." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDc2K3QROxl5VutFt2RPtxzgD9EIGMTD64N9nxdbrg-a1Vz_vK3DzQzMW3VlxrT7F0e9SHS45fkWvBan0hq1hKDUm-QimQKoXNv4Mxg28WXXBHjkxJ4Yj4VTbsCI98vFTwU8ZhR99ZVUzjzHXjGESX4hc4XqD12X1d-yJVD_XBcTDWEbXaVUxTdy1TgpdyEmg-GvVpJL6AhRO6SsYaaO5YN37m9WIEQrUjn-cDBBnZKy8cYtZoPvOS6UpRuitUB4ML6HLjUg8_V7YeD"/>
+<span class="absolute top-1 left-1 font-code-sm text-[9px] bg-black/70 text-white px-1 py-0.2 rounded">W00 Front</span>
+</div>
+<div class="p-1.5">
+<p class="font-body-sm text-[11px] font-medium text-on-surface truncate">0주차 전면</p>
+<p class="font-code-sm text-[10px] text-outline truncate">도금 초기 표면 정상</p>
+</div>
+</div>
+<!-- Thumbnail 2: W00 Back -->
+<div class="group border border-outline-variant rounded overflow-hidden bg-surface-container-low hover:border-primary transition-all">
+<div class="relative h-24 bg-surface-dim overflow-hidden">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" data-alt="Laboratory high resolution metallic sample photography of galvanized steel rear coupon surface, uniform flat silvery metal zinc finish with smooth coating reflection under calibrated clean room lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBrX69JKJ85nqLyvtx5fHey0_phD2hqCmSDFzwG1azbLWDL2ruXnFjkWaD8OACTx_oHf1caUcP9symir4ZMPtCgHvgf67dIsH3hwrUczdkpyl8SPoAlnGGnY9svqLazh6rJrc9ko6Ub4wqW6KcOQWL2lqlDLIeX4sZymPze2xE1wfQxbOd1n4asd87Vql4d4LPDbE-Z03h01DgqMo0sd2vBfqWNAXqFs7ur0EhXqgAxRRp-EtMyVJbeBop1G_G7nCDFKK0wa3vus7ta"/>
+<span class="absolute top-1 left-1 font-code-sm text-[9px] bg-black/70 text-white px-1 py-0.2 rounded">W00 Back</span>
+</div>
+<div class="p-1.5">
+<p class="font-body-sm text-[11px] font-medium text-on-surface truncate">0주차 후면</p>
+<p class="font-code-sm text-[10px] text-outline truncate">초기 표면 상태</p>
+</div>
+</div>
+<!-- Thumbnail 3: W01 Front -->
+<div class="group border border-outline-variant rounded overflow-hidden bg-surface-container-low hover:border-primary transition-all">
+<div class="relative h-24 bg-surface-dim overflow-hidden">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" data-alt="Laboratory specimen photography of a coated steel sheet after 1 week cyclic corrosion testing showing slight white rust patina and minimal oxidation specks on metallic zinc surface, strict industrial measurement lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBbTqhySRDYzF5qD6-70l0v4ENdwN5juxJALc8R_42AXlWwZRuRuIiprTrBLSJhuJs-IkZih_RwGTvW6XN7IJ3gayiAeDzmwETdXC_C1lHo7KrRp5P2xZWFxPGPAJFYkKXCsxK5v_a5_7lvBMUkOzzJT0Jrdi9EgO5ArhiUloetbR0JZXnlUV9YoGyOtNE-1I3wxEJJD9WtFzJIwPVBNuT7AauvOY-6z45sARLNE3ylp5tJ22dJ5lzlgZOmLlD6X9lO86C2dRSAL4A0"/>
+<span class="absolute top-1 left-1 font-code-sm text-[9px] bg-black/70 text-white px-1 py-0.2 rounded">W01 Front</span>
+</div>
+<div class="p-1.5">
+<p class="font-body-sm text-[11px] font-medium text-on-surface truncate">1주차 CCT 전면</p>
+<p class="font-code-sm text-[10px] text-outline truncate">백청 5% 미만 정상</p>
+</div>
+</div>
+<!-- Thumbnail 4: W01 Back -->
+<div class="group border border-outline-variant rounded overflow-hidden bg-surface-container-low hover:border-primary transition-all">
+<div class="relative h-24 bg-surface-dim overflow-hidden">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" data-alt="Laboratory corrosion testing specimen showing rear side of steel coupon with mild white zinc oxidation film, even surface degradation analysis under cool high CRI laboratory luminaire." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDma73TamS3xdOaoY7Ae2CfhPzImIQrK83RUhssGg8KnxHJ5N1a6AMElcIFwoR0oBUXDZUpXAFMjfpijlj8hJdyYryEhf3ukDC8YlPKsvh9vLQdhPQymOhgp9n8DprgdQm8BaJ8y3xYzb8Tt5Ppzmvki2vPmVik-HDCcxKsxUhnkkzWO881uaSyOSoL1aLiYdsyk9pSF6kmkBclWyVN5QTPqsXlTPSETtzXJYXhL2idzHObQS2WIYhB45VNLYz2sy5DfBZ7qCNw9wjk"/>
+<span class="absolute top-1 left-1 font-code-sm text-[9px] bg-black/70 text-white px-1 py-0.2 rounded">W01 Back</span>
+</div>
+<div class="p-1.5">
+<p class="font-body-sm text-[11px] font-medium text-on-surface truncate">1주차 CCT 후면</p>
+<p class="font-code-sm text-[10px] text-outline truncate">백청 발생 초기</p>
+</div>
+</div>
+<!-- Thumbnail 5: W02 Front -->
+<div class="group border border-outline-variant rounded overflow-hidden bg-surface-container-low hover:border-primary transition-all">
+<div class="relative h-24 bg-surface-dim overflow-hidden">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" data-alt="Scientific metallurgical evaluation photograph of hot dip galvanized sheet after two weeks salt spray corrosion chamber exposure, exhibiting moderate zinc patina without red iron rust, laboratory metric scale visible." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCYzEdp-10rRtrlSy7nbtQTsRJAYbo8XD75_z6KY8tFgu7TrxstzzXSS9wD6RuaIGQ2e_hOdrE4Y-XTQZLOhQejclpewlQ0SJY5c8kE24Uc5V2BOn4kceK4FcVNPEfA5yYKA81bG8D0PXWb5vQZtK_lTGiJexlvlkVPchThLSYX2aU3B-4QqFhrf0bnrJzWyNepceSK2LuF8pNKtWQ-Hkb_EgAuA5Bz71hqE79E6Tsq_9RPW-dujns9wC7AAj8jPqycPfeEqnw3PCyZ"/>
+<span class="absolute top-1 left-1 font-code-sm text-[9px] bg-black/70 text-white px-1 py-0.2 rounded">W02 Front</span>
+</div>
+<div class="p-1.5">
+<p class="font-body-sm text-[11px] font-medium text-on-surface truncate">2주차 CCT 전면</p>
+<p class="font-code-sm text-[10px] text-tertiary truncate">적청 0% 합격</p>
+</div>
+</div>
+<!-- Thumbnail 6: W02 Back -->
+<div class="group border border-outline-variant rounded overflow-hidden bg-surface-container-low hover:border-primary transition-all">
+<div class="relative h-24 bg-surface-dim overflow-hidden">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" data-alt="Technical surface analysis photo of test plate reverse face at two weeks interval in CCT chamber, dull zinc oxide film without base substrate breakthrough." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDk4mWituvyGTZVLyOadPYgNAWbITMMR6dqyKByzDxkZvS6KPQGLEMcYJXxeeVrHs9BzZ_Z-MuKpjK2EJffeplJG3iZdNRia0LyY-YQs8571Nm6AFaQumRLMQ7dP2b3XhzaLsNAe69jBcV54ILLmkPNP-kZFCS70QJXBW_fQopwiuu4LylzU-7yxy1g4JeK3unDLVb6bqt4O7yRNvF7BDf60sa0xd8jUE5BAsfHtAb6cmgwVaBNE1fz7q5GQG5LCBvWmZ8aJOijU7dV"/>
+<span class="absolute top-1 left-1 font-code-sm text-[9px] bg-black/70 text-white px-1 py-0.2 rounded">W02 Back</span>
+</div>
+<div class="p-1.5">
+<p class="font-body-sm text-[11px] font-medium text-on-surface truncate">2주차 CCT 후면</p>
+<p class="font-code-sm text-[10px] text-outline truncate">적청 0% 유지</p>
+</div>
+</div>
+<!-- Thumbnail 7: W03 Front (WARNING OUTLINE - RED RUST DETECTED) -->
+<div class="group border-2 border-secondary rounded overflow-hidden bg-secondary-fixed/10 hover:border-secondary transition-all relative">
+<div class="relative h-24 bg-surface-dim overflow-hidden">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" data-alt="Macrophotography of steel sample edge showing pinpoint 1.0 percent red rust iron oxidation spots on weathered galvanized coating, crisp technical inspection photography under bright clean room lights." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDMwkVEb3NxBQVe4AsS-0vdktQkcn7Xsu3UEFAZ1pl9zM_4EukStSDvex4SqXKyztpZT3lvzuut3oNj4YNh_InBwvGfSH6uIwWITH6Rwe7SXxlzes3B93d1icwgbpw48iB0Dy15Qc95kEEIhAaauiUv2ictnTEXI8J7eufT4Iy2n007vG72i7j3kIbXN7w2JM59-k5t4yFEy-UwMQ9fv1Cl0ywgYGnucVbJ5JBWUiS3uy_ffUlb8HAz0iw7zcF0TFlrGYyCKhn_JctU"/>
+<span class="absolute top-1 left-1 font-code-sm text-[9px] bg-secondary text-white px-1 py-0.2 rounded font-bold">W03 Front</span>
+<span class="absolute bottom-1 right-1 font-code-sm text-[9px] bg-white/90 text-secondary px-1 py-0.2 rounded font-bold border border-secondary">● 적청 관찰</span>
+</div>
+<div class="p-1.5">
+<p class="font-body-sm text-[11px] font-semibold text-secondary truncate">3주차 CCT 전면</p>
+<p class="font-code-sm text-[10px] text-secondary font-medium truncate">적청 1.0% 관찰</p>
+</div>
+</div>
+<!-- Thumbnail 8: SEM Micrograph (SEM x5000) -->
+<div class="group border border-outline-variant rounded overflow-hidden bg-surface-container-low hover:border-primary transition-all">
+<div class="relative h-24 bg-black overflow-hidden flex items-center justify-center">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" data-alt="Scanning Electron Microscope SEM grayscale micrograph at 5000x magnification displaying crystalline Fe-Zn alloy intermetallic layer cross section with micron scale bar and high vacuum detector metadata on black border." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBmIkZ1_ZxDsOoQW4w9p3Bo9drHwQ9E3enVFR3KGmO-wJ8B3fEpsFndrHdsBYTMQ960J0r9Qq8YB1o0ayau4dvK8r7758sGPhTWL7mOKqil1RNJk7OQ5si-I5QuL8jvEaampNu4pEros2fCZaa0CbiMn6IlqhwBR4DeWFCdJlnRk8D61Hi-BUn6PCBMsQ2CdjGOnN1eVVA8iUH76FN2R4N0S1USvwa7_OZ9trOxqr7unH-MzdhZTJj37gjUFVfLsa-e9APb0h52oOgt"/>
+<span class="absolute top-1 left-1 font-code-sm text-[9px] bg-primary text-white px-1 py-0.2 rounded font-mono">SEM x5000</span>
+</div>
+<div class="p-1.5">
+<p class="font-code-sm text-[11px] font-bold text-on-surface truncate">SEM_26P4_5k.tif</p>
+<p class="font-body-sm text-[10px] text-outline truncate">Fe-Zn 합금상 단면</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Quick Actions at Gallery Footer -->
+<div class="pt-3 mt-3 border-t border-outline-variant flex items-center justify-between">
+<button class="inline-flex items-center gap-1.5 bg-surface-container-lowest hover:bg-surface-container border border-outline-variant text-on-surface px-2.5 py-1.5 rounded-lg font-body-sm font-medium transition-colors h-8" type="button">
+<span class="material-symbols-outlined text-sm text-primary">add_a_photo</span>
+<span>+ 사진 업로드</span>
+</button>
+<button class="inline-flex items-center gap-1.5 bg-surface-container-lowest hover:bg-surface-container border border-outline-variant text-on-surface px-2.5 py-1.5 rounded-lg font-body-sm font-medium transition-colors h-8" type="button">
+<span class="material-symbols-outlined text-sm text-outline">file_download</span>
+<span>대용량 TIF 다운로드</span>
+</button>
+</div>
+</section>
+</div>
+</div>
+<!-- 4. SYSTEM STATUS STRIP (INDUSTRIAL INSTRUMENT PANEL STYLE) -->
+<footer class="mt-4 pt-2 border-t border-outline-variant flex flex-wrap items-center justify-between font-code-sm text-[10px] text-outline">
+<div class="flex items-center gap-3">
+<span>서버 노드: <span class="text-on-surface">POH-LIMS-PROD-02</span></span>
+<span>DB Latency: <span class="text-tertiary">4ms</span></span>
+<span>스캐너 포트: <span class="text-on-surface">COM3 (Honeywell 1900G)</span></span>
+</div>
+<div>
+<span>포항제철소 기술연구원 표면처리연구그룹 코팅강판 LIMS v4.12.0</span>
+</div>
+</footer>
+</main>
+</body></html>

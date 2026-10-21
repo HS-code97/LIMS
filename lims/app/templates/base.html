@@ -1,0 +1,54 @@
+{% from "_icons.html" import icon %}<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}LIMS{% endblock %} · 도금강판 R&D LIMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="/static/css/lims.css?v=2.2.0">
+<script src="{{ vendor('htmx') }}" defer></script>
+<script src="{{ vendor('alpine') }}" defer></script>
+<script src="/static/js/app.js?v=2.2.0"></script>
+{% block head %}{% endblock %}
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="/">{{ icon('logo', 26) }}<div><b>PLATED-STEEL LIMS</b><small>표면연구그룹 · v2.2</small></div></a>
+  <form class="gsearch" action="/go" method="get" x-data="suggestBox()" @submit="onSubmit($event)" autocomplete="off">
+    <span class="ico">{{ icon('scan', 18) }}</span>
+    <input id="gq" name="q" placeholder="약식번호·코일번호·시험런·공정런 (스캐너 입력 가능)" aria-label="검색"
+      hx-get="/search/suggest" hx-trigger="input changed delay:180ms, focus" hx-target="#suggest" hx-swap="innerHTML"
+      @keydown.down.prevent="move(1)" @keydown.up.prevent="move(-1)" @keydown.escape="close()">
+    <kbd>F2</kbd>
+    <div id="suggest" @click.outside="close()"></div>
+  </form>
+  <div class="grow"></div>
+  <a class="btn" href="/process-runs/new">{{ icon('plus', 16) }}<span class="btn-label">공정런</span></a>
+  <a class="btn primary" href="/test-runs/new">{{ icon('plus', 16) }}<span class="btn-label">시험런</span></a>
+  {% if user %}
+  <div class="who"><span class="avatar">{{ user.name[:1] }}</span><div><b>{{ user.name }}</b><small>{{ user.team.name if user.team else '' }}{% if user.is_admin %} · 관리자{% endif %}</small></div>
+    <form method="post" action="/logout"><button class="btn ghost sm" title="로그아웃">{{ icon('logout', 16) }}</button></form></div>
+  {% endif %}
+</header>
+<div class="shell">
+  <nav class="nav" aria-label="주 메뉴">
+    <div class="org"><b>표면연구그룹</b><small>연구실 LIMS · 사전 {{ pdict.version() }}</small></div>
+    <a href="/" class="{{ 'on' if nav=='home' }}">{{ icon('home') }}<span>내 작업</span></a>
+    <a href="/process-runs" class="{{ 'on' if nav=='pr' }}">{{ icon('run') }}<span>공정런</span></a>
+    <a href="/specimens" class="{{ 'on' if nav=='spec' }}">{{ icon('spec') }}<span>시편</span></a>
+    <a href="/test-runs" class="{{ 'on' if nav=='tr' }}">{{ icon('test') }}<span>시험런</span></a>
+    <a href="/search" class="{{ 'on' if nav=='search' }}">{{ icon('search') }}<span>검색·비교</span></a>
+    <a href="/admin" class="{{ 'on' if nav=='admin' }}">{{ icon('admin') }}<span>관리</span></a>
+    <div class="spacer"></div>
+    <a href="#" class="scan" onclick="document.getElementById('gq').focus();return false">{{ icon('scan') }}<span>시편 바코드 입력</span></a>
+  </nav>
+  <main class="main">
+    {% block content %}{% endblock %}
+    <div class="foot"><span>LIMS v2.2 · DB {{ db_kind }} · 파라미터 사전 {{ pdict.version() }}</span><span>도금강판 연구개발 LIMS · 표면연구그룹</span></div>
+  </main>
+</div>
+<div class="toast-wrap" id="toasts"></div>
+{% block scripts %}{% endblock %}
+</body>
+</html>

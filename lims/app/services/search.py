@@ -1,0 +1,117 @@
+"""조건·과제·시험·수치 필터 검색 (5.1 #5, 6.7절 기준 토글, D-34)."""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+from sqlalchemy import and_, or_, select
+from sqlalchemy.orm import Session, aliased
+
+from ..models import EffectiveParam, Material, ProcessRun, RunSpecimen, Specimen, TestRun
+from . import param_dict as pdict
+
+BASIS = {"effective": "대표값(실측 우선)", "target": "목표 기준", "actual": "실측 있는 것만"}
+
+
+@dataclass
+class ParamFilter:
+    key: str
+    lo: float | None = None
+    hi: float | None = None
+
+
+@dataclass
+class Query:
+    q: str = ""
+    project: str = ""
+    stage: str = ""
+    status: str = ""
+    test_type: str = ""
+    code: str = ""
+    basis: str = "effective"
+    params: list[ParamFilter] = field(default_factory=list)
+    limit: int = 500
+
+
+def parse_query(args) -> Query:
+    """쿼리스트링(k1, lo1, hi1, k2 …) → Query."""
+    qy = Query(q=args.get("q", "").strip(), project=args.get("project", "").strip().upper(),
+               stage=args.get("stage", ""), status=args.get("status", ""), test_type=args.get("test_type", ""),
+               code=args.get("code", "").strip().upper(), basis=args.get("basis", "effective"))
+    if qy.basis not in BASIS:
+        qy.basis = "effective"
+    for i in range(1, 6):
+        k = args.get(f"k{i}")
+        if not k or pdict.param(k) is None:
+            continue
+
+        def num(v):
+            try:
+                return float(v) if v not in (None, "") else None
+            except ValueError:
+                return None
+        qy.params.append(ParamFilter(k, num(args.get(f"lo{i}")), num(args.get(f"hi{i}"))))
+    return qy
+
+
+def build(qy: Query):
+    """검색 SELECT 문 (DB 방언과 무관하게 구성 — PostgreSQL 컴파일 검사에도 씀)."""
+    stmt = select(Specimen).where(Specimen.is_deleted.is_(False))
+    if qy.q:
+        like = f"%{qy.q.upper()}%"
+        stmt = stmt.outerjoin(Material, Material.id == Specimen.material_id) \
+                   .outerjoin(ProcessRun, ProcessRun.id == Specimen.process_run_id) \
+                   .where(or_(Specimen.short_id.like(like), Material.coil_no.like(like),
+                              ProcessRun.run_no.like(like), Specimen.condition_code.like(like)))
+    if qy.project:
+        stmt = stmt.where(Specimen.project_code == qy.project)
+    if qy.stage:
+        stmt = stmt.where(Specimen.stage == qy.stage)
+    if qy.status:
+        stmt = stmt.where(Specimen.status == qy.status)
+    if qy.code:
+        stmt = stmt.where(Specimen.condition_code.like(qy.code.replace("?", "_") + "%"))
+    if qy.test_type:
+        stmt = stmt.where(Specimen.id.in_(
+            select(RunSpecimen.specimen_id).join(TestRun, TestRun.id == RunSpecimen.test_run_id)
+            .where(TestRun.test_type == qy.test_type)))
+    for f in qy.params:
+        ep = aliased(EffectiveParam)
+        col = {"effective": ep.effective, "target": ep.target, "actual": ep.actual}[qy.basis]
+        conds = [ep.specimen_id == Specimen.id, ep.param_key == f.key, col.is_not(None)]
+        if f.lo is not None:
+            conds.append(col >= f.lo)
+        if f.hi is not None:
+            conds.append(col <= f.hi)
+        stmt = stmt.join(ep, and_(*conds))
+    return stmt.order_by(Specimen.project_code, Specimen.stage, Specimen.serial_no).limit(qy.limit)
+
+
+def run(db: Session, qy: Query) -> list[Specimen]:
+    return list(db.scalars(build(qy)).unique())
+
+
+def effective_map(db: Session, spec_ids: list[int], keys: list[str]) -> dict[tuple[int, str], EffectiveParam]:
+    if not spec_ids or not keys:
+        return {}
+    rows = db.scalars(select(EffectiveParam).where(EffectiveParam.specimen_id.in_(spec_ids),
+                                                   EffectiveParam.param_key.in_(keys)))
+    return {(r.specimen_id, r.param_key): r for r in rows}
+
+
+def autocomplete(db: Session, q: str, limit: int = 10) -> list[dict]:
+    """상단 검색창 자동완성: 약식번호·코일번호·공정런·시험런."""
+    q = q.strip().upper()
+    if not q:
+        return []
+    like = f"%{q}%"
+    out = []
+    for s in db.scalars(select(Specimen).where(Specimen.short_id.like(like), Specimen.is_deleted.is_(False))
+                        .order_by(Specimen.short_id).limit(limit)):
+        out.append({"label": s.short_id, "sub": f"{s.display_id} · {s.stage_name}", "href": f"/specimens/{s.short_id}"})
+    for t in db.scalars(select(TestRun).where(TestRun.test_run_no.like(like)).limit(5)):
+        out.append({"label": t.test_run_no, "sub": f"시험런 · {t.equipment or ''}", "href": f"/test-runs/{t.test_run_no}"})
+    for r in db.scalars(select(ProcessRun).where(ProcessRun.run_no.like(like)).limit(5)):
+        out.append({"label": r.run_no, "sub": f"공정런 · {r.run_date}", "href": f"/process-runs/{r.run_no}"})
+    for m in db.scalars(select(Material).where(Material.coil_no.like(like)).limit(5)):
+        out.append({"label": m.coil_no, "sub": f"원소재 · {m.label}", "href": f"/search?q={m.coil_no}"})
+    return out[:limit + 5]

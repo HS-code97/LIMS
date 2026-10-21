@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}내 작업{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><div class="crumb">내 작업</div><h1 style="font-family:var(--f-body)">{{ user.name }}님의 작업</h1></div>
+  <div class="acts">
+    <a class="btn" href="/process-runs/new">{{ icon('run', 16) }} 공정런 등록</a>
+    <a class="btn" href="/test-runs/new">{{ icon('test', 16) }} 시험런 생성</a>
+  </div>
+</div>
+
+<div class="kpis">
+  <div class="kpi"><small>진행 중 시험런</small><b>{{ run_stats|length }}</b></div>
+  <div class="kpi"><small>시험 중인 내 시편</small><b>{{ in_test }}</b></div>
+  <div class="kpi"><small>최근 공정런</small><b>{{ recent_pr|length }}</b></div>
+  <div class="kpi"><small>내 미분류 파일</small><b {% if unmatched %}style="color:var(--warn)"{% endif %}>{{ unmatched|length }}</b></div>
+</div>
+
+<div class="grid2">
+  <div class="stack">
+    <section class="card">
+      <header><h2>{{ icon('test') }}내 진행 중 시험런</h2><span class="meta">빈칸 = 아직 입력하지 않은 회차 (알림·마감 없음)</span>
+        <div class="r"><a class="btn sm" href="/test-runs?mine=1">전체</a></div></header>
+      {% if run_stats %}
+      <ul class="list">{% for s in run_stats %}{% set tr = s.run %}
+        <li><a class="mono" href="/test-runs/{{ tr.test_run_no }}"><b>{{ tr.test_run_no }}</b></a>
+          <div class="grow"><div class="small">{{ tr.template.name }} · {{ tr.equipment or '설비 미지정' }} · {{ tr.start_date|d }} 시작</div>
+            <div class="bar" title="입력 {{ s.filled }} / {{ s.total }}"><i style="width:{{ (100 * s.filled / s.total)|round(0) if s.total else 0 }}%"></i></div></div>
+          <span class="small mono muted nowrap">시편 {{ s.n_spec }} · 입력 {{ s.filled }}/{{ s.total }}</span></li>
+      {% endfor %}</ul>
+      {% else %}<div class="empty-note">진행 중인 시험런이 없습니다. <a href="/test-runs/new">시험런 만들기</a></div>{% endif %}
+      {% if others_runs %}
+      <div class="body small muted" style="border-top:1px solid var(--line-2)">내 시편이 탑승한 다른 사람의 시험런:
+        {% for t in others_runs %}<a class="mono" href="/test-runs/{{ t.test_run_no }}">{{ t.test_run_no }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</div>
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <header><h2>{{ icon('run') }}최근 공정런</h2><div class="r"><a class="btn sm" href="/process-runs?mine=1">전체</a></div></header>
+      {% if recent_pr %}
+      <div class="tablewrap"><table class="t">
+        <tr><th>공정런</th><th>일자</th><th>과제</th><th>조건부</th><th class="n">원판</th><th>메모</th><th></th></tr>
+        {% for r in recent_pr %}
+        <tr><td><a class="mono" href="/process-runs/{{ r.run_no }}">{{ r.run_no }}</a></td><td class="mono">{{ r.run_date|d }}</td>
+          <td class="mono">{{ r.project_code }}</td><td class="mono"><b>{{ r.base_condition_code }}</b></td>
+          <td class="n">{{ r.panels|length }}</td><td class="small muted">{{ (r.note or '')[:30] }}</td>
+          <td class="nowrap"><a class="btn sm" href="/process-runs/{{ r.run_no }}?tab=actuals">실측</a>
+            <a class="btn sm" href="/process-runs/new?clone={{ r.run_no }}" title="이 레시피로 새 공정런">{{ icon('copy', 14) }}복제</a></td></tr>
+        {% endfor %}
+      </table></div>
+      {% else %}<div class="empty-note">아직 등록한 공정런이 없습니다.</div>{% endif %}
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="card">
+      <header><h2>{{ icon('inbox') }}내 미분류 파일함</h2><span class="meta">파일명에서 시편을 찾지 못한 파일 (올린 사람에게만 보임)</span></header>
+      <div class="body">
+        <div class="drop" id="home-drop">{{ icon('upload', 22) }}<div>파일·폴더를 끌어 놓으면 <code>26P4-C0102_W03_front.jpg</code>처럼 파일명의 약식번호로 자동 연결합니다.</div></div>
+        <ul class="upl-list" id="home-upl"></ul>
+      </div>
+      {% if unmatched %}
+      <ul class="list" x-data>
+        {% for a in unmatched %}
+        <li x-data="{sid:''}">
+          {% if a.thumb_path %}<img src="/files/{{ a.id }}/thumb" alt="" width="40" height="40" style="object-fit:cover;border-radius:3px">{% else %}<span class="chip">{{ a.kind }}</span>{% endif %}
+          <div class="grow"><a class="mono small" href="/files/{{ a.id }}" target="_blank">{{ a.original_name }}</a>
+            <div class="small muted">{{ a.uploaded_at|d }}</div></div>
+          <input class="in mono" style="width:130px" placeholder="26P4-C0102" x-model="sid" @keydown.enter="link({{ a.id }}, sid)">
+          <button class="btn sm" @click="link({{ a.id }}, sid)">연결</button>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </section>
+
+    <section class="card">
+      <header><h2>{{ icon('spec') }}최근 내 시편</h2><div class="r"><a class="btn sm" href="/specimens?mine=1">전체</a></div></header>
+      {% if my_specs %}
+      <ul class="list">{% for s in my_specs %}
+        <li><span class="stage">{{ s.stage }}</span><a class="mono grow" href="/specimens/{{ s.short_id }}"><b>{{ s.short_id }}</b> <span class="muted">{{ s.condition_code or '' }}</span></a>
+          <span class="chip st-{{ s.status }}">{{ s.status }}</span></li>
+      {% endfor %}</ul>
+      {% else %}<div class="empty-note">아직 시편이 없습니다. 공정런을 등록하면 원판이 생깁니다.</div>{% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+LIMS.uploader(document.getElementById("home-drop"), {list: document.getElementById("home-upl"), onDone: () => setTimeout(() => location.reload(), 1200)});
+async function link(id, sid) {
+  if (!sid) return LIMS.toast("약식번호를 입력하세요", "err");
+  try { await LIMS.api("PATCH", `/api/files/${id}`, {short_id: sid.trim().toUpperCase()}); LIMS.toast(`${sid.toUpperCase()}에 연결했습니다`, "ok"); setTimeout(() => location.reload(), 600); }
+  catch (e) { LIMS.fail(e); }
+}
+</script>
+{% endblock %}

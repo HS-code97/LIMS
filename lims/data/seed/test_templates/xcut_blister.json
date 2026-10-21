@@ -1,0 +1,16 @@
+{
+  "code": "XCUT_BLISTER", "version": 1, "name": "X-cut 블리스터 화상 측정 (앱 연동)", "test_type": "XCUT", "team": "부식",
+  "default_cycles": 1, "default_interval_days": null,
+  "condition_schema": [
+    {"key": "app_version", "label": "측정 앱 버전", "type": "text"},
+    {"key": "scale_mm", "label": "스케일 보정 길이", "unit": "mm", "type": "number", "default": 50}
+  ],
+  "field_schema": [
+    {"key": "blister_area_pct", "label": "블리스터 면적률", "unit": "%", "type": "number", "min": 0, "max": 100, "grid": true},
+    {"key": "blister_count", "label": "블리스터 수", "type": "number", "min": 0},
+    {"key": "max_blister_mm", "label": "최대 블리스터", "unit": "mm", "type": "number", "min": 0},
+    {"key": "creep_mm", "label": "X-cut 크리프", "unit": "mm", "type": "number", "min": 0},
+    {"key": "rating", "label": "등급", "type": "text"},
+    {"key": "note", "label": "비고", "type": "text"}
+  ]
+}

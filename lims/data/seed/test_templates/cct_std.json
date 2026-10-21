@@ -1,0 +1,16 @@
+{
+  "code": "CCT_STD", "version": 1, "name": "복합부식시험 표준", "test_type": "CCT", "team": "부식",
+  "default_cycles": 9, "default_interval_days": 7,
+  "condition_schema": [
+    {"key": "salt_conc", "label": "염수 농도", "unit": "%", "type": "number", "default": 5},
+    {"key": "temp_dry", "label": "건조 온도", "unit": "°C", "type": "number", "default": 60},
+    {"key": "temp_wet", "label": "습윤 온도", "unit": "°C", "type": "number", "default": 50}
+  ],
+  "field_schema": [
+    {"key": "red_rust_pct", "label": "적청률", "unit": "%", "type": "number", "min": 0, "max": 100, "grid": true},
+    {"key": "white_rust_pct", "label": "백청률", "unit": "%", "type": "number", "min": 0, "max": 100},
+    {"key": "blister_width_mm", "label": "블리스터 폭", "unit": "mm", "type": "number", "min": 0},
+    {"key": "edge_creep_mm", "label": "에지 크리프", "unit": "mm", "type": "number", "min": 0},
+    {"key": "note", "label": "비고", "type": "text"}
+  ]
+}

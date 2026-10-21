@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}관리{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="crumb">관리</div><h1 style="font-family:var(--f-body)">관리</h1></div>
+  <div class="acts small muted">{% if not user.is_admin %}조회 전용 — 과제·코드·사용자 변경은 관리자만 할 수 있습니다 (원소재·욕 분석 등록은 누구나).{% endif %}</div></div>
+<nav class="tabs">{% for k, n in tabs %}<a href="?tab={{ k }}" class="{{ 'on' if tab == k }}">{{ n }}</a>{% endfor %}</nav>
+{% if msg %}<div class="flash ok">{{ msg }}</div>{% endif %}
+
+{% if tab == 'projects' %}
+<div class="grid2">
+  <section class="card"><header><h2>과제</h2><span class="meta">사내 과제번호 → 4자 과제코드 (끝자리가 겹치면 26PA, 26PB…)</span></header>
+    <div class="tablewrap"><table class="t"><tr><th>코드</th><th>사내 번호</th><th>과제명</th><th>책임자</th><th>구분</th></tr>
+      {% for p in projects %}<tr><td class="mono"><b>{{ p.project_code }}</b></td><td class="mono">{{ p.company_project_no or '' }}</td><td>{{ p.project_name }}</td>
+        <td>{{ p.manager.name if p.manager else '' }}</td><td>{% if p.is_common %}<span class="chip">공통</span>{% endif %}</td></tr>{% endfor %}</table></div></section>
+  {% if user.is_admin %}
+  <section class="card"><header><h2>과제 추가</h2></header>
+    <form class="body form" method="post" action="/admin/projects">
+      <label class="f">사내 과제번호<input class="in mono" name="company_project_no" placeholder="2026P1234"></label>
+      <label class="f">또는 공통 과제코드<input class="in mono" name="common_code" placeholder="26X0 (과제 미연계 업무)"></label>
+      <label class="f">과제명<input class="in" name="project_name" required></label>
+      <label class="f">책임자<select class="in" name="manager_id"><option value="">-</option>{% for u in users %}<option value="{{ u.id }}">{{ u.name }}</option>{% endfor %}</select></label>
+      <button class="btn primary">추가 (코드 자동 배정)</button></form></section>
+  {% endif %}
+</div>
+
+{% elif tab == 'materials' %}
+<div class="grid2">
+  <section class="card"><header><h2>원소재 로트</h2><span class="meta">블랭크는 번호 대신 코일 로트로 관리 (D-23)</span></header>
+    <div class="tablewrap"><table class="t"><tr><th>코일번호</th><th>강종</th><th class="n">두께</th><th>입고</th><th>비고</th></tr>
+      {% for m in materials %}<tr><td class="mono"><a href="/search?q={{ m.coil_no }}">{{ m.coil_no }}</a></td><td>{{ m.steel_grade or '' }}</td><td class="n">{{ m.thickness_mm|num }}</td><td class="mono">{{ m.received_date|d }}</td><td class="small">{{ m.note or '' }}</td></tr>
+      {% else %}<tr class="empty-row"><td colspan="5">원소재가 없습니다.</td></tr>{% endfor %}</table></div></section>
+  <section class="card"><header><h2>원소재 등록</h2></header>
+    <form class="body form" method="post" action="/admin/materials">
+      <label class="f">코일번호<input class="in mono" name="coil_no" required placeholder="POS-26-8891"></label>
+      <div class="row"><label class="f">강종<input class="in" name="steel_grade" placeholder="SPCC"></label><label class="f">두께 (mm)<input class="in num" name="thickness_mm" type="number" step="0.01"></label></div>
+      <label class="f">입고일<input class="in" type="date" name="received_date"></label>
+      <label class="f">비고<input class="in" name="note"></label>
+      <button class="btn primary">등록</button></form></section>
+</div>
+
+{% elif tab == 'bath' %}
+<div class="grid2" x-data="bathApply()">
+  <section class="card"><header><h2>욕 분석</h2><span class="meta">1회 분석을 여러 공정런에 세션 실측으로 적용 (D-35)</span></header>
+    <div class="tablewrap"><table class="t"><tr><th>채취</th><th>포트</th><th>방법</th><th>조성 (wt%)</th><th>실측 키</th><th></th></tr>
+      {% for b in analyses %}<tr><td class="mono small">{{ b.sampled_at|d }}</td><td class="mono">{{ b.pot }}</td><td>{{ b.method or '' }}</td>
+        <td class="mono small">{% for el, v in b.composition.items() %}{{ el }} {{ v }}{% if not loop.last %} / {% endif %}{% endfor %}</td>
+        <td class="mono small">{% for k, v in bath_values(b).items() %}{{ k }}={{ v|num }} {% endfor %}</td>
+        <td><button class="btn sm" @click="open({{ b.id }})">적용할 공정런 선택</button></td></tr>
+      {% else %}<tr class="empty-row"><td colspan="6">등록된 욕 분석이 없습니다.</td></tr>{% endfor %}</table></div>
+    <div class="body" x-show="id" style="border-top:1px solid var(--line-2);display:none">
+      <b class="small">채취 ±1일 공정런 (기본 제안)</b>
+      <ul class="list"><template x-for="c in cands" :key="c.run_no"><li><input type="checkbox" :value="c.run_no" x-model="pick"><span class="mono" x-text="c.run_no"></span><span class="mono small muted" x-text="c.run_date + ' · ' + c.code"></span></li></template>
+        <li x-show="!cands.length" class="muted small">제안할 공정런이 없습니다.</li></ul>
+      <label class="f">다른 공정런 번호 추가 (쉼표)<input class="in mono" x-model="extra" placeholder="PR-26-0001, PR-26-0002"></label>
+      <button class="btn primary sm" style="margin-top:8px" @click="apply()">선택한 공정런에 적용</button>
+    </div></section>
+  <section class="card"><header><h2>욕 분석 등록</h2></header>
+    <form class="body form" method="post" action="/admin/bath">
+      <div class="row"><label class="f">포트<input class="in mono" name="pot" value="POT-1" required></label>
+        <label class="f">채취 시각<input class="in" type="datetime-local" name="sampled_at" required></label>
+        <label class="f">방법<select class="in" name="method"><option>ICP</option><option>습식</option><option>XRF</option></select></label></div>
+      <label class="f">조성 (wt%, 잔부는 bal.)<input class="in mono" name="composition" required placeholder="Zn 25.1, Si 2.9, Mg 0.46, Fe 0.4, Al bal."></label>
+      <label class="f">비고<input class="in" name="note"></label>
+      <button class="btn primary">등록</button></form></section>
+</div>
+
+{% elif tab == 'codes' %}
+<div class="grid2">
+  <section class="card"><header><h2>마스터 코드 (부록 A~D)</h2><span class="meta">조건부 자동 생성 기준 · 0단계에서 확정</span></header>
+    <div class="tablewrap" style="max-height:70vh"><table class="t"><tr><th>분류</th><th>코드</th><th>이름</th><th>매칭 기준 spec</th><th></th></tr>
+      {% for c in codes %}<tr {% if not c.is_active %}style="opacity:.5"{% endif %}><td class="mono small">{{ c.category }}</td><td class="mono"><b>{{ c.code }}</b></td><td>{{ c.name }}<div class="small muted">{{ c.description or '' }}</div></td>
+        <td class="mono small">{{ c.spec|tojson_compact if c.spec else '' }}</td>
+        <td>{% if user.is_admin %}<button class="btn sm" onclick='fillCode({{ {"category": c.category, "code": c.code, "name": c.name, "spec": (c.spec|tojson_compact if c.spec else ""), "description": c.description or ""}|tojson }})'>수정</button>{% endif %}</td></tr>{% endfor %}</table></div></section>
+  {% if user.is_admin %}
+  <section class="card"><header><h2>코드 추가·수정</h2></header>
+    <form class="body form" method="post" action="/admin/codes" id="codeform">
+      <div class="row"><label class="f">분류<select class="in" name="category"><option>COATING_SYS</option><option>BATH</option><option>ANNEALING</option></select></label>
+        <label class="f">코드<input class="in mono" name="code" required></label></div>
+      <label class="f">이름<input class="in" name="name" required></label>
+      <label class="f">spec (JSON)<textarea class="in" name="spec" rows="4" placeholder='BATH: {"el":{"Al":[70.5,1.0],"Si":[3,1.0],"Mg":[0.5,0.05]}}  ANNEALING: {"T":800,"t":60,"DP":-40,"tol":{"T":10,"t":10,"DP":5}}'></textarea></label>
+      <label class="f">설명<input class="in" name="description"></label>
+      <label class="small"><input type="checkbox" name="is_active" checked> 사용</label>
+      <button class="btn primary">저장</button>
+      <p class="small muted" style="margin:0">코드표를 바꿔도 이미 각인한 조건부(engraved_label)는 바뀌지 않습니다. 화면에 "각인 라벨 ≠ 현재 조건"만 표시됩니다.</p></form></section>
+  {% endif %}
+</div>
+
+{% elif tab == 'presets' %}
+<section class="card"><header><h2>공정 프리셋</h2><span class="meta">공용(관리자) · 팀 · 개인 — 사전 기본값과 다른 값만 저장</span></header>
+  <div class="tablewrap"><table class="t"><tr><th>이름</th><th>범위</th><th>계열·욕</th><th>기본값과 다른 값</th><th>사전</th><th>만든 사람</th><th></th></tr>
+    {% for p in presets %}<tr {% if not p.is_active %}style="opacity:.5"{% endif %}><td><b>{{ p.name }}</b></td><td><span class="chip">{{ p.scope }}</span></td><td class="mono">{{ p.coating_system }}{{ p.bath_code }}</td>
+      <td class="mono small">{% for sec, vals in p.overrides.items() %}{{ sec }}{{ vals|tojson_compact }} {% endfor %}</td><td class="mono small">{{ p.dict_version }}</td>
+      <td>{{ p.owner.name if p.owner else '' }}</td>
+      <td>{% if user.is_admin %}<form method="post" action="/admin/presets/{{ p.id }}/toggle"><button class="btn sm">{{ '끄기' if p.is_active else '켜기' }}</button></form>{% endif %}</td></tr>{% endfor %}</table></div></section>
+
+{% elif tab == 'templates' %}
+<section class="card"><header><h2>시험 템플릿</h2><span class="meta">초기값은 JSON 시드(data/seed/test_templates). 고치면 새 버전이 생기고 기존 결과는 저장 당시 버전으로 해석합니다.</span>
+  <div class="r"><a class="btn primary sm" href="/admin/templates/edit">{{ icon('plus', 14) }} 새 템플릿</a></div></header>
+  <div class="tablewrap"><table class="t"><tr><th>코드</th><th>버전</th><th>이름</th><th>종류</th><th>팀</th><th class="n">기본 회차</th><th>필드 (grid ★ / maps_to →)</th><th></th></tr>
+    {% for t in tpls %}<tr {% if not t.is_active %}style="opacity:.5"{% endif %}><td class="mono"><b>{{ t.code }}</b></td><td class="mono">v{{ t.version }}</td><td>{{ t.name }}</td><td class="mono">{{ t.test_type }}</td><td>{{ t.team.name if t.team else '' }}</td>
+      <td class="n">{{ t.default_cycles or '' }}{% if t.default_interval_days %} × {{ t.default_interval_days }}일{% endif %}</td>
+      <td class="small">{% for f in t.field_schema %}{{ f.label }}{% if f.unit %}({{ f.unit }}){% endif %}{% if f.grid %}★{% endif %}{% if f.maps_to %} <span class="bdg b-test">→ {{ f.maps_to }}</span>{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</td>
+      <td class="nowrap">{% if t.is_active %}<a class="btn sm" href="/admin/templates/edit?id={{ t.id }}">편집</a>{% endif %}
+        <button class="btn sm" onclick="LIMS.api('POST','/api/test-templates/{{ t.id }}/toggle').then(()=>location.reload()).catch(LIMS.fail)">{{ '끄기' if t.is_active else '켜기' }}</button></td></tr>{% endfor %}</table></div></section>
+
+{% elif tab == 'dictionary' %}
+<section class="card"><header><h2>실측 항목·허용편차</h2><span class="meta">파라미터 사전 {{ dict_version }} · 허용편차는 색 표시에만 쓰입니다(알림 없음, D-36) · ★ = 실측 탭 기본 열</span></header>
+  <div class="tablewrap" style="max-height:72vh"><table class="t">
+    <tr><th>키</th><th>항목</th><th>수준</th><th class="n">허용(절대)</th><th class="n">허용(%)</th><th>대표값</th><th>★</th><th>측정 방법 (쉼표)</th><th></th></tr>
+    {% for k, p, c in dict_rows %}{% set fid = "df" ~ loop.index %}
+    <tr>
+      <td class="mono small">{{ k }}</td><td>{{ p.section_nm }} {{ p.l }} <span class="muted small">{{ p.u }}</span></td>
+      <td><select class="in" name="level" form="{{ fid }}" {% if not user.is_admin %}disabled{% endif %}><option value="run" {% if c.level=='run' %}selected{% endif %}>세션</option><option value="panel" {% if c.level!='run' %}selected{% endif %}>원판</option></select></td>
+      <td><input class="in num mono" style="width:70px" name="tol" form="{{ fid }}" value="{{ c.tol|num if c.tol is defined else '' }}" {% if not user.is_admin %}disabled{% endif %}></td>
+      <td><input class="in num mono" style="width:60px" name="tol_pct" form="{{ fid }}" value="{{ c.tol_pct|num if c.tol_pct is defined else '' }}" {% if not user.is_admin %}disabled{% endif %}></td>
+      <td><select class="in" name="agg" form="{{ fid }}" {% if not user.is_admin %}disabled{% endif %}>{% for a in ['mean','last','median'] %}<option {% if c.agg==a %}selected{% endif %}>{{ a }}</option>{% endfor %}</select></td>
+      <td><input type="checkbox" name="quick" form="{{ fid }}" {% if c.quick %}checked{% endif %} {% if not user.is_admin %}disabled{% endif %}></td>
+      <td><input class="in" style="width:150px" name="methods" form="{{ fid }}" value="{{ (c.methods or [])|join(', ') }}" {% if not user.is_admin %}disabled{% endif %}></td>
+      <td><form id="{{ fid }}" method="post" action="/admin/dictionary"><input type="hidden" name="key" value="{{ k }}">{% if user.is_admin %}<button class="btn sm">저장</button>{% endif %}</form></td></tr>
+    {% endfor %}
+  </table></div></section>
+
+{% elif tab == 'import' %}
+<div class="grid2" x-data="imp()">
+  <section class="card"><header><h2>{{ icon('upload') }}과거 엑셀 데이터 가져오기</h2><span class="meta">시트: 공정런 → 분기 → 실측 → 시험결과 · 오류가 하나라도 있으면 아무것도 저장하지 않습니다</span></header>
+    <div class="body form">
+      <a class="btn" href="/api/import/template.xlsx">{{ icon('download', 16) }} 양식 내려받기 (예시 포함)</a>
+      <input class="in" type="file" accept=".xlsx" x-ref="f" style="height:auto;padding:6px">
+      <div style="display:flex;gap:8px"><button class="btn" @click="go(true)" :disabled="busy">미리보기 (검증만)</button><button class="btn primary" @click="go(false)" :disabled="busy || !ok">저장</button></div>
+      <p class="small muted" style="margin:0">미리보기에서 오류가 없을 때만 [저장]이 켜집니다. 번호 충돌·없는 프리셋·템플릿 외 항목을 행 단위로 알려 줍니다.</p>
+    </div></section>
+  <section class="card"><header><h2>결과</h2></header>
+    <div class="body" x-show="rep" style="display:none">
+      <div class="flash" :class="rep && rep.errors.length ? 'err' : 'ok'" x-text="rep && (rep.errors.length ? '오류 ' + rep.errors.length + '건' : (rep.saved ? '저장 완료' : '검증 통과 — 저장할 수 있습니다'))"></div>
+      <ul class="upl-list"><template x-for="e in (rep ? rep.errors : [])"><li><span class="s error">오류</span><span x-text="e"></span></li></template>
+        <template x-for="w in (rep ? rep.warnings : [])"><li><span class="s unmatched">주의</span><span x-text="w"></span></li></template></ul>
+      <div class="small mono" x-show="rep" x-text="rep && ('공정런 ' + rep.created.process_runs.length + ' · 시편 ' + rep.created.specimens.length + ' · 실측 ' + rep.created.actuals + ' · 시험런 ' + rep.created.test_runs.length + ' · 결과 ' + rep.created.results)"></div>
+    </div></section>
+</div>
+
+{% elif tab == 'settings' %}
+<section class="card"><header><h2>{{ icon('admin') }}시스템 설정 — 설계서 11.3 확인 필요 사항</h2><span class="meta">사내 확인 후 환경변수(deploy/lims.env.example)로 넣고 서버를 다시 시작합니다</span></header>
+  <div class="tablewrap"><table class="t"><tr><th>항목</th><th>설정</th><th>현재 값</th><th>상태</th><th>확인할 내용</th></tr>
+    {% for it in items %}<tr><td><b>{{ it.k }}</b></td><td class="mono small">{% if it.href %}<a href="{{ it.href }}">{{ it.env }}</a>{% else %}{{ it.env }}{% endif %}</td>
+      <td class="mono small">{{ it.v }}</td>
+      <td>{% if it.ok %}<span class="chip st-AVAILABLE">확정</span>{% elif it.ok is sameas false %}<span class="chip st-SCRAP">미설정</span>{% else %}<span class="chip">확인 필요</span>{% endif %}</td>
+      <td class="small">{{ it.note }}</td></tr>{% endfor %}</table></div></section>
+
+{% elif tab == 'users' %}
+<div class="grid2">
+  <section class="card"><header><h2>사용자</h2></header>
+    <div class="tablewrap"><table class="t"><tr><th>사번</th><th>이름</th><th>팀</th><th>권한</th><th>상태</th><th></th></tr>
+      {% for u in users_all %}<tr {% if not u.is_active %}style="opacity:.5"{% endif %}><td class="mono">{{ u.emp_no }}</td><td>{{ u.name }}</td><td>{{ u.team.name if u.team else '' }}</td><td><span class="chip">{{ u.role }}</span></td><td>{{ '사용' if u.is_active else '중지' }}</td>
+        <td class="nowrap">{% if user.is_admin %}
+          <form method="post" action="/admin/users/{{ u.id }}" style="display:inline"><input type="hidden" name="action" value="toggle"><button class="btn sm">{{ '중지' if u.is_active else '사용' }}</button></form>
+          <form method="post" action="/admin/users/{{ u.id }}" style="display:inline"><input type="hidden" name="action" value="role"><button class="btn sm">권한 전환</button></form>
+          <form method="post" action="/admin/users/{{ u.id }}" style="display:inline" onsubmit="const p=prompt('새 비밀번호 (6자 이상)'); if(!p) return false; this.password.value=p;"><input type="hidden" name="action" value="password"><input type="hidden" name="password"><button class="btn sm">비밀번호</button></form>
+        {% endif %}</td></tr>{% endfor %}</table></div></section>
+  <div class="stack">
+  {% if user.is_admin %}
+  <section class="card"><header><h2>사용자 추가</h2></header>
+    <form class="body form" method="post" action="/admin/users">
+      <div class="row"><label class="f">사번<input class="in mono" name="emp_no" required></label><label class="f">이름<input class="in" name="name" required></label></div>
+      <div class="row"><label class="f">팀<select class="in" name="team_id">{% for t in teams %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}</select></label>
+        <label class="f">권한<select class="in" name="role"><option>USER</option><option>ADMIN</option></select></label></div>
+      <label class="f">초기 비밀번호<input class="in" type="password" name="password" required minlength="6"></label>
+      <button class="btn primary">추가</button></form></section>
+  {% endif %}
+  <section class="card"><header><h2>내 비밀번호 변경</h2></header>
+    <form class="body form" method="post" action="/account/password">
+      <label class="f">현재 비밀번호<input class="in" type="password" name="current" required></label>
+      <label class="f">새 비밀번호<input class="in" type="password" name="new" required minlength="6"></label>
+      <button class="btn">변경</button></form></section>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+function imp() {
+  return {
+    rep: null, busy: false, ok: false,
+    async go(dry) {
+      const f = this.$refs.f.files[0]; if (!f) return LIMS.toast("파일을 고르세요", "err");
+      const fd = new FormData(); fd.append("file", f); fd.append("dry_run", dry ? "true" : "false");
+      this.busy = true;
+      try { const r = await fetch("/api/import/excel", {method: "POST", body: fd}); this.rep = await r.json(); if (!r.ok) throw new Error(LIMS.errText(this.rep));
+        this.ok = dry && !this.rep.errors.length; if (this.rep.saved) LIMS.toast("가져오기 완료", "ok"); }
+      catch (e) { LIMS.fail(e); }
+      this.busy = false;
+    },
+  };
+}
+function fillCode(c) { const f = document.getElementById("codeform"); for (const k in c) if (f[k]) f[k].value = c[k]; f.scrollIntoView({behavior: "smooth"}); }
+function bathApply() {
+  return {
+    id: null, cands: [], pick: [], extra: "",
+    async open(id) { this.id = id; try { this.cands = await LIMS.api("GET", `/api/bath-analyses/${id}/candidates`); this.pick = this.cands.map(c => c.run_no); } catch (e) { LIMS.fail(e); } },
+    async apply() {
+      const runs = [...new Set([...this.pick, ...this.extra.split(/[,\s]+/).map(s => s.trim().toUpperCase()).filter(Boolean)])];
+      if (!runs.length) return LIMS.toast("공정런을 고르세요", "err");
+      try { const r = await LIMS.api("POST", `/api/bath-analyses/${this.id}/apply`, {run_nos: runs}); LIMS.toast(`${r.runs.join(", ")}에 ${r.applied_rows}개 값 적용`, "ok"); }
+      catch (e) { LIMS.fail(e); }
+    },
+  };
+}
+</script>
+{% endblock %}

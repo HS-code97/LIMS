@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "lims",
+      "runtimeExecutable": "C:\\Vibe Coding\\12. LIMS\\.venv\\Scripts\\python.exe",
+      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--app-dir", "lims", "--port", "8610"],
+      "port": 8610
+    }
+  ]
+}

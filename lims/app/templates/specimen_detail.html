@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+{% block title %}{{ spec.short_id }}{% endblock %}
+{% block content %}
+{% set run = spec.process_run %}
+<div x-data="specPage()" x-cloak>
+<section class="hero">
+  <div class="page-head" style="margin:0">
+    <div>
+      <div class="crumb"><a href="/specimens">시편</a> › <a href="/specimens?project={{ spec.project_code }}">{{ spec.project_code }}</a>{% if spec.parent %} › <a href="/specimens/{{ spec.parent.short_id }}">{{ spec.parent.short_id }}</a>{% endif %} › {{ spec.short_id }}</div>
+      <h1>{{ spec.short_id }}<span class="sub">{{ spec.display_id }}</span></h1>
+    </div>
+  </div>
+  <div class="meta">
+    <span class="stage">{{ spec.stage }}</span><span class="chip">{{ spec.stage_name }}</span>
+    <span class="chip st-{{ spec.status }}"><span class="dot"></span>{{ spec.status }}</span>
+    <span class="chip">과제 <b>{{ spec.project.label }}</b></span>
+    {% if spec.owner %}<span class="chip">담당 <b style="font-family:var(--f-body)">{{ spec.owner.name }}</b></span>{% endif %}
+    {% if spec.material %}<span class="chip">원소재 <b>{{ spec.material.label }}</b></span>{% endif %}
+    {% if spec.size_text %}<span class="chip">크기 <b>{{ spec.size_text }}</b></span>{% endif %}
+    {% for v in [spec.sample_position, spec.rolling_direction, spec.surface_side] if v %}<span class="chip"><b>{{ v }}</b></span>{% endfor %}
+  </div>
+  <div class="facts">
+    <span>각인 <b>{{ (spec.engraved_label or spec.display_id)[:5] }}</b></span>
+    {% if actual_code %}<span>· 실측 기준 <b {% if actual_code != spec.condition_code %}class="mk-dev"{% endif %}>{{ actual_code }}</b></span>{% endif %}
+    {% if spec.label_mismatch %}<span class="mk-dev">· 각인 라벨 ≠ 현재 조건 ({{ spec.engraved_label }})</span>{% endif %}
+    {% if spec.storage_location %}<span>· 보관 <b>{{ spec.storage_location }}</b></span>{% endif %}
+    <span>· 등록 {{ spec.created_at|d }}</span>
+  </div>
+  <div class="acts">
+    {% if spec.stage != 'S' %}<button class="btn primary lg" @click="openSplit()">{{ icon('split', 18) }} [분기] 자식 시편 생성</button>{% endif %}
+    <button class="btn lg" @click="ev.open=true">{{ icon('event', 18) }} 이벤트 추가</button>
+    <a class="btn lg" href="/api/labels/engrave.csv?ids={{ spec.short_id }}">{{ icon('csv', 18) }} 각인 CSV</a>
+    <a class="btn lg" href="/api/labels/print.pdf?ids={{ spec.short_id }}" target="_blank">{{ icon('label', 18) }} 라벨 출력</a>
+    <a class="btn lg" href="/test-runs/new?specimens={{ spec.short_id }}">{{ icon('test', 18) }} 시험런 탑승</a>
+    <a class="btn lg" href="/api/specimens/{{ spec.short_id }}/report.pptx">{{ icon('download', 18) }} PPT</a>
+    {% if can_edit %}
+    <select class="in" style="height:42px" @change="setStatus($event.target.value)" aria-label="상태 변경">
+      {% for s in STATUSES %}<option {% if s == spec.status %}selected{% endif %}>{{ s }}</option>{% endfor %}
+    </select>{% endif %}
+  </div>
+</section>
+
+<section class="card" style="margin-bottom:16px">
+  <header><h2>{{ icon('tree') }}계보</h2><span class="meta">원소재 → 공정런 → 원판 → 쿠폰 → 조각 (부모-자식은 DB가 기억, 번호 길이 불변)</span></header>
+  <div class="body">
+    <div class="chain">
+      {% for n in chain %}
+        {% if not loop.first %}<span class="arrow">→</span>{% endif %}
+        {% set cls = 'self' if n.kind == 'self' else '' %}
+        {% if n.href and n.kind != 'self' %}<a class="node" href="{{ n.href }}">{% else %}<div class="node {{ cls }}">{% endif %}
+          <small>{{ loop.index }}. {{ {'material':'원소재 코일','run':'공정런','specimen':'상위 시편','self':'현재 시편'}[n.kind] }}</small>
+          <b>{{ n.label }}</b><span>{{ n.sub }}</span>
+        {% if n.href and n.kind != 'self' %}</a>{% else %}</div>{% endif %}
+      {% endfor %}
+      {% for t in tree %}
+        <span class="arrow">→</span>
+        <a class="node child" href="/specimens/{{ t.spec.short_id }}"><small>자식 시편</small><b>{{ t.spec.short_id }}</b>
+          <span>{{ t.spec.stage_name }}{% if t.children %} · 하위 {{ t.children|length }}{% endif %}</span></a>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<div class="grid2">
+  <div class="stack">
+    <section class="card">
+      <header><h2>{{ icon('gauge') }}공정 조건 (목표 → 실측)</h2>
+        <div class="r"><div class="seg" role="group" aria-label="기준">
+          <button :aria-pressed="basis==='eff'" @click="basis='eff'">대표값 기준</button>
+          <button :aria-pressed="basis==='tgt'" @click="basis='tgt'">목표 기준</button></div></div></header>
+      {% if params %}
+      <div class="tablewrap"><table class="t">
+        <tr><th>파라미터</th><th class="n">목표</th><th class="n" x-text="basis==='eff' ? '실측 / 대표값' : '목표값'">실측 / 대표값</th><th class="n">편차</th><th>출처</th></tr>
+        {% for e in params %}{% set p = pdict.param(e.key) %}
+        <tr class="{{ 'dev' if e.out_of_tol }}">
+          <td>{{ p.l }} <span class="muted small mono">{{ p.section_nm }}</span>{% if e.is_override %} <span class="mk-intent" title="원판별 목표 변경(의도, 시리즈)">◆</span>{% endif %}</td>
+          <td class="n">{{ e.target|num }} <span class="muted small">{{ p.u }}</span></td>
+          <td class="n dv"><b x-show="basis==='eff'">{{ e.effective|num }}</b><span x-show="basis==='tgt'">{{ e.target|num }}</span> <span class="muted small">{{ p.u }}</span></td>
+          <td class="n dv">{% if e.deviation is not none %}{{ e.deviation|signed }}{% if e.deviation_pct is not none and p.u == 'g/m²' %} ({{ e.deviation_pct|signed }}%){% endif %}{% if e.out_of_tol %} <span class="mk-dev">●</span>{% endif %}{% endif %}</td>
+          <td><span class="bdg {{ badge_class(e.source, e.level, e.inherited_from) }}">{{ e.badge }}</span></td>
+        </tr>
+        {% endfor %}
+      </table></div>
+      <div class="body small muted">● 허용편차 밖(색 표시만, 알림 없음) · ◆ 원판별 목표 변경(시리즈, 의도된 변화) · 실측이 없으면 목표값으로 간주합니다.
+        {% if run %}<a href="/process-runs/{{ run.run_no }}?tab=actuals">실측 입력 →</a>{% endif %}</div>
+      {% else %}<div class="empty-note">공정런에 연결되지 않은 시편입니다.</div>{% endif %}
+    </section>
+
+    <section class="card">
+      <header><h2>{{ icon('test') }}시험 이력</h2><span class="meta">{{ tests|length }}건 · 상위 시편의 시험 포함</span>
+        <div class="r"><a class="btn sm" href="/test-runs/new?specimens={{ spec.short_id }}">{{ icon('plus', 14) }}시험런 연결</a></div></header>
+      {% if tests %}
+      <ul class="list">{% for t in tests %}
+        <li style="align-items:flex-start">
+          <div class="grow">
+            <div><a class="mono" href="/test-runs/{{ t.run.test_run_no }}"><b>{{ t.run.test_run_no }}</b></a> {{ t.run.template.name }}
+              {% if t.b.slot %}<span class="chip">Slot <b>{{ t.b.slot }}</b></span>{% endif %}
+              {% if not t.own %}<span class="bdg b-inherit">{{ t.b.specimen.short_id }}</span>{% endif %}</div>
+            <div class="small muted mono" style="margin-top:4px">{{ t.run.start_date|d }} 시작 · {{ t.run.equipment or '' }} · 결과 {{ t.results|length }}회
+              {% if t.last %}· 최근 W{{ '%02d' % t.last.cycle_no }} <b style="color:var(--ink)">{{ t.last_text }}</b>{% endif %}</div>
+          </div>
+          <span class="chip st-{{ t.run.status }}">{{ '진행 중' if t.run.status == 'RUNNING' else '완료' }}</span>
+        </li>{% endfor %}</ul>
+      {% else %}<div class="empty-note">아직 시험 이력이 없습니다.</div>{% endif %}
+    </section>
+
+    <section class="card">
+      <header><h2>{{ icon('clock') }}공정 이벤트</h2><span class="meta">자르지 않는 상태 변화(후처리·도장·열처리·이동)</span></header>
+      {% if events %}
+      <ul class="list">{% for e in events %}
+        <li style="align-items:flex-start"><span class="mono small muted nowrap">{{ e.event_date|d }}</span>
+          <span class="chip"><b>{{ e.event_type }}</b></span>
+          <div class="grow small">{{ EVENT_TYPES.get(e.event_type, '') }}{% for k, v in (e.params or {}).items() %} · {{ k }}={{ v }}{% endfor %}
+            {% if e.specimen_id != spec.id %}<span class="bdg b-inherit">{{ e.specimen.short_id }}</span>{% endif %}</div>
+          <span class="small muted">{{ e.user.name if e.user else '' }}</span></li>{% endfor %}</ul>
+      {% else %}<div class="empty-note">기록된 이벤트가 없습니다.</div>{% endif %}
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="card">
+      <header><h2>{{ icon('image') }}사진·파일</h2><span class="meta">총 {{ files|length }}개</span></header>
+      <div class="body">
+        <div class="drop" id="spec-drop">{{ icon('upload', 20) }}<div>여기로 끌어 놓으면 <b class="mono">{{ spec.short_id }}</b>에 연결됩니다 (파일명에 약식번호가 있으면 그 시편으로).</div></div>
+        <ul class="upl-list" id="spec-upl"></ul>
+      </div>
+      {% if files %}
+      <div class="body" style="padding-top:0"><div class="gallery">
+        {% for a in files %}
+        <a class="thumb" href="/files/{{ a.id }}" target="_blank" title="{{ a.original_name }}">
+          <div class="img">{% if a.thumb_path %}<img loading="lazy" src="/files/{{ a.id }}/thumb" alt="">{% else %}{{ a.kind }}{% endif %}
+            {% if a.result %}<span class="tag">{{ a.result.test_run.test_type }} W{{ '%02d' % a.result.cycle_no }}</span>{% elif a.kind == 'SEM' %}<span class="tag">SEM</span>{% endif %}</div>
+          <div class="cap"><b>{{ a.original_name }}</b><span>{% if a.specimen_id != spec.id %}{{ a.specimen.short_id }} · {% endif %}{{ a.uploaded_at|d }}</span></div>
+        </a>{% endfor %}
+      </div></div>
+      {% endif %}
+    </section>
+    {% if spec.children %}
+    <section class="card">
+      <header><h2>{{ icon('tree') }}자손 시편</h2></header>
+      <div class="body">{% macro branch(nodes) %}<ul class="tree">{% for t in nodes %}<li>└ <a href="/specimens/{{ t.spec.short_id }}">{{ t.spec.short_id }}</a> <span class="muted">{{ t.spec.stage_name }} · {{ t.spec.status }}</span>{% if t.children %}{{ branch(t.children) }}{% endif %}</li>{% endfor %}</ul>{% endmacro %}{{ branch(tree) }}</div>
+    </section>
+    {% endif %}
+  </div>
+</div>
+
+<!-- 분기 대화상자 (7장 P2) -->
+<div class="modal" x-show="sp.open" x-transition.opacity @keydown.escape.window="sp.open=false" style="display:none">
+  <div class="dlg" @click.outside="sp.open=false">
+    <header><h3>분기 — {{ spec.short_id }}의 자식 시편 일괄 생성</h3><button class="btn ghost sm x" @click="sp.open=false">{{ icon('x', 16) }}</button></header>
+    <div class="body form">
+      <div class="row">
+        <label class="f">단계<select class="in" x-model="sp.stage" @change="suggest()">
+          {% for st, n in split_suggest.items() %}<option value="{{ st }}">{{ st }} · {{ {'C':'시험편','S':'분석 조각'}[st] }}</option>{% endfor %}</select></label>
+        <label class="f">개수<input class="in num" type="number" min="1" max="200" x-model.number="sp.count" @input="suggest()"></label>
+        <label class="f">시작 번호<input class="in num mono" type="number" min="0" max="9999" x-model.number="sp.start" @input.debounce.250ms="check()"></label>
+      </div>
+      <div class="small mono">→ <b x-text="range()"></b> <span class="muted">(과제·공정런·원소재·조건부 상속)</span></div>
+      <div class="flash err" x-show="sp.conflicts.length" x-text="'이미 쓰인 번호: ' + sp.conflicts.join(', ')"></div>
+      <div class="row">
+        <label class="f">크기<input class="in" x-model="sp.size_text" :placeholder="sp.stage==='C' ? '70x150' : '20x20'"></label>
+        <label class="f">채취 위치<select class="in" x-model="sp.sample_position"><option value="">-</option><option>DS</option><option>C</option><option>WS</option></select></label>
+        <label class="f">방향<select class="in" x-model="sp.rolling_direction"><option value="">-</option><option>RD</option><option>TD</option></select></label>
+        <label class="f">평가면<select class="in" x-model="sp.surface_side"><option value="">-</option><option>TOP</option><option>BOTTOM</option></select></label>
+      </div>
+      <label class="f">보관 위치<input class="in" x-model="sp.storage_location"></label>
+      <label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox" x-model="sp.consume"> 부모 {{ spec.short_id }}를 모두 잘라 썼음 (상태 → CONSUMED)</label>
+    </div>
+    <footer><button class="btn" @click="sp.open=false">취소</button><button class="btn primary" :disabled="sp.busy || sp.conflicts.length" @click="doSplit()">분기 저장</button></footer>
+  </div>
+</div>
+
+<!-- 이벤트 대화상자 -->
+<div class="modal" x-show="ev.open" x-transition.opacity style="display:none">
+  <div class="dlg" @click.outside="ev.open=false">
+    <header><h3>공정 이벤트 추가</h3><button class="btn ghost sm x" @click="ev.open=false">{{ icon('x', 16) }}</button></header>
+    <div class="body form">
+      <div class="row">
+        <label class="f">종류<select class="in" x-model="ev.type">{% for k, v in EVENT_TYPES.items() %}<option value="{{ k }}">{{ k }} · {{ v }}</option>{% endfor %}</select></label>
+        <label class="f">일자<input class="in" type="date" x-model="ev.date"></label>
+      </div>
+      <label class="f">내용 (키=값, 쉼표로 구분 · 예: type=Cr-free, product=XYZ, dry_T=150)<input class="in" x-model="ev.text"></label>
+      <p class="small muted" style="margin:0">MOVE는 location=…으로 보관 위치를 바꾸고, SCRAP은 상태를 SCRAP으로 바꿉니다.</p>
+    </div>
+    <footer><button class="btn" @click="ev.open=false">취소</button><button class="btn primary" @click="addEvent()">저장</button></footer>
+  </div>
+</div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const SID = "{{ spec.short_id }}", PROJ = "{{ spec.project_code }}";
+const SUG = {{ split_suggest|tojson }};
+function specPage() {
+  const first = Object.keys(SUG)[0] || "C";
+  return {
+    basis: "eff",
+    sp: {open: false, stage: first, count: 1, start: SUG[first] || 1, conflicts: [], busy: false, size_text: "", sample_position: "",
+         rolling_direction: "", surface_side: "", storage_location: "", consume: false},
+    ev: {open: false, type: "POST_TREAT", date: new Date().toISOString().slice(0, 10), text: ""},
+    openSplit() { this.sp.open = true; this.suggest(); },
+    range() {
+      const a = `${PROJ}-${this.sp.stage}${String(this.sp.start).padStart(4, "0")}`;
+      if (this.sp.count <= 1) return a;
+      return `${a} ~ ${this.sp.stage}${String(this.sp.start + this.sp.count - 1).padStart(4, "0")} (${this.sp.count}개)`;
+    },
+    async suggest() {
+      const prefer = parseInt(SID.slice(-4), 10);
+      try {
+        const r = await LIMS.api("GET", `/api/numbering/next?project=${PROJ}&stage=${this.sp.stage}&count=${this.sp.count || 1}&prefer=${prefer}`);
+        this.sp.start = r.suggest; this.sp.conflicts = [];
+      } catch (e) { LIMS.fail(e); }
+    },
+    async check() {
+      try {
+        const r = await LIMS.api("GET", `/api/numbering/next?project=${PROJ}&stage=${this.sp.stage}&count=${this.sp.count || 1}&start=${this.sp.start}`);
+        this.sp.conflicts = r.conflicts;
+      } catch (e) { LIMS.fail(e); }
+    },
+    async doSplit() {
+      this.sp.busy = true;
+      const s = this.sp;
+      try {
+        const r = await LIMS.api("POST", `/api/specimens/${SID}/split`, {
+          stage: s.stage, count: s.count, serial_start: s.start, size_text: s.size_text || null,
+          sample_position: s.sample_position || null, rolling_direction: s.rolling_direction || null,
+          surface_side: s.surface_side || null, storage_location: s.storage_location || null, mark_parent_consumed: s.consume});
+        LIMS.toast(`${r.children.length}개 생성: ${r.children.map(c => c.short_id).join(", ")}`, "ok");
+        if (confirm("각인 CSV를 내려받을까요?")) LIMS.download(r.engrave_csv);
+        setTimeout(() => location.reload(), 500);
+      } catch (e) {
+        if (e.data && e.data.conflicts) this.sp.conflicts = e.data.conflicts;
+        LIMS.fail(e);
+      } finally { this.sp.busy = false; }
+    },
+    async addEvent() {
+      const params = {};
+      this.ev.text.split(",").forEach(p => { const [k, ...v] = p.split("="); if (k && k.trim()) params[k.trim()] = v.join("=").trim(); });
+      try { await LIMS.api("POST", `/api/specimens/${SID}/events`, {event_type: this.ev.type, event_date: this.ev.date, params}); location.reload(); }
+      catch (e) { LIMS.fail(e); }
+    },
+    async setStatus(v) {
+      try { await LIMS.api("PATCH", `/api/specimens/${SID}`, {status: v}); LIMS.toast(`상태 → ${v}`, "ok"); setTimeout(() => location.reload(), 400); }
+      catch (e) { LIMS.fail(e); }
+    },
+  };
+}
+LIMS.uploader(document.getElementById("spec-drop"), {shortId: SID, list: document.getElementById("spec-upl"), onDone: () => setTimeout(() => location.reload(), 1200)});
+</script>
+{% endblock %}

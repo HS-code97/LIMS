@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}사진 비교 뷰어{% endblock %}
+{% block head %}<style>
+.vw{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:900px){.vw{grid-template-columns:1fr}}
+.pane{position:relative;height:62vh;overflow:hidden;background:#111;border-radius:var(--r-lg);cursor:grab;touch-action:none}
+.pane img{position:absolute;left:0;top:0;transform-origin:0 0;user-select:none;-webkit-user-drag:none;max-width:none}
+.pane .cap{position:absolute;left:8px;top:8px;background:rgba(23,28,33,.78);color:#fff;font:600 12px var(--f-num);padding:3px 8px;border-radius:3px;z-index:2}
+.pane .none{color:#aaa;display:grid;place-items:center;height:100%;font:13px var(--f-num)}
+</style>{% endblock %}
+{% block content %}
+<div class="page-head"><div><div class="crumb"><a href="/search">검색·비교</a> › 사진 비교 뷰어</div><h1 style="font-family:var(--f-body)">좌우 동기화 사진 뷰어</h1></div>
+  <div class="acts small muted">휠·핀치 = 확대, 끌기 = 이동 — 두 사진이 함께 움직입니다. ← → 회차 이동</div></div>
+<form class="card body" method="get" style="display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin-bottom:12px">
+  <label class="f">왼쪽 시편<input class="in mono" name="a" value="{{ a }}" placeholder="26P4-C0102"></label>
+  <label class="f">오른쪽 시편<input class="in mono" name="b" value="{{ b }}" placeholder="26P4-C0103"></label>
+  <button class="btn primary">불러오기</button>
+</form>
+<div x-data="viewer()" x-init="init()">
+  <div class="card body" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:12px" x-show="cycles.length">
+    <span class="small muted">회차</span>
+    <input type="range" min="0" :max="cycles.length - 1" x-model.number="ci" style="flex:1;min-width:200px">
+    <b class="mono" x-text="'W' + String(cycles[ci] ?? 0).padStart(2,'0')"></b>
+    <button class="btn sm" @click="reset()">맞춤</button>
+  </div>
+  <div class="vw">
+    <template x-for="side in ['a','b']" :key="side">
+      <div class="pane" @wheel.prevent="wheel($event, side)" @pointerdown="down($event)" @pointermove="move($event)" @pointerup="up()" @pointerleave="up()">
+        <template x-if="pic(side)"><div><span class="cap" x-text="label(side)"></span><img :src="'/files/' + pic(side).id + '/thumb?size=l'" :style="tf()" @load="fit($event)"></div></template>
+        <template x-if="!pic(side)"><div class="none" x-text="(side==='a' ? A : B) ? '이 회차 사진 없음' : '시편을 입력하세요'"></div></template>
+      </div>
+    </template>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const DATA = {{ data|tojson }}, A = "{{ a }}", B = "{{ b }}";
+function viewer() {
+  const flat = (sid) => { const out = {}; const runs = (DATA[sid] || {}).runs || {};
+    for (const tr in runs) for (const c in runs[tr]) { (out[c] = out[c] || []).push(Object.assign({tr}, runs[tr][c])); } return out; };
+  const fa = flat(A), fb = flat(B);
+  return {
+    ci: 0, s: 1, x: 0, y: 0, drag: null,
+    cycles: [...new Set([...Object.keys(fa), ...Object.keys(fb)].map(Number))].sort((p, q) => p - q),
+    init() { window.addEventListener("keydown", e => { if (e.target.tagName === "INPUT") return;
+      if (e.key === "ArrowRight") this.ci = Math.min(this.ci + 1, this.cycles.length - 1); if (e.key === "ArrowLeft") this.ci = Math.max(this.ci - 1, 0); }); },
+    entry(side) { const f = side === "a" ? fa : fb; const e = f[this.cycles[this.ci]]; return e && e[0]; },
+    pic(side) { const e = this.entry(side); return e && e.photos[0]; },
+    label(side) { const e = this.entry(side); return `${side === "a" ? A : B} · ${e.tr} W${String(this.cycles[this.ci]).padStart(2, "0")} · ${e.text}`; },
+    tf() { return `transform:translate(${this.x}px,${this.y}px) scale(${this.s})`; },
+    fit(ev) { if (this.s !== 1 || this.x || this.y) return; const img = ev.target, pane = img.closest(".pane");
+      this.s = Math.min(pane.clientWidth / img.naturalWidth, pane.clientHeight / img.naturalHeight); },
+    reset() { this.s = 1; this.x = 0; this.y = 0; document.querySelectorAll(".pane img").forEach(i => i.complete && this.fit({target: i})); },
+    wheel(e) { const k = e.deltaY < 0 ? 1.15 : 1 / 1.15, r = e.currentTarget.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+      this.x = px - (px - this.x) * k; this.y = py - (py - this.y) * k; this.s *= k; },
+    down(e) { this.drag = {x: e.clientX - this.x, y: e.clientY - this.y}; e.currentTarget.setPointerCapture(e.pointerId); },
+    move(e) { if (!this.drag) return; this.x = e.clientX - this.drag.x; this.y = e.clientY - this.drag.y; },
+    up() { this.drag = null; },
+  };
+}
+</script>
+{% endblock %}

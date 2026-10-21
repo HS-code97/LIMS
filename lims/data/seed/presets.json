@@ -1,0 +1,19 @@
+{
+  "note": "공용(PUBLIC) 프리셋 초기값. 기존 HMI PRE와 같이 사전 기본값과 다른 값만 저장합니다. M1/M2는 연구실 성분계(Al-26Zn-3Si(-0.5Mg), Al bal.) — 조성·온도는 0단계에서 확정.",
+  "presets": [
+    {"name": "GI",  "coating_system": "G", "bath_code": "1",
+     "overrides": {"nof": {"on": false}, "pot": {"T": 460, "Al": 0.20, "Mg": 0, "Si": 0}, "snout": {"SET": 465}, "rjc": {"T": 460}, "ak": {"gas": "Air"}, "ga": {"on": false}, "apc": {"rate": 15}}},
+    {"name": "GA",  "coating_system": "A", "bath_code": "1",
+     "overrides": {"nof": {"on": false}, "pot": {"T": 460, "Al": 0.13, "Mg": 0, "Si": 0}, "snout": {"SET": 465}, "rjc": {"T": 460}, "ak": {"gas": "Air"}, "ga": {"on": true}, "apc": {"rate": 15}}},
+    {"name": "ZAM", "coating_system": "Z", "bath_code": "1",
+     "overrides": {"nof": {"on": false}, "pot": {"T": 430, "Al": 6.0, "Mg": 3.0, "Si": 0}, "snout": {"SET": 440}, "rjc": {"T": 440}, "ak": {"gas": "N₂"}, "ga": {"on": false}, "apc": {"rate": 30}}},
+    {"name": "AZ",  "coating_system": "Y", "bath_code": "1",
+     "overrides": {"nof": {"on": false}, "pot": {"T": 600, "Al": 55, "Mg": 0, "Si": 1.6}, "snout": {"SET": 605}, "rjc": {"T": 600}, "ak": {"gas": "Air"}, "ga": {"on": false}, "apc": {"rate": 20}}},
+    {"name": "AS",  "coating_system": "L", "bath_code": "1",
+     "overrides": {"nof": {"on": false}, "pot": {"T": 680, "Al": 90, "Mg": 0, "Si": 9}, "snout": {"SET": 680}, "rjc": {"T": 680}, "ak": {"gas": "N₂"}, "ga": {"on": false}, "apc": {"rate": 20}}},
+    {"name": "M1",  "coating_system": "M", "bath_code": "1",
+     "overrides": {"nof": {"on": false}, "pot": {"T": 590, "Al": 71.0, "Mg": 0, "Si": 3.0}, "snout": {"SET": 595}, "rjc": {"T": 590}, "ak": {"gas": "N₂"}, "ga": {"on": false}, "apc": {"rate": 20}}},
+    {"name": "M2",  "coating_system": "M", "bath_code": "2",
+     "overrides": {"nof": {"on": false}, "pot": {"T": 590, "Al": 70.5, "Mg": 0.5, "Si": 3.0}, "snout": {"SET": 595}, "rjc": {"T": 590}, "ak": {"gas": "N₂"}, "ga": {"on": false}, "apc": {"rate": 20}}}
+  ]
+}

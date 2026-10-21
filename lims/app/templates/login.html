@@ -1,0 +1,16 @@
+{% from "_icons.html" import icon %}<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>로그인 · 도금강판 R&D LIMS</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="/static/css/lims.css?v=2.2.0"></head>
+<body><div class="login"><section class="card">
+  <header><span class="brand">{{ icon('logo', 26) }}<div><b>PLATED-STEEL LIMS</b><small>표면연구그룹 · 도금강판 연구개발</small></div></span></header>
+  <form class="body form" method="post" action="/login">
+    {% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <label class="f">사번<input class="in" name="emp_no" value="{{ emp_no or '' }}" autofocus required autocomplete="username"></label>
+    <label class="f">비밀번호<input class="in" type="password" name="password" required autocomplete="current-password"></label>
+    <button class="btn primary lg" type="submit">로그인</button>
+    <p class="small muted" style="margin:0">계정은 관리자에게 요청하세요. 누구나 조회할 수 있고, 수정은 작성자·시편 소유자·관리자만 할 수 있습니다.</p>
+  </form>
+</section></div></body></html>

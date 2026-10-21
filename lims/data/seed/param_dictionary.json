@@ -1,0 +1,96 @@
+{
+  "dict_version": "2026.10-1",
+  "note": "CGL 모사장치 HMI의 구간·파라미터 사전(S)을 분리한 단일 원본. HMI와 LIMS가 함께 읽습니다. actual 블록 = 실측 수준·허용편차·대표값 계산법(설계서 6.6절).",
+  "sections": [
+    {"id": "nof", "nm": "NOF", "full": "직화가열/선산화", "opt": true,
+     "desc": "DFF/NOF 구간. 고Si·Mn 강종의 선택적 산화 제어용 선산화(옵션).",
+     "p": [
+       {"k": "T", "l": "선산화 온도", "u": "°C", "min": 600, "max": 800, "v": 700, "actual": {"level": "panel", "tol": 10, "agg": "mean", "methods": ["열전대", "PV"]}},
+       {"k": "O2", "l": "O₂ 농도", "u": "%", "min": 0.1, "max": 3, "v": 1.0, "st": 0.1, "actual": {"level": "run", "tol": 0.2, "agg": "mean", "methods": ["분석계"]}},
+       {"k": "t", "l": "유지 시간", "u": "s", "min": 1, "max": 10, "v": 4}
+     ]},
+    {"id": "rth", "nm": "RTH", "full": "복사관 가열",
+     "desc": "목표 판온까지 승온. 분위기(H₂/이슬점)는 소둔로 전체에 적용.",
+     "p": [
+       {"k": "rate", "l": "승온 속도", "u": "°C/s", "min": 1, "max": 50, "v": 10},
+       {"k": "T", "l": "최고 판온", "u": "°C", "min": 650, "max": 900, "v": 800,
+        "actual": {"level": "panel", "tol": 10, "agg": "mean", "quick": true, "methods": ["열전대", "PV"], "pv_tag": "RTH.TT01"}},
+       {"k": "H2", "l": "H₂ 농도 (N₂ bal.)", "u": "%", "min": 1, "max": 10, "v": 5, "st": 0.5,
+        "actual": {"level": "run", "tol": 0.5, "agg": "mean", "methods": ["분석계", "PV"]}},
+       {"k": "DP", "l": "이슬점", "u": "°C", "min": -60, "max": 0, "v": -40,
+        "actual": {"level": "run", "tol": 5, "agg": "mean", "quick": true, "methods": ["노점계", "PV"], "pv_tag": "RTH.DP01"}}
+     ]},
+    {"id": "rts", "nm": "RTS", "full": "균열", "desc": "최고 판온에서 등온 유지.",
+     "p": [
+       {"k": "t", "l": "균열 시간", "u": "s", "min": 5, "max": 300, "v": 60,
+        "actual": {"level": "panel", "tol": 5, "agg": "last", "methods": ["PV", "타이머"]}}
+     ]},
+    {"id": "sjc", "nm": "SJC", "full": "서냉", "desc": "서냉대 가스젯 냉각.",
+     "p": [
+       {"k": "T", "l": "서냉 종료 판온", "u": "°C", "min": 550, "max": 800, "v": 680, "actual": {"level": "panel", "tol": 10, "agg": "mean", "methods": ["열전대", "PV"]}},
+       {"k": "rate", "l": "냉각 속도", "u": "°C/s", "min": 1, "max": 30, "v": 10}
+     ]},
+    {"id": "rjc", "nm": "RJC", "full": "급냉(고H₂)", "desc": "고수소 가스젯 급냉.",
+     "p": [
+       {"k": "T", "l": "급냉 종료 판온", "u": "°C", "min": 300, "max": 720, "v": 460, "actual": {"level": "panel", "tol": 10, "agg": "mean", "methods": ["열전대", "PV"]}},
+       {"k": "rate", "l": "냉각 속도", "u": "°C/s", "min": 10, "max": 100, "v": 50},
+       {"k": "H2", "l": "H₂ 농도", "u": "%", "min": 5, "max": 75, "v": 30, "actual": {"level": "run", "tol": 3, "agg": "mean", "methods": ["분석계"]}}
+     ]},
+    {"id": "oa", "nm": "OA", "full": "과시효/등온", "desc": "포트 인입 전 등온 유지.",
+     "p": [
+       {"k": "t", "l": "유지 시간", "u": "s", "min": 0, "max": 300, "v": 20}
+     ]},
+    {"id": "snout", "nm": "SNOUT", "full": "스나우트", "desc": "포트 인입판온(SET) 조정. 욕온 대비 차이가 핵심 점검 항목.",
+     "p": [
+       {"k": "SET", "l": "인입판온 (SET)", "u": "°C", "min": 400, "max": 720, "v": 465, "actual": {"level": "panel", "tol": 5, "agg": "mean", "methods": ["열전대", "PV"]}}
+     ]},
+    {"id": "pot", "nm": "POT", "full": "도금 포트", "desc": "도금욕 조성과 침지 조건.",
+     "p": [
+       {"k": "T", "l": "욕온", "u": "°C", "min": 400, "max": 720, "v": 460,
+        "actual": {"level": "run", "tol": 3, "agg": "mean", "quick": true, "methods": ["열전대", "PV"], "pv_tag": "POT.TT01"}},
+       {"k": "Al", "l": "욕 Al", "u": "wt%", "min": 0, "max": 95, "v": 0.20, "st": 0.01,
+        "actual": {"level": "run", "tol": 1.0, "agg": "last", "methods": ["ICP", "습식"]}},
+       {"k": "Mg", "l": "욕 Mg", "u": "wt%", "min": 0, "max": 5, "v": 0, "st": 0.1,
+        "actual": {"level": "run", "tol": 0.05, "agg": "last", "methods": ["ICP", "습식"]}},
+       {"k": "Si", "l": "욕 Si", "u": "wt%", "min": 0, "max": 12, "v": 0, "st": 0.1,
+        "actual": {"level": "run", "tol": 0.5, "agg": "last", "methods": ["ICP", "습식"]}},
+       {"k": "t", "l": "침지 시간", "u": "s", "min": 1, "max": 10, "v": 3, "st": 0.5,
+        "actual": {"level": "panel", "tol": 0.5, "agg": "last", "quick": true, "methods": ["PV", "타이머"]}}
+     ]},
+    {"id": "ak", "nm": "A/K", "full": "에어나이프", "desc": "와이핑 조건. 실제 라인의 판속 대신 시편 인상 속도로 입력.",
+     "p": [
+       {"k": "gas", "l": "와이핑 가스", "u": "", "type": "sel", "opts": ["Air", "N₂"], "v": "Air"},
+       {"k": "P", "l": "노즐 압력", "aka": ["나이프 압력", "에어나이프 압력"], "u": "kPa", "min": 5, "max": 80, "v": 30,
+        "actual": {"level": "panel", "tol": 2, "agg": "mean", "quick": true, "methods": ["압력계", "PV"]}},
+       {"k": "d", "l": "노즐–시편 거리", "u": "mm", "min": 5, "max": 20, "v": 10},
+       {"k": "h", "l": "욕면 위 높이", "u": "mm", "min": 100, "max": 400, "v": 250},
+       {"k": "v", "l": "인상 속도", "u": "mm/s", "min": 100, "max": 1000, "v": 500, "actual": {"level": "panel", "tol": 20, "agg": "mean", "methods": ["PV"]}}
+     ]},
+    {"id": "ga", "nm": "GA", "full": "합금화로", "opt": true, "desc": "유도가열 → 보열. GI는 OFF.",
+     "p": [
+       {"k": "T", "l": "합금화 온도", "u": "°C", "min": 480, "max": 600, "v": 520, "actual": {"level": "panel", "tol": 10, "agg": "mean", "methods": ["열전대", "PV"]}},
+       {"k": "rate", "l": "승온 속도", "u": "°C/s", "min": 5, "max": 60, "v": 30},
+       {"k": "t", "l": "보열 시간", "u": "s", "min": 0, "max": 30, "v": 10}
+     ]},
+    {"id": "apc", "nm": "APC", "full": "후냉각", "desc": "공냉/미스트 냉각탑. 탑롤 도달 전 판온 제한.",
+     "p": [
+       {"k": "rate", "l": "냉각 속도", "u": "°C/s", "min": 5, "max": 100, "v": 15},
+       {"k": "T", "l": "탑롤 판온", "u": "°C", "min": 150, "max": 400, "v": 300}
+     ]},
+    {"id": "wq", "nm": "W/Q", "full": "수냉조", "desc": "최종 수냉.",
+     "p": [
+       {"k": "T", "l": "출구 판온", "u": "°C", "min": 25, "max": 80, "v": 40}
+     ]},
+    {"id": "out", "nm": "OUT", "full": "출력 특성", "setpoint": false,
+     "desc": "설비 설정값이 아닌 결과 특성. HMI 미믹에는 그리지 않고 LIMS 실측 화면에만 나타납니다.",
+     "p": [
+       {"k": "cw", "l": "목표 부착량(단면)", "u": "g/m²", "min": 10, "max": 300, "v": 60},
+       {"k": "cw_top", "l": "부착량 윗면", "u": "g/m²", "target_from": "cw",
+        "actual": {"level": "panel", "tol_pct": 10, "agg": "mean", "quick": true, "methods": ["중량법", "XRF"]}},
+       {"k": "cw_bottom", "l": "부착량 아랫면", "u": "g/m²", "target_from": "cw",
+        "actual": {"level": "panel", "tol_pct": 10, "agg": "mean", "quick": true, "methods": ["중량법", "XRF"]}},
+       {"k": "fe_pct", "l": "도금층 Fe", "u": "wt%", "only_if": "ga.on",
+        "actual": {"level": "panel", "tol": 1.0, "agg": "mean", "methods": ["ICP", "XRF"]}}
+     ]}
+  ]
+}

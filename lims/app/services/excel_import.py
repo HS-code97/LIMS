@@ -12,9 +12,11 @@
 from __future__ import annotations
 
 import io
+import zipfile
 from datetime import date, datetime
 
 from openpyxl import Workbook, load_workbook
+from openpyxl.utils.exceptions import InvalidFileException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -58,7 +60,10 @@ def _keymap() -> dict[str, str]:
 
 
 def run_import(db: Session, data: bytes, user_id: int | None, dry_run: bool = True) -> dict:
-    wb = load_workbook(io.BytesIO(data), data_only=True)
+    try:
+        wb = load_workbook(io.BytesIO(data), data_only=True)
+    except (zipfile.BadZipFile, InvalidFileException, KeyError, OSError) as e:
+        raise workflow.Invalid(f"엑셀(.xlsx) 파일을 읽을 수 없습니다: {e}") from e
     report: dict = {"created": {"process_runs": [], "specimens": [], "actuals": 0, "test_runs": [], "results": 0},
                     "errors": [], "warnings": []}
     err = report["errors"]
@@ -145,8 +150,12 @@ def run_import(db: Session, data: bytes, user_id: int | None, dry_run: bool = Tr
                 if k is None:
                     report["warnings"].append(f"{where}: 사전에 없는 열 '{col}' 무시")
                     continue
-                actuals.add_actual(db, run, k, v, specimen=spec, source="manual", method=r.get("방법"),
-                                   user_id=user_id, note="엑셀 가져오기")
+                try:
+                    actuals.add_actual(db, run, k, v, specimen=spec, source="manual", method=r.get("방법"),
+                                       user_id=user_id, note="엑셀 가져오기")
+                except (workflow.Invalid, ValueError) as e:
+                    err.append(f"{where} '{col}': {e}")
+                    continue
                 report["created"]["actuals"] += 1
             touched.add(run.id)
         for run in {r for r in run_keys.values()} | set(db.scalars(select(ProcessRun).where(ProcessRun.id.in_(touched)))):

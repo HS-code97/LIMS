@@ -40,8 +40,10 @@ class Base(DeclarativeBase):
 
 
 def get_db():
+    from .services import param_dict     # 순환 import 방지 (param_dict → models → db)
     db = SessionLocal()
     try:
+        param_dict.sync(db)              # 다른 worker가 고친 실측 설정 반영
         yield db
     finally:
         db.close()

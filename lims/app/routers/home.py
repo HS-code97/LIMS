@@ -1,6 +1,9 @@
 """내 작업(홈), 로그인."""
 from __future__ import annotations
 
+import time
+from collections import defaultdict
+
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import func, select
@@ -13,23 +16,46 @@ from ..web import render
 
 router = APIRouter()
 
+# 로그인 실패 제한: 같은 사번·주소로 10분에 5번 틀리면 10분 동안 막음 (프로세스 메모리, worker마다 따로 셈)
+MAX_FAILS, FAIL_WINDOW = 5, 600
+_fails: dict[tuple[str, str], list[float]] = defaultdict(list)
+
+
+def safe_next(next: str | None) -> str:
+    """로그인 뒤 이동할 주소는 이 사이트 안 경로만 (//evil.com, /\\evil.com, https://… 는 /로)."""
+    if not next or not next.startswith("/") or next.startswith(("//", "/\\")):
+        return "/"
+    return next
+
+
+def _recent_fails(key: tuple[str, str]) -> list[float]:
+    now = time.monotonic()
+    _fails[key] = [t for t in _fails[key] if now - t < FAIL_WINDOW]
+    return _fails[key]
+
 
 @router.get("/login")
 def login_page(request: Request, next: str = "/", user: User | None = Depends(optional_user)):
     if user:
-        return RedirectResponse(next or "/", 303)
-    return render(request, "login.html", next=next)
+        return RedirectResponse(safe_next(next), 303)
+    return render(request, "login.html", next=safe_next(next))
 
 
 @router.post("/login")
 def login(request: Request, emp_no: str = Form(...), password: str = Form(...), next: str = Form("/"),
           db: Session = Depends(get_db)):
+    key = (emp_no.strip().lower(), request.client.host if request.client else "")
+    if len(_recent_fails(key)) >= MAX_FAILS:
+        return render(request, "login.html", status_code=429, next=safe_next(next), emp_no=emp_no,
+                      error="로그인을 여러 번 틀렸습니다. 10분 뒤에 다시 시도하세요.")
     u = db.scalar(select(User).where(User.emp_no == emp_no.strip(), User.is_active.is_(True)))
     if u is None or not verify_password(password, u.pw_hash):
-        return render(request, "login.html", status_code=401, next=next, error="사번 또는 비밀번호가 맞지 않습니다.",
-                      emp_no=emp_no)
+        _fails[key].append(time.monotonic())
+        return render(request, "login.html", status_code=401, next=safe_next(next),
+                      error="사번 또는 비밀번호가 맞지 않습니다.", emp_no=emp_no)
+    _fails.pop(key, None)
     request.session["uid"] = u.id
-    return RedirectResponse(next if next.startswith("/") else "/", 303)
+    return RedirectResponse(safe_next(next), 303)
 
 
 @router.post("/logout")

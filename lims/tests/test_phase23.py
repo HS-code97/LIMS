@@ -7,12 +7,12 @@ import pytest
 from fastapi.testclient import TestClient
 from openpyxl import load_workbook
 from PIL import Image
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.config import SEED_DIR, VAR_DIR
 from app.db import SessionLocal
 from app.main import app
-from app.models import ProcessPreset
+from app.models import AuditLog, ParamActualCfg, ProcessPreset
 from app.services import param_dict as pdict
 
 
@@ -73,24 +73,33 @@ def test_excel_import(client):
     assert any("이미 쓰인" in e for e in again["errors"])
 
 
-def test_dictionary_edit(client, tmp_path, monkeypatch):
-    # 저장소의 시드 사전은 건드리지 않고 임시 복사본에 씁니다.
+def test_dictionary_edit(client):
+    """허용편차 편집은 DB(param_actual_cfg)에 저장되고, 다른 worker도 다음 요청에서 반영합니다."""
     seed_file = SEED_DIR / "param_dictionary.json"
     mtime = seed_file.stat().st_mtime_ns
-    shutil.copy(seed_file, tmp_path / "param_dictionary.json")
-    monkeypatch.setattr(pdict, "SEED_DIR", tmp_path)
-    pdict.reload()
     try:
         r = client.post("/admin/dictionary", data={"key": "ak.P", "level": "panel", "tol": "5", "agg": "mean",
                                                    "quick": "on", "methods": "압력계, PV"}, follow_redirects=False)
         assert r.status_code == 303
         assert pdict.actual_cfg("ak.P")["tol"] == 5.0
-        path = tmp_path / "param_dictionary.json"
-        assert json.loads(path.read_text(encoding="utf-8"))["dict_version"] == pdict.version()
+        with SessionLocal() as db:
+            assert db.get(ParamActualCfg, "ak.P").cfg["tol"] == 5.0
+            assert db.scalar(select(AuditLog.id).where(AuditLog.table_name == "param_actual_cfg"))
+        # 다른 worker에서 고친 상황: 이 프로세스의 캐시는 그대로인데 DB rev만 오름 → 다음 sync에서 반영
+        with SessionLocal() as db:
+            row = db.get(ParamActualCfg, "ak.P")
+            row.cfg, row.rev = {**row.cfg, "tol": 7.0}, row.rev + 1
+            db.commit()
+        assert pdict.actual_cfg("ak.P")["tol"] == 5.0
+        assert client.get("/admin?tab=dictionary").status_code == 200       # 요청마다 get_db가 sync
+        assert pdict.actual_cfg("ak.P")["tol"] == 7.0
+        assert pdict.version() == json.loads(seed_file.read_text(encoding="utf-8"))["dict_version"]
     finally:
-        monkeypatch.undo()
-        pdict.reload()
-    assert seed_file.stat().st_mtime_ns == mtime
+        with SessionLocal() as db:
+            db.execute(delete(ParamActualCfg))
+            db.commit()
+            pdict.sync(db)
+    assert seed_file.stat().st_mtime_ns == mtime                         # 시드 파일은 더 이상 쓰지 않음
 
 
 def test_pv_receive(client, run):

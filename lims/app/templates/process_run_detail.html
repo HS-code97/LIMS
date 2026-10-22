@@ -15,7 +15,7 @@
     <span class="chip">사전 <b>{{ run.dict_version }}</b></span>
     {% if run.operator %}<span class="chip">작업자 <b style="font-family:var(--f-body)">{{ run.operator.name }}</b></span>{% endif %}
   </div>
-  {% if run.note %}<div class="small" style="color:var(--ink-2)">{{ run.note }}</div>{% endif %}
+  {% if run.note %}<div class="small" style="color:var(--ink-2);white-space:pre-line">{{ run.note }}</div>{% endif %}
   <div class="acts">
     <a class="btn" href="/api/labels/engrave.csv?run={{ run.run_no }}">{{ icon('csv', 16) }} 각인 CSV</a>
     <a class="btn" href="/api/labels/print.pdf?run={{ run.run_no }}" target="_blank">{{ icon('label', 16) }} 라벨 출력</a>
@@ -32,7 +32,7 @@
     <div class="tablewrap"><table class="t">
       <tr><th>약식번호</th><th>정식번호</th><th>목표 변경</th><th>상태</th><th>자식</th></tr>
       {% for p in panels %}
-      <tr><td><a class="mono" href="/specimens/{{ p.short_id }}"><b>{{ p.short_id }}</b></a></td><td class="mono">{{ p.display_id }}</td>
+      <tr><td><a class="mono" href="/specimens/{{ p.short_id }}"><b>{{ p.short_id }}</b></a></td><td class="mono">{{ p.display_id }}{% if p.label_mismatch %}<div class="small mk-dev" title="목표 정정·코드표 변경으로 현재 조건부가 각인과 다릅니다">각인 {{ p.engraved_label }}</div>{% endif %}</td>
         <td class="mono small">{% if p.target_overrides %}<span class="mk-intent">◆</span> {% for k, v in p.target_overrides.items() %}{{ pdict.label(k) }} {{ v|num }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}</td>
         <td><span class="chip st-{{ p.status }}">{{ p.status }}</span></td>
         <td class="mono small">{% for c in p.children if not c.is_deleted %}<a href="/specimens/{{ c.short_id }}">{{ c.short_id[5:] }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</td></tr>
@@ -54,6 +54,18 @@
         {% endfor %}
       </table></div>
     </section>
+    {% if user.is_admin or user.id == run.operator_id %}
+    <section class="card" x-data="targetFix()">
+      <header><h2>{{ icon('gauge') }}목표 정정</h2><span class="meta">잘못 저장한 목표값만 고칩니다 (측정값은 [실측] 탭)</span></header>
+      <form class="body form" @submit.prevent="save()">
+        <div class="row"><label class="f">대상<select class="in" x-model="specimen"><option value="">기본 레시피 (모든 원판)</option>{% for p in panels %}<option value="{{ p.short_id }}">{{ p.short_id }} 원판만</option>{% endfor %}</select></label>
+          <label class="f">항목<select class="in" x-model="key">{% for k, p in pdict.params().items() if pdict.is_numeric(k) and p.target_from is not defined %}<option value="{{ k }}">{{ p.section_nm }} {{ p.l }} ({{ p.u }})</option>{% endfor %}</select></label>
+          <label class="f">새 목표<input class="in mono" type="number" step="any" x-model="value" required></label></div>
+        <label class="f">사유 (공정런 메모에 남음)<input class="in" x-model="reason" required placeholder="예: 목표 부착량 오입력 (60 → 55)"></label>
+        <p class="small muted" style="margin:0">현재 조건부가 다시 만들어집니다. 이미 각인한 라벨은 바뀌지 않고 "각인 ≠ 현재"로 표시됩니다.</p>
+        <button class="btn primary" :disabled="busy">정정 저장</button></form>
+    </section>
+    {% endif %}
     {% if checks %}<section class="card"><header><h2>저장 당시 점검</h2></header>
       <ul class="list">{% for c in checks %}<li><span class="chip {{ 'st-SCRAP' if c.lv == 'err' else '' }}">{{ '범위' if c.lv == 'err' else '주의' }}</span><span class="small">{{ c.msg }}</span></li>{% endfor %}</ul></section>{% endif %}
   </div>
@@ -177,6 +189,29 @@ function actTab() {
     async applyBa(id) {
       try { const r = await LIMS.api("POST", `/api/bath-analyses/${id}/apply`, {run_nos: [RUN]}); LIMS.toast(`욕 분석 적용: ${r.applied_rows}개 값`, "ok"); setTimeout(() => location.reload(), 400); }
       catch (e) { LIMS.fail(e); }
+    },
+  };
+}
+</script>
+{% else %}
+<script>
+function targetFix() {
+  return {
+    specimen: "", key: "out.cw", value: "", reason: "", busy: false,
+    async save(confirm = false) {
+      this.busy = true;
+      const body = {changes: [{key: this.key, value: Number(this.value), specimen: this.specimen || null}],
+                    reason: this.reason, confirm_out_of_range: confirm};
+      try {
+        const r = await LIMS.api("POST", "/api/process-runs/{{ run.run_no }}/targets", body);
+        LIMS.toast(`정정했습니다${r.codes_changed ? ` — 현재 조건부가 바뀐 시편 ${r.codes_changed}개` : ""}`, "ok");
+        setTimeout(() => location.reload(), 700);
+      } catch (e) {
+        if (e.status === 422 && !confirm && e.data && (e.data.items || []).length && /범위/.test(e.data.detail)
+            && window.confirm(`${e.data.detail}\n${e.data.items.join("\n")}\n그래도 저장할까요?`)) { this.busy = false; return this.save(true); }
+        LIMS.fail(e);
+      }
+      this.busy = false;
     },
   };
 }

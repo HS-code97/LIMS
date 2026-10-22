@@ -146,6 +146,30 @@
       <td>{% if it.ok %}<span class="chip st-AVAILABLE">확정</span>{% elif it.ok is sameas false %}<span class="chip st-SCRAP">미설정</span>{% else %}<span class="chip">확인 필요</span>{% endif %}</td>
       <td class="small">{{ it.note }}</td></tr>{% endfor %}</table></div></section>
 
+{% elif tab == 'apikeys' %}
+{% if not user.is_admin %}<section class="card"><div class="body">관리자만 볼 수 있습니다.</div></section>
+{% else %}
+{% if new_key %}<section class="card"><header><h2>새 API 키 — 지금만 보입니다</h2></header>
+  <div class="body"><p class="small">장비·앱 설정에 넣고 이 화면을 닫으세요. 서버에는 해시만 저장되어 다시 볼 수 없습니다. 요청 머리글 <span class="mono">X-API-Key</span>로 보냅니다.</p>
+    <input class="in mono" readonly value="{{ new_key }}" onclick="this.select()" style="width:100%"></div></section>{% endif %}
+<div class="grid2">
+  <section class="card"><header><h2>API 키</h2><span class="meta">쿠키 로그인을 못 하는 HMI·X-cut 앱·장비 PC용</span></header>
+    <div class="tablewrap"><table class="t"><tr><th>이름</th><th>키 앞부분</th><th>처리 계정</th><th>범위</th><th>마지막 사용</th><th>상태</th><th></th></tr>
+      {% for k in keys %}<tr {% if not k.is_active %}style="opacity:.5"{% endif %}><td>{{ k.name }}</td><td class="mono small">{{ k.prefix }}…</td>
+        <td>{{ k.user.name }} <span class="mono small">{{ k.user.emp_no }}</span></td>
+        <td class="small">{% for s in k.scopes %}<span class="chip">{{ scope_names.get(s, s) }}</span> {% endfor %}</td>
+        <td class="small">{{ k.last_used_at.strftime('%Y-%m-%d %H:%M') if k.last_used_at else '-' }}</td><td>{{ '사용' if k.is_active else '중지' }}</td>
+        <td>{% if k.is_active %}<form method="post" action="/admin/api-keys/{{ k.id }}/revoke" onsubmit="return confirm('{{ k.name }} 키를 중지할까요? 그 키를 쓰는 장비는 바로 막힙니다.')"><button class="btn sm">중지</button></form>{% endif %}</td></tr>
+      {% else %}<tr><td colspan="7" class="muted">발급한 키가 없습니다.</td></tr>{% endfor %}</table></div></section>
+  <section class="card"><header><h2>키 발급</h2></header>
+    <form class="body form" method="post" action="/admin/api-keys">
+      <label class="f">이름<input class="in" name="name" required maxlength="50" placeholder="HMI-CGL1"></label>
+      <label class="f">처리 계정 (권한·감사 로그의 사용자, 전용 계정 권장)<select class="in" name="user_id">{% for u in users_all %}<option value="{{ u.id }}">{{ u.name }} ({{ u.emp_no }})</option>{% endfor %}</select></label>
+      <div class="f">범위{% for s, n in scope_names.items() %}<label class="small"><input type="checkbox" name="scopes" value="{{ s }}"> {{ n }}</label>{% endfor %}</div>
+      <button class="btn primary">발급</button></form></section>
+</div>
+{% endif %}
+
 {% elif tab == 'users' %}
 <div class="grid2">
   <section class="card"><header><h2>사용자</h2></header>

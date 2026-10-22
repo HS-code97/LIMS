@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from ..auth import can_edit, ensure_can_edit, require_user
+from ..auth import can_edit, ensure_can_edit, require_admin, require_user
 from ..db import get_db
 from ..models import (Attachment, ProcessRun, Project, RunSpecimen, Specimen, SpecimenEvent, TestResult, TestRun,
                       User)
@@ -33,8 +33,9 @@ def get_spec(db: Session, short_id: str) -> Specimen:
 
 @router.get("/specimens")
 def list_page(request: Request, project: str = "", stage: str = "", status: str = "", mine: int = 0,
-              user: User = Depends(require_user), db: Session = Depends(get_db)):
-    q = select(Specimen).where(Specimen.is_deleted.is_(False))
+              deleted: int = 0, user: User = Depends(require_user), db: Session = Depends(get_db)):
+    deleted = int(bool(deleted and user.is_admin))      # 삭제한 시편 보기·되살리기는 관리자만
+    q = select(Specimen).where(Specimen.is_deleted.is_(bool(deleted)))
     if project:
         q = q.where(Specimen.project_code == project.upper())
     if stage:
@@ -46,7 +47,21 @@ def list_page(request: Request, project: str = "", stage: str = "", status: str 
     specs = db.scalars(q.order_by(Specimen.created_at.desc(), Specimen.id.desc()).limit(500)).all()
     projects = db.scalars(select(Project).order_by(Project.project_code.desc())).all()
     return render(request, "specimens.html", nav="spec", specs=specs, projects=projects, f=dict(
-        project=project, stage=stage, status=status, mine=mine), statuses=STATUSES)
+        project=project, stage=stage, status=status, mine=mine, deleted=deleted), statuses=STATUSES)
+
+
+@router.post("/api/specimens/{short_id}/restore")
+def restore_spec(short_id: str, user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """논리 삭제한 시편 되살리기 (관리자). 부모가 삭제돼 있으면 부모부터."""
+    spec = db.scalar(select(Specimen).where(Specimen.short_id == short_id.strip().upper(),
+                                            Specimen.is_deleted.is_(True)))
+    if spec is None:
+        raise HTTPException(404, f"삭제된 시편 {short_id}이 없습니다.")
+    if spec.parent is not None and spec.parent.is_deleted:
+        raise HTTPException(409, f"부모 {spec.parent.short_id}이 삭제돼 있습니다. 부모부터 되살리세요.")
+    spec.is_deleted = False
+    db.commit()
+    return spec_json(spec)
 
 
 def detail_context(db: Session, spec: Specimen) -> dict:
@@ -141,6 +156,7 @@ def get_params(short_id: str, user: User = Depends(require_user), db: Session = 
 @router.post("/api/specimens/{short_id}/split")
 def split_api(short_id: str, data: SplitIn, user: User = Depends(require_user), db: Session = Depends(get_db)):
     parent = get_spec(db, short_id)
+    ensure_can_edit(user, parent.owner_id)
     kids = workflow.split(db, parent, data, user.id)
     db.commit()
     return {"children": [spec_json(k) for k in kids], "parent_status": parent.status,
@@ -151,6 +167,7 @@ def split_api(short_id: str, data: SplitIn, user: User = Depends(require_user), 
 @router.post("/api/specimens/{short_id}/events")
 def add_event(short_id: str, data: EventIn, user: User = Depends(require_user), db: Session = Depends(get_db)):
     spec = get_spec(db, short_id)
+    ensure_can_edit(user, spec.owner_id)        # SCRAP·MOVE는 상태·보관 위치를 바꾸므로 소유자·관리자만
     if data.event_type not in EVENT_TYPES:
         raise HTTPException(422, f"이벤트 종류: {', '.join(EVENT_TYPES)}")
     ev = SpecimenEvent(specimen_id=spec.id, event_type=data.event_type, params=data.params,
@@ -198,16 +215,18 @@ def _label_targets(db: Session, ids: str, run: str, test_run: str) -> tuple[list
         pr = db.scalar(select(ProcessRun).where(ProcessRun.run_no == run))
         if pr is None:
             raise HTTPException(404)
-        return list(pr.panels), None, {}
+        return [s for s in pr.panels if not s.is_deleted], None, {}
     if test_run:
         tr = db.scalar(select(TestRun).where(TestRun.test_run_no == test_run))
         if tr is None:
             raise HTTPException(404)
-        specs = [b.specimen for b in sorted(tr.boardings, key=lambda b: (b.slot or "", b.specimen.short_id))]
+        specs = [b.specimen for b in sorted(tr.boardings, key=lambda b: (b.slot or "", b.specimen.short_id))
+                 if not b.specimen.is_deleted]
         slots = {b.specimen_id: b.slot for b in tr.boardings}
         return specs, tr, slots
     wanted = [x.strip().upper() for x in ids.split(",") if x.strip()]
-    specs = db.scalars(select(Specimen).where(or_(*[Specimen.short_id == w for w in wanted]))).all() if wanted else []
+    specs = db.scalars(select(Specimen).where(or_(*[Specimen.short_id == w for w in wanted]),
+                                              Specimen.is_deleted.is_(False))).all() if wanted else []
     order = {w: i for i, w in enumerate(wanted)}
     return sorted(specs, key=lambda s: order.get(s.short_id, 0)), None, {}
 

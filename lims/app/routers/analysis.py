@@ -13,8 +13,8 @@ from sqlalchemy.orm import Session
 from ..auth import ensure_can_edit, require_user
 from ..config import TMP_DIR
 from ..db import get_db
-from ..models import (Attachment, EffectiveParam, ProcessRun, Project, Specimen, TestResult, TestRun, TestTemplate,
-                      User)
+from ..models import (Attachment, EffectiveParam, ParamActual, ProcessRun, Project, Specimen, TestResult, TestRun,
+                      TestTemplate, User)
 from ..services import actuals, file_ingest, ppt, pv, workflow
 from ..services import param_dict as pdict
 from ..services.templates_engine import MetricsError, cell_text
@@ -91,6 +91,12 @@ async def receive_pv(run_no: str, file: UploadFile = File(...), specimen: str = 
     for key, st in summary.items():
         level = pdict.actual_cfg(key)["level"]
         target = spec if (spec is not None and level != "run") else None
+        # 같은 로그 파일을 다시 보내면(HMI 재전송·수정본) 이전 값을 대체합니다. 다른 파일(다른 사이클)은 쌓입니다.
+        for old in db.scalars(select(ParamActual).where(
+                ParamActual.process_run_id == run.id, ParamActual.param_key == key, ParamActual.source == "pv",
+                ParamActual.note == file.filename, ParamActual.is_deleted.is_(False),
+                ParamActual.specimen_id == target.id if target else ParamActual.specimen_id.is_(None))):
+            old.is_deleted = True
         actuals.add_actual(db, run, key, st["mean"], specimen=target, source="pv", method="PV", user_id=user.id,
                            stats=st, note=file.filename)
     # 원본 CSV는 공정런 첨부로 보관
@@ -170,7 +176,11 @@ def xcut_import(data: XcutIn, user: User = Depends(require_user), db: Session = 
             errors.append(f"{r.short_id}: 시편 없음")
             continue
         if spec.short_id not in boarded:
-            workflow.board(db, tr, spec, None)
+            try:
+                workflow.board(db, tr, spec, None)
+            except workflow.Invalid as e:         # 폐기·소진 시편
+                errors.append(f"{r.short_id}: {e}")
+                continue
             boarded.add(spec.short_id)
         metrics = r.model_dump(exclude={"short_id", "cycle"}, exclude_none=True)
         try:

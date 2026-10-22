@@ -4,7 +4,13 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel as _BaseModel
+from pydantic import ConfigDict, Field, field_validator
+
+
+class BaseModel(_BaseModel):
+    # JSON의 NaN·Infinity 숫자를 받지 않습니다(pydantic 기본은 허용 → min/max 비교를 모두 통과).
+    model_config = ConfigDict(allow_inf_nan=False)
 
 
 class SeriesSpec(BaseModel):
@@ -43,6 +49,19 @@ class ProcessRunIn(BaseModel):
         if self.series is None:
             return []
         return self.series if isinstance(self.series, list) else [self.series]
+
+
+class TargetChange(BaseModel):
+    key: str                                  # 'out.cw'
+    value: float
+    specimen: str | None = None               # 원판 약식번호 (없으면 공정런 기본 레시피)
+
+
+class TargetCorrectionIn(BaseModel):
+    """POST /api/process-runs/{run_no}/targets — 저장한 목표값 정정."""
+    changes: list[TargetChange] = Field(min_length=1)
+    reason: str
+    confirm_out_of_range: bool = False
 
 
 class ActualRow(BaseModel):

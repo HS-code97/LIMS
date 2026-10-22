@@ -15,6 +15,7 @@ from sqlalchemy import select  # noqa: E402
 
 from app.db import SessionLocal, current_user_id  # noqa: E402
 from app.models import User  # noqa: E402
+from app.services import param_dict as pdict  # noqa: E402
 from app.services.excel_import import run_import, template_workbook  # noqa: E402
 
 
@@ -30,6 +31,7 @@ def main() -> None:
         print(a.template)
         return
     with SessionLocal() as db:
+        pdict.sync(db)                       # 관리 화면에서 고친 실측 설정(대표값 계산법·허용편차)
         uid = db.scalar(select(User.id).where(User.emp_no == a.user))
         current_user_id.set(uid)
         rep = run_import(db, Path(a.file).read_bytes(), uid, dry_run=not a.commit)

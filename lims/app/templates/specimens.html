@@ -8,6 +8,7 @@
   <label class="f">단계<select class="in" name="stage"><option value="">전체</option>{% for s, n in [('P','원판'),('C','시험편'),('S','조각')] %}<option value="{{ s }}" {% if s == f.stage %}selected{% endif %}>{{ s }} {{ n }}</option>{% endfor %}</select></label>
   <label class="f">상태<select class="in" name="status"><option value="">전체</option>{% for s in statuses %}<option {% if s == f.status %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></label>
   <label class="small" style="display:flex;gap:6px;align-items:center;height:34px"><input type="checkbox" name="mine" value="1" {% if f.mine %}checked{% endif %}> 내 시편만</label>
+  {% if user.is_admin %}<label class="small" style="display:flex;gap:6px;align-items:center;height:34px"><input type="checkbox" name="deleted" value="1" {% if f.deleted %}checked{% endif %}> 삭제한 시편</label>{% endif %}
   <button class="btn primary">조회</button>
 </form>
 <section class="card"><div class="tablewrap"><table class="t">
@@ -18,7 +19,16 @@
     <td class="mono small">{% if s.parent %}<a href="/specimens/{{ s.parent.short_id }}">{{ s.parent.short_id }}</a>{% endif %}</td>
     <td class="mono small">{% if s.process_run %}<a href="/process-runs/{{ s.process_run.run_no }}">{{ s.process_run.run_no }}</a>{% endif %}</td>
     <td class="mono small">{{ s.material.coil_no if s.material else '' }}</td><td class="mono small">{{ s.size_text or '' }}</td>
-    <td class="small">{{ s.storage_location or '' }}</td><td class="small">{{ s.owner.name if s.owner else '' }}</td></tr>
+    <td class="small">{{ s.storage_location or '' }}</td><td class="small">{{ s.owner.name if s.owner else '' }}
+      {% if f.deleted %}<button class="btn sm" onclick="restoreSpec('{{ s.short_id }}')">되살리기</button>{% endif %}</td></tr>
   {% else %}<tr class="empty-row"><td colspan="10">조건에 맞는 시편이 없습니다.</td></tr>{% endfor %}
 </table></div></section>
+{% endblock %}
+{% block scripts %}
+{% if f.deleted %}<script>
+async function restoreSpec(sid) {
+  try { await LIMS.api("POST", `/api/specimens/${sid}/restore`); LIMS.toast(`${sid}을 되살렸습니다`, "ok"); setTimeout(() => location.reload(), 600); }
+  catch (e) { LIMS.fail(e); }
+}
+</script>{% endif %}
 {% endblock %}

@@ -11,18 +11,21 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..auth import hash_password, require_admin, require_user
+from ..auth import API_SCOPES, hash_api_key, hash_password, new_api_key, require_admin, require_user
 from ..db import get_db
-from ..models import (BathAnalysis, Material, MasterCode, ProcessPreset, Project, Team, TestTemplate, User)
-from ..services import actuals
+from ..models import (ApiKey, BathAnalysis, Material, MasterCode, ProcessPreset, ProcessRun, Project, Team,
+                      TestTemplate, User)
+from ..services import actuals, workflow
+from ..services.condition_code import CodeBook
 from ..web import render
 
 router = APIRouter()
 
 TABS = [("projects", "과제"), ("materials", "원소재"), ("bath", "욕 분석"), ("codes", "코드표"),
         ("presets", "프리셋"), ("templates", "시험 템플릿"), ("dictionary", "실측 항목·허용편차"),
-        ("import", "엑셀 가져오기"), ("users", "사용자"),
+        ("import", "엑셀 가져오기"), ("users", "사용자"), ("apikeys", "API 키"),
         ("settings", "시스템 설정")]
+API_SCOPE_NAMES = {"pv": "HMI PV 실행기록", "xcut": "X-cut 앱 결과", "files": "파일 업로드"}
 PROJECT_NO = re.compile(r"^(?P<y>\d{4})(?P<k>[A-Z])(?P<n>\d+)$")
 
 
@@ -47,8 +50,8 @@ def _back(tab: str, msg: str = "") -> RedirectResponse:
 
 @router.get("/admin")
 def admin_page(request: Request, tab: str = "projects", msg: str = "", user: User = Depends(require_user),
-               db: Session = Depends(get_db)):
-    ctx = {"tab": tab, "tabs": TABS, "msg": msg}
+               db: Session = Depends(get_db), new_key: str | None = None):
+    ctx = {"tab": tab, "tabs": TABS, "msg": msg, "new_key": new_key}
     if tab == "projects":
         ctx["projects"] = db.scalars(select(Project).order_by(Project.is_common, Project.project_code.desc())).all()
         ctx["users"] = db.scalars(select(User).where(User.is_active.is_(True)).order_by(User.name)).all()
@@ -73,6 +76,10 @@ def admin_page(request: Request, tab: str = "projects", msg: str = "", user: Use
     elif tab == "users":
         ctx["users_all"] = db.scalars(select(User).order_by(User.is_active.desc(), User.name)).all()
         ctx["teams"] = db.scalars(select(Team).order_by(Team.name)).all()
+    elif tab == "apikeys" and user.is_admin:
+        ctx["keys"] = db.scalars(select(ApiKey).order_by(ApiKey.is_active.desc(), ApiKey.id.desc())).all()
+        ctx["users_all"] = db.scalars(select(User).where(User.is_active.is_(True)).order_by(User.name)).all()
+        ctx["scope_names"] = API_SCOPE_NAMES
     return render(request, "admin.html", nav="admin", **ctx)
 
 
@@ -186,8 +193,12 @@ def edit_code(category: str = Form(...), code: str = Form(...), name: str = Form
         raise HTTPException(422, f"spec JSON 오류: {e}")
     obj.name, obj.description, obj.is_active = name, description or None, is_active == "on"
     db.add(obj)
+    db.flush()
+    # 코드표가 바뀌면 현재 조건부를 다시 만듭니다. 각인 라벨은 그대로 → 달라진 시편은 "각인 ≠ 현재"로 표시(3.1절)
+    codes = CodeBook.load(db)
+    n = sum(workflow.refresh_condition_codes(db, run, codes) for run in db.scalars(select(ProcessRun)))
     db.commit()
-    return _back("codes", f"{category} {obj.code} 저장")
+    return _back("codes", f"{category} {obj.code} 저장" + (f" — 현재 조건부가 바뀐 시편 {n}개" if n else ""))
 
 
 @router.post("/admin/presets/{pid}/toggle")
@@ -233,12 +244,37 @@ def edit_user(uid: int, action: str = Form(...), password: str = Form(""), user:
     return _back("users", f"{u.name} 변경")
 
 
+@router.post("/admin/api-keys")
+def add_api_key(request: Request, name: str = Form(...), user_id: int = Form(...), scopes: list[str] = Form([]),
+                user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """장비·외부 앱 키 발급. 원문은 이 응답 화면에서 한 번만 보여 주고 저장하지 않습니다(리다이렉트 URL에 싣지 않음)."""
+    scopes = [s for s in scopes if s in API_SCOPES]
+    owner = db.get(User, user_id)
+    if not name.strip() or not scopes or owner is None or not owner.is_active:
+        raise HTTPException(422, "이름, 처리 계정(사용 중), 범위를 하나 이상 고르세요.")
+    raw = new_api_key()
+    db.add(ApiKey(name=name.strip(), prefix=raw[:12], key_hash=hash_api_key(raw), user_id=owner.id, scopes=scopes,
+                  created_by=user.id))
+    db.commit()
+    return admin_page(request, tab="apikeys", msg=f"{name} 발급 — 키는 지금만 보입니다", user=user, db=db,
+                      new_key=raw)
+
+
+@router.post("/admin/api-keys/{kid}/revoke")
+def revoke_api_key(kid: int, user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    key = db.get(ApiKey, kid)
+    if key is None:
+        raise HTTPException(404)
+    key.is_active = False
+    db.commit()
+    return _back("apikeys", f"{key.name} 중지")
+
+
 @router.post("/admin/dictionary")
 def edit_actual_cfg(key: str = Form(...), level: str = Form("panel"), tol: str = Form(""), tol_pct: str = Form(""),
                     agg: str = Form("mean"), quick: str = Form(""), methods: str = Form(""),
                     user: User = Depends(require_admin), db: Session = Depends(get_db)):
     """실측 항목·허용편차 (11.3 '키별 허용편차 초안' 확정용). 편차는 색 표시에만 쓰입니다(D-36)."""
-    from ..models import AuditLog, ProcessRun
     from ..services import param_dict as pdict
     if pdict.param(key) is None:
         raise HTTPException(404)
@@ -257,9 +293,7 @@ def edit_actual_cfg(key: str = Form(...), level: str = Form("panel"), tol: str =
     for k in ("pv_tag",):
         if (pk.get("actual") or {}).get(k):
             cfg[k] = pk["actual"][k]
-    change = pdict.update_actual_cfg(key, cfg)
-    db.add(AuditLog(table_name="param_dictionary", row_id=0, action="UPDATE", before={key: change["before"]},
-                    after={key: change["after"]}, user_id=user.id))
+    pdict.update_actual_cfg(db, key, cfg, user.id)      # param_actual_cfg 행 변경은 감사 로그에 자동 기록
     # 허용편차가 바뀌면 대표값 캐시의 편차 표시를 다시 계산
     for run in db.scalars(select(ProcessRun)):
         actuals.recompute_run(db, run)

@@ -1,6 +1,8 @@
 """시험 템플릿 → 입력 폼 정의·검증 (9장, D-27: 모든 필드 선택 입력, 템플릿 외 키는 저장 거부)."""
 from __future__ import annotations
 
+import math
+
 from ..models import TestTemplate
 
 
@@ -29,6 +31,9 @@ def validate_metrics(tpl: TestTemplate, raw: dict) -> tuple[dict, list[str]]:
             try:
                 fv = float(str(v).replace(",", "").replace("%", "").strip())
             except ValueError:
+                errors.append(f"{f['label']}: 숫자가 아닙니다 ({v!r})")
+                continue
+            if not math.isfinite(fv):          # 'nan'·'inf'는 float()가 받아 주지만 모든 min/max 비교를 통과함
                 errors.append(f"{f['label']}: 숫자가 아닙니다 ({v!r})")
                 continue
             if "min" in f and f["min"] is not None and fv < f["min"]:

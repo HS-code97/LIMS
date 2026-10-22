@@ -1,4 +1,4 @@
--- 도금강판 R&D LIMS v2.2 — PostgreSQL 15+ DDL (app/models에서 자동 생성, 직접 고치지 마세요)
+-- 도금강판 R&D LIMS v2.3 — PostgreSQL 15+ DDL (app/models에서 자동 생성, 직접 고치지 마세요)
 -- 운영 적용은 Alembic(alembic upgrade head)을 쓰고, 이 파일은 검토·대조용입니다.
 
 CREATE TABLE master_codes (
@@ -60,6 +60,23 @@ CREATE TABLE users (
 	FOREIGN KEY(team_id) REFERENCES teams (id)
 );
 
+CREATE TABLE api_keys (
+	id SERIAL NOT NULL, 
+	name VARCHAR(50) NOT NULL, 
+	prefix VARCHAR(12) NOT NULL, 
+	key_hash VARCHAR(64) NOT NULL, 
+	user_id INTEGER NOT NULL, 
+	scopes JSONB NOT NULL, 
+	is_active BOOLEAN NOT NULL, 
+	created_by INTEGER, 
+	created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now() NOT NULL, 
+	last_used_at TIMESTAMP WITHOUT TIME ZONE, 
+	PRIMARY KEY (id), 
+	UNIQUE (key_hash), 
+	FOREIGN KEY(user_id) REFERENCES users (id), 
+	FOREIGN KEY(created_by) REFERENCES users (id)
+);
+
 CREATE TABLE audit_log (
 	id BIGSERIAL NOT NULL, 
 	table_name VARCHAR(40) NOT NULL, 
@@ -83,6 +100,16 @@ CREATE TABLE bath_analyses (
 	note TEXT, 
 	PRIMARY KEY (id), 
 	FOREIGN KEY(user_id) REFERENCES users (id)
+);
+
+CREATE TABLE param_actual_cfg (
+	param_key VARCHAR(40) NOT NULL, 
+	cfg JSONB, 
+	rev INTEGER NOT NULL, 
+	updated_by INTEGER, 
+	updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now() NOT NULL, 
+	PRIMARY KEY (param_key), 
+	FOREIGN KEY(updated_by) REFERENCES users (id)
 );
 
 CREATE TABLE process_presets (

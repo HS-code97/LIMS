@@ -14,7 +14,7 @@
 </head>
 <body>
 <header class="topbar">
-  <a class="brand" href="/">{{ icon('logo', 26) }}<div><b>PLATED-STEEL LIMS</b><small>표면연구그룹 · v2.2</small></div></a>
+  <a class="brand" href="/">{{ icon('logo', 26) }}<div><b>PLATED-STEEL LIMS</b><small>표면연구그룹 · v2.3</small></div></a>
   <form class="gsearch" action="/go" method="get" x-data="suggestBox()" @submit="onSubmit($event)" autocomplete="off">
     <span class="ico">{{ icon('scan', 18) }}</span>
     <input id="gq" name="q" placeholder="약식번호·코일번호·시험런·공정런 (스캐너 입력 가능)" aria-label="검색"
@@ -45,7 +45,7 @@
   </nav>
   <main class="main">
     {% block content %}{% endblock %}
-    <div class="foot"><span>LIMS v2.2 · DB {{ db_kind }} · 파라미터 사전 {{ pdict.version() }}</span><span>도금강판 연구개발 LIMS · 표면연구그룹</span></div>
+    <div class="foot"><span>LIMS v2.3 · DB {{ db_kind }} · 파라미터 사전 {{ pdict.version() }}</span><span>도금강판 연구개발 LIMS · 표면연구그룹</span></div>
   </main>
 </div>
 <div class="toast-wrap" id="toasts"></div>

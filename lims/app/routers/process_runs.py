@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from ..auth import ensure_can_edit, require_user
 from ..db import get_db
 from ..models import BathAnalysis, Material, ParamActual, ProcessRun, Project, Specimen, User
-from ..schemas import ActualsIn, ApplyIn, BathAnalysisIn, PasteIn, ProcessRunIn
+from ..schemas import ActualsIn, ApplyIn, BathAnalysisIn, PasteIn, ProcessRunIn, TargetCorrectionIn
 from ..services import actuals, numbering, workflow
 from ..services import param_dict as pdict
 from ..services.condition_code import CodeBook
@@ -154,6 +154,17 @@ def create_run(data: ProcessRunIn, user: User = Depends(require_user), db: Sessi
     return run_json(db, run)
 
 
+@router.post("/api/process-runs/{run_no}/targets")
+def correct_targets(run_no: str, data: TargetCorrectionIn, user: User = Depends(require_user),
+                    db: Session = Depends(get_db)):
+    """저장한 목표값 정정 (작성자·관리자). 현재 조건부를 다시 만들고, 각인 라벨이 달라지면 화면에 표시됩니다."""
+    run = get_run(db, run_no)
+    ensure_can_edit(user, run.operator_id)
+    out = workflow.correct_targets(db, run, data.changes, data.reason, user.name, data.confirm_out_of_range)
+    db.commit()
+    return out | {"run": run_json(db, run)}
+
+
 @router.post("/api/process-runs/preview-code")
 def preview_code(payload: dict, user: User = Depends(require_user), db: Session = Depends(get_db)):
     """조건부 미리보기 (화면 하단 'M206K → …')."""
@@ -280,6 +291,8 @@ def apply_bath(ba_id: int, data: ApplyIn, user: User = Depends(require_user), db
     if ba is None:
         raise HTTPException(404)
     runs = [get_run(db, no) for no in data.run_nos]
+    for run in runs:                             # 욕 분석 적용은 각 공정런 작성자·관리자
+        ensure_can_edit(user, run.operator_id)
     n = actuals.apply_bath_analysis(db, ba, runs, user.id)
     db.commit()
     return {"applied_rows": n, "runs": [r.run_no for r in runs]}

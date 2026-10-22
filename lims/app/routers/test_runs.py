@@ -149,6 +149,7 @@ def get_api(no: str, user: User = Depends(require_user), db: Session = Depends(g
 @router.post("/api/test-runs/{no}/board")
 def board(no: str, data: list[Boarding], user: User = Depends(require_user), db: Session = Depends(get_db)):
     tr = get_tr(db, no)
+    ensure_can_edit(user, tr.owner_id)          # 탑승·회수·회차는 시험런 담당자·관리자 (결과 입력은 누구나)
     missing = [b.short_id for b in data if workflow.find_specimen(db, b.short_id) is None]
     if missing:
         raise HTTPException(422, "없는 시편: " + ", ".join(missing))
@@ -166,6 +167,7 @@ class UnloadIn(BaseModel):
 @router.post("/api/test-runs/{no}/unload")
 def unload(no: str, data: UnloadIn, user: User = Depends(require_user), db: Session = Depends(get_db)):
     tr = get_tr(db, no)
+    ensure_can_edit(user, tr.owner_id)
     workflow.unload(db, tr, get_spec(db, data.short_id), data.when)
     db.commit()
     return tr_json(tr)
@@ -188,6 +190,7 @@ class CyclesIn(BaseModel):
 def change_cycles(no: str, data: CyclesIn, user: User = Depends(require_user), db: Session = Depends(get_db)):
     """[+열] / 마지막 빈 열 삭제. 결과가 있는 열은 지우지 않습니다."""
     tr = get_tr(db, no)
+    ensure_can_edit(user, tr.owner_id)
     cur = tr.cycles or tr.template.default_cycles or 1
     new = max(1, cur + data.delta)
     if new < cur:

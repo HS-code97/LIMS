@@ -13,7 +13,7 @@ from sqlalchemy.schema import CreateIndex, CreateTable  # noqa: E402
 from app import models  # noqa: E402,F401
 from app.db import Base  # noqa: E402
 
-out = ["-- 도금강판 R&D LIMS v2.2 — PostgreSQL 15+ DDL (app/models에서 자동 생성, 직접 고치지 마세요)",
+out = ["-- 도금강판 R&D LIMS v2.3 — PostgreSQL 15+ DDL (app/models에서 자동 생성, 직접 고치지 마세요)",
        "-- 운영 적용은 Alembic(alembic upgrade head)을 쓰고, 이 파일은 검토·대조용입니다.", ""]
 d = postgresql.dialect()
 for t in Base.metadata.sorted_tables:

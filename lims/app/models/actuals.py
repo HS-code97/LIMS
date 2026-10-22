@@ -71,3 +71,15 @@ class EffectiveParam(Base):
     inherited_from: Mapped[str | None] = mapped_column(String(10))
     deviation: Mapped[float | None] = mapped_column(Num)
     out_of_tol: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class ParamActualCfg(Base):
+    """관리 화면에서 고친 실측 설정(수준·허용편차·대표값 계산·방법). 시드 사전의 actual 블록 위에 덮어씁니다.
+    코드 폴더의 JSON에 쓰면 재배포로 사라지고 백업·다중 worker에 반영되지 않아 DB에 둡니다.
+    rev는 전체에서 증가하는 번호로, 각 worker가 요청마다 바뀌었는지 확인합니다(param_dict.sync)."""
+    __tablename__ = "param_actual_cfg"
+    param_key: Mapped[str] = mapped_column(String(40), primary_key=True)
+    cfg: Mapped[dict | None] = mapped_column(JSONType)       # None = actual 블록 없음
+    rev: Mapped[int] = mapped_column(Integer)
+    updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

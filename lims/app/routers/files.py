@@ -9,10 +9,10 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..auth import require_user
+from ..auth import can_edit, require_user
 from ..config import FILES_DIR, MAX_UPLOAD_MB, TMP_DIR
 from ..db import get_db
-from ..models import Attachment, TestResult, TestRun, User
+from ..models import Attachment, Specimen, TestResult, TestRun, User
 from ..schemas import LinkIn
 from ..services import file_ingest, workflow
 from ..services.thumbnails import large_of
@@ -59,6 +59,11 @@ def link_file(att_id: int, data: LinkIn, user: User = Depends(require_user), db:
     att = db.get(Attachment, att_id)
     if att is None or att.is_deleted:
         raise HTTPException(404)
+    # 미분류 파일은 누구나 제자리에 붙일 수 있고, 이미 붙은 파일을 옮기는 것은 올린 사람·현재 시편 소유자·관리자만
+    if att.specimen_id is not None:
+        current = db.get(Specimen, att.specimen_id)
+        if not can_edit(user, att.uploaded_by, current.owner_id if current else None):
+            raise HTTPException(403, "이미 연결된 파일은 올린 사람·시편 소유자·관리자만 옮길 수 있습니다.")
     spec = workflow.find_specimen(db, data.short_id)
     if spec is None:
         raise HTTPException(422, f"시편 {data.short_id}이 없습니다.")

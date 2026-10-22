@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import glob
 import hashlib
 import re
 import shutil
@@ -85,13 +86,33 @@ def rel(p: Path | None) -> str | None:
     return p.relative_to(FILES_DIR).as_posix() if p else None
 
 
-def ingest(db: Session, tmp: Path, original_name: str, *, user_id: int | None,
-           test_run: TestRun | None = None, source: str = "upload",
-           default_spec: Specimen | None = None, auto_test_run: bool = False) -> IngestResult:
+def ingest(db: Session, tmp: Path, original_name: str, **kw) -> IngestResult:
     """임시 파일 1개를 해시 검사 → 매칭 → 저장·썸네일 → attachments 기록.
-    default_spec: 시편 상세 화면에서 올린 경우, 파일명에 약식번호가 없으면 이 시편에 연결."""
+    도중에 실패하면(예: 업로드와 폴더 감시가 같은 파일을 동시에 넣어 해시 UNIQUE 위반) 임시 파일과
+    이미 옮긴 원본·썸네일을 지워, DB 행 없는 고아 파일이 남지 않게 합니다."""
+    stored: list[Path] = []
+    try:
+        return _ingest(db, tmp, original_name, stored, **kw)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        for p in stored:
+            p.unlink(missing_ok=True)
+        raise
+
+
+def _ingest(db: Session, tmp: Path, original_name: str, stored: list[Path], *, user_id: int | None,
+            test_run: TestRun | None = None, source: str = "upload",
+            default_spec: Specimen | None = None, auto_test_run: bool = False) -> IngestResult:
+    """default_spec: 시편 상세 화면에서 올린 경우, 파일명에 약식번호가 없으면 이 시편에 연결."""
     sha = sha256_of(tmp)
     dup = db.scalar(select(Attachment).where(Attachment.sha256 == sha))
+    if dup is not None and dup.is_deleted:
+        # 실수로 지운 파일을 다시 올리면 되살립니다 (원본은 논리 삭제라 그대로 있음, D-20)
+        tmp.unlink(missing_ok=True)
+        dup.is_deleted = False
+        where = dup.specimen.short_id if dup.specimen else None
+        return IngestResult(original_name, "matched" if where else "unmatched", dup.id, where,
+                            message=f"삭제했던 파일을 되살렸습니다 ({where or '미분류함'})")
     if dup is not None:
         tmp.unlink(missing_ok=True)
         where = dup.specimen.short_id if dup.specimen else "미분류함"
@@ -132,6 +153,7 @@ def ingest(db: Session, tmp: Path, original_name: str, *, user_id: int | None,
             msg = f"{spec.short_id}은 {test_run.test_run_no}에 탑승하지 않아 시편에만 연결했습니다."
 
     dest, thumb = _store(tmp, sha, original_name, spec.short_id if spec else None)
+    stored += [dest, *dest.parent.glob(f"{glob.escape(dest.stem)}.w*.webp")]
     att = Attachment(specimen_id=spec.id if spec else None, result_id=result.id if result else None,
                      process_run_id=spec.process_run_id if spec else None,
                      kind=kind_of(original_name, parsed.tags), path=rel(dest), thumb_path=rel(thumb),

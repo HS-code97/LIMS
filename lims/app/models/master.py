@@ -32,6 +32,24 @@ class User(Base):
         return self.role == "ADMIN"
 
 
+class ApiKey(Base):
+    """장비·외부 앱 연동 키 (쿠키 로그인을 못 하는 HMI·X-cut 앱). 원문은 발급 때 한 번만 보여 주고 SHA-256만 저장.
+    요청은 user_id 계정으로 처리되고(권한·감사 로그), scopes에 든 주소만 부를 수 있습니다(auth.API_SCOPES)."""
+    __tablename__ = "api_keys"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(50))                   # 'HMI-CGL1', 'XCUT-APP'
+    prefix: Mapped[str] = mapped_column(String(12))                 # 화면 표시용 앞부분
+    key_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    scopes: Mapped[list] = mapped_column(JSONType)                  # ["pv", "xcut", "files"]
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    user: Mapped[User] = relationship(foreign_keys=[user_id])
+
+
 class Project(Base):
     __tablename__ = "projects"
     project_code: Mapped[str] = mapped_column(String(4), primary_key=True)   # '26P4', '26X0'

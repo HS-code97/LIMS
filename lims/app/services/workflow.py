@@ -1,14 +1,16 @@
 """업무 흐름: 공정런 저장(P1), 분기(P2), 시험런·탑승(P3), 결과 저장(P4), 실측 붙여넣기."""
 from __future__ import annotations
 
+import copy
 import re
-from datetime import date
+from datetime import date, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import (ParamActual, ProcessPreset, ProcessRun, Project, RunSpecimen, Specimen, TestResult,
-                      TestRun, TestTemplate)
+from ..errors import Conflict, Invalid  # noqa: F401  (기존 import 경로 workflow.Conflict·Invalid 유지)
+from ..models import (Material, ParamActual, ProcessPreset, ProcessRun, Project, RunSpecimen, Specimen,
+                      TestResult, TestRun, TestTemplate)
 from ..schemas import ProcessRunIn, SplitIn, TestRunIn
 from . import actuals
 from . import condition_code as cc
@@ -16,24 +18,16 @@ from . import numbering
 from . import param_dict as pdict
 from .templates_engine import validate_metrics
 
-
-class Conflict(Exception):
-    """번호 충돌 (409)."""
-
-    def __init__(self, message: str, items: list[str]):
-        super().__init__(message)
-        self.items = items
-
-
-class Invalid(ValueError):
-    def __init__(self, message: str, items: list[str] | None = None):
-        super().__init__(message)
-        self.items = items or []
+# 탑승할 수 없는 상태 (폐기·소진). 소진 원판의 남은 조각 분기는 허용, 폐기 시편은 분기도 막음.
+NO_BOARDING = ("SCRAP", "CONSUMED")
+NO_SPLIT = ("SCRAP",)
+STATUS_NAME = {"SCRAP": "폐기", "CONSUMED": "소진"}
 
 
 # ── P1. 공정런 → 원판 생성 ─────────────────────────────────────────
-def series_overrides(payload: ProcessRunIn) -> list[dict]:
-    """시리즈 설정 → 원판별 target_overrides (바뀐 키만, 6.9절)."""
+def series_overrides(payload: ProcessRunIn, recipe: dict) -> list[dict]:
+    """시리즈 설정 → 원판별 target_overrides (바뀐 키만, 6.9절).
+    recipe는 기본값·목표 부착량까지 합친 실제 기본 레시피 — 비교 기준이 화면 원본과 다르면 원판 목표가 틀어집니다."""
     per_panel: list[dict] = [{} for _ in range(payload.panel_count)]
     series = payload.series_list()
     if len(series) > 2:
@@ -44,7 +38,7 @@ def series_overrides(payload: ProcessRunIn) -> list[dict]:
             raise Invalid(f"시리즈 키가 사전에 없거나 숫자가 아닙니다: {s.key}")
         if len(s.values) != payload.panel_count:
             raise Invalid(f"시리즈 {s.key} 값 {len(s.values)}개 ≠ 원판 {payload.panel_count}매")
-        base = pdict.get(payload.recipe, s.key)
+        base = pdict.get(recipe, s.key)
         for i, v in enumerate(s.values):
             if "min" in p and not (p["min"] <= v <= p["max"]):
                 raise Invalid(f"시리즈 {pdict.label(s.key)} {v:g} — 허용 범위 {p['min']}~{p['max']} 밖")
@@ -58,6 +52,8 @@ def create_process_run(db: Session, payload: ProcessRunIn, user_id: int | None) 
         raise Invalid(f"파라미터 사전 버전이 다릅니다 (화면 {payload.dict_version}, 서버 {pdict.version()}). 새로고침하세요.")
     if db.get(Project, payload.project_code) is None:
         raise Invalid(f"과제코드 {payload.project_code}가 없습니다.")
+    if payload.material_id is not None and db.get(Material, payload.material_id) is None:
+        raise Invalid(f"원소재 id {payload.material_id}가 없습니다.")
     # 1. 기본값 위에 화면 레시피를 얹고, 사전 min/max로 범위 재검증 (브라우저 검증은 신뢰하지 않음)
     recipe = pdict.merge(pdict.defaults(), payload.recipe)
     recipe.setdefault("out", {})["cw"] = payload.coating_weight_target
@@ -71,7 +67,7 @@ def create_process_run(db: Session, payload: ProcessRunIn, user_id: int | None) 
         raise Invalid("도금 계열을 정할 수 없습니다. 프리셋을 고르거나 지난 공정런을 복제하세요.")
 
     # 2. 시리즈 → 원판별 목표 변경 → 원판마다 목표 기준 조건부
-    overrides = series_overrides(payload)
+    overrides = series_overrides(payload, recipe)
     codes = cc.CodeBook.load(db)
     preferred = preset.bath_code if preset else None
     base_code = cc.code_from_recipe(codes, sys_code, recipe, preferred)
@@ -107,6 +103,74 @@ def create_process_run(db: Session, payload: ProcessRunIn, user_id: int | None) 
     return run
 
 
+# ── 목표 정정 (3.1 "각인 라벨 ≠ 현재 조건", 6.7 목표 변경 시 재계산) ─────────────
+def refresh_condition_codes(db: Session, run: ProcessRun, codes: cc.CodeBook | None = None) -> int:
+    """공정런 시편들의 현재 조건부(목표 기준)를 다시 만듭니다. 각인 라벨(engraved_label)은 그대로 두므로,
+    달라지면 화면에 "각인 라벨 ≠ 현재 조건"이 표시됩니다(신원 = 약식번호는 불변, D-10). 바뀐 시편 수를 돌려줌."""
+    codes = codes or cc.CodeBook.load(db)
+    preferred = run.preset.bath_code if run.preset else None
+    run.base_condition_code = cc.code_from_recipe(codes, run.coating_system, run.recipe, preferred)
+    changed = 0
+    for s in db.scalars(select(Specimen).where(Specimen.process_run_id == run.id)):
+        panel = cc.panel_of(s)
+        code = cc.code_from_recipe(codes, run.coating_system,
+                                   pdict.merge(run.recipe, panel.target_overrides if panel else None), preferred)
+        if s.condition_code != code:
+            s.condition_code = code
+            changed += 1
+    return changed
+
+
+def correct_targets(db: Session, run: ProcessRun, changes: list, reason: str, who: str,
+                    confirm_out_of_range: bool = False) -> dict:
+    """저장한 목표값을 고칩니다. changes: [{key, value, specimen}] — specimen이 없으면 공정런 기본 레시피,
+    있으면 그 원판의 target_overrides. 사유는 공정런 메모에 남고, 값의 전후는 감사 로그에 남습니다."""
+    if not reason.strip():
+        raise Invalid("정정 사유를 적으세요.")
+    panels = {p.short_id: p for p in run.panels}
+    recipe = copy.deepcopy(run.recipe)
+    overrides = {p.short_id: dict(p.target_overrides or {}) for p in run.panels}
+    notes = []
+    for ch in changes:
+        if pdict.param(ch.key) is None or not pdict.is_numeric(ch.key):
+            raise Invalid(f"사전에 없거나 숫자가 아닌 키입니다: {ch.key}")
+        if ch.specimen:
+            sid = ch.specimen.strip().upper()
+            if sid not in panels:
+                raise Invalid(f"{ch.specimen}은 {run.run_no}의 원판이 아닙니다.")
+            base, ov = pdict.get(recipe, ch.key), overrides[sid]
+            old = ov.get(ch.key, base)
+            if base is not None and float(base) == ch.value:
+                ov.pop(ch.key, None)            # 기본값과 같아지면 원판별 변경을 지움
+            else:
+                ov[ch.key] = ch.value
+            notes.append(f"{sid[5:]} {pdict.label(ch.key)} {old}→{ch.value:g}")
+        else:
+            old = pdict.get(recipe, ch.key)
+            if any(ch.key in ov for ov in overrides.values()):
+                # 시리즈 키: 기본값과 같아 원판별 값을 따로 저장하지 않은 원판은 기존 값으로 고정 (시리즈 유지)
+                for ov in overrides.values():
+                    if ch.key not in ov and old is not None:
+                        ov[ch.key] = old
+            sec, k = ch.key.split(".", 1)
+            recipe.setdefault(sec, {})[k] = ch.value
+            if ch.key == "out.cw":
+                run.coating_weight_target = ch.value
+            notes.append(f"{pdict.label(ch.key)} {old}→{ch.value:g}")
+    errs = sorted({e for p in panels for e in pdict.out_of_range(pdict.merge(recipe, overrides[p] or None))}
+                  | set(pdict.out_of_range(recipe)))
+    if errs and not confirm_out_of_range:
+        raise Invalid("허용 범위 밖 값이 있습니다. 확인 후 다시 저장하세요.", errs)
+    run.recipe = recipe
+    for sid, p in panels.items():
+        p.target_overrides = overrides[sid] or None
+    run.note = f"{run.note or ''}\n[목표 정정 {date.today():%Y-%m-%d} {who}] {', '.join(notes)} — {reason.strip()}".strip()
+    db.flush()
+    n = refresh_condition_codes(db, run)
+    actuals.recompute_run(db, run)
+    return {"changed": notes, "codes_changed": n}
+
+
 def clone_payload(run: ProcessRun) -> dict:
     """[지난 공정런 복제]: 레시피·계열·목표 부착량을 그대로 채움."""
     return {"run_no": run.run_no, "recipe": run.recipe, "preset_id": run.preset_id,
@@ -121,6 +185,8 @@ def split(db: Session, parent: Specimen, data: SplitIn, user_id: int | None) -> 
     allowed = {"P": ("C", "S"), "C": ("S",), "S": ()}[parent.stage]
     if stage not in allowed:
         raise Invalid(f"{parent.stage} 단계에서는 {', '.join(allowed) or '더 이상'} 분기할 수 없습니다.")
+    if parent.status in NO_SPLIT:
+        raise Invalid(f"{parent.short_id}은 {STATUS_NAME[parent.status]} 상태라 분기할 수 없습니다.")
     clash = numbering.conflicts(db, parent.project_code, stage, data.serial_start, data.count)
     if clash:
         raise Conflict("이미 쓰인 번호가 있습니다.", clash)
@@ -171,6 +237,9 @@ def create_test_run(db: Session, data: TestRunIn, user_id: int | None) -> TestRu
 
 
 def board(db: Session, tr: TestRun, spec: Specimen, slot: str | None, when: date | None = None) -> RunSpecimen:
+    # 폐기·소진 시편을 IN_TEST로 덮으면 회수 때 AVAILABLE로 되살아나 이력이 사라집니다.
+    if spec.status in NO_BOARDING:
+        raise Invalid(f"{spec.short_id}은 {STATUS_NAME[spec.status]} 상태라 탑승할 수 없습니다.")
     rs = db.get(RunSpecimen, (tr.id, spec.id))
     if rs is None:
         rs = RunSpecimen(test_run_id=tr.id, specimen_id=spec.id, slot=slot, loaded_at=when or date.today())
@@ -250,6 +319,8 @@ def sync_mapped_actuals(db: Session, res: TestResult, user_id: int | None) -> No
                 changed = True
             continue
         if rows:
+            if rows[0].value != float(val):
+                rows[0].measured_at = datetime.now()    # 고친 결과가 "가장 최근 측정"이 되도록 (D-37)
             rows[0].value = float(val)
             rows[0].method = method
             for r in rows[1:]:

@@ -20,9 +20,13 @@ DEV_SECRET_KEY = "dev-only-change-me"
 # 예시 파일·옛 기본값 그대로의 키는 공개된 값이라 세션 쿠키 위조에 쓰일 수 있습니다.
 _KNOWN_SECRET_KEYS = {DEV_SECRET_KEY, "change-me-to-a-long-random-string"}
 MAX_UPLOAD_MB = int(os.getenv("LIMS_MAX_UPLOAD_MB", "200"))
+# HTTPS로 서비스하면 1: 세션 쿠키에 Secure를 붙여 HTTP로는 보내지 않음 (사내 인증서 확보 후, 11.3)
+COOKIE_SECURE = os.getenv("LIMS_COOKIE_SECURE", "0") == "1"
+# /docs·/openapi.json (API 목록). 개발용 SQLite는 기본으로 열고, 운영은 LIMS_API_DOCS=1일 때만
+API_DOCS = os.getenv("LIMS_API_DOCS", "1" if DATABASE_URL.startswith("sqlite") else "0") == "1"
 THUMB_SIZES = (400, 1600)
 
-# 같은 키에 여러 경로의 실측이 있을 때 대표값 출처 순위 (6.8절, 설정값)
+# 같은 키에 여러 경로의 실측이 있을 때: 가장 최근 측정의 출처를 쓰고, 측정 시각이 같을 때만 이 순위로 고름 (D-37)
 SOURCE_PRIORITY = os.getenv("LIMS_SOURCE_PRIORITY", "test,lab,manual,pv").split(",")
 
 # ── 11.3 확인 필요 사항: 사내 확인 후 환경변수로 넣습니다 (관리 > 시스템 설정에서 현재 값 확인) ──

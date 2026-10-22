@@ -1,11 +1,13 @@
 """실측 기록·대표값 산출·편차 (6.6~6.8절, D-29~D-36).
 
 대표값 규칙(6.7절): 자신 → 부모 원판(→ 조부모) 순으로 실측을 찾고, 없으면 세션(공정런 공통) 실측,
-그래도 없으면 목표값. 같은 노드에 여러 출처가 있으면 출처 순위(test > lab > manual > pv)가 높은
-행들만 모아 agg(mean/last/median)로 계산합니다. 결과는 effective_params 캐시에 저장합니다.
+그래도 없으면 목표값. 같은 노드에 여러 출처가 있으면 가장 최근에 잰 행의 출처를 고르고(D-37, 같은 시각이면
+출처 순위 test > lab > manual > pv), 그 출처의 행들을 agg(mean/last/median)로 계산합니다.
+결과는 effective_params 캐시에 저장합니다.
 """
 from __future__ import annotations
 
+import math
 import statistics
 from collections import defaultdict
 from dataclasses import dataclass
@@ -15,6 +17,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from ..config import SOURCE_PRIORITY
+from ..errors import Invalid
 from ..models import BathAnalysis, EffectiveParam, ParamActual, ProcessRun, Specimen
 from . import condition_code as cc
 from . import param_dict as pdict
@@ -59,20 +62,36 @@ def badge_text(source: str, level: str, inherited_from: str | None) -> str:
 
 def _to_float(v):
     try:
-        return None if v is None or v == "" else float(v)
+        f = None if v is None or v == "" else float(v)
     except (TypeError, ValueError):
         return None
+    return f if f is None or math.isfinite(f) else None
+
+
+def _measured(v) -> float | None:
+    """입력 실측값 → 숫자(숫자가 아니면 None = 텍스트 값). 'nan'·'inf'는 숫자처럼 보이지만 거부합니다."""
+    try:
+        f = None if v is None or v == "" else float(v)
+    except (TypeError, ValueError):
+        return None
+    if f is not None and not math.isfinite(f):
+        raise Invalid(f"숫자가 아닌 실측값입니다: {v!r}")
+    return f
+
+
+def _when(r: ParamActual) -> datetime:
+    return r.measured_at or r.created_at or datetime.min
 
 
 def aggregate(rows: list[ParamActual], key: str) -> tuple[float | None, str]:
-    """출처 순위가 가장 높은 행들만 골라 agg로 대표값 계산."""
+    """가장 최근에 잰 행의 출처(같은 시각이면 출처 순위)를 고르고, 그 출처 행들로 agg 계산 (D-37).
+    나중에 넣은 수기 정정이 앞선 시험 결과 값을 대신하게 됩니다."""
     rows = [r for r in rows if r.value is not None]
     if not rows:
         return None, ""
     rank = {s: i for i, s in enumerate(SOURCE_PRIORITY)}
-    best = min(rows, key=lambda r: rank.get(r.source, 99)).source
-    grp = sorted([r for r in rows if r.source == best],
-                 key=lambda r: (r.measured_at or r.created_at or datetime.min, r.id or 0))
+    best = max(rows, key=lambda r: (_when(r), -rank.get(r.source, 99))).source
+    grp = sorted([r for r in rows if r.source == best], key=lambda r: (_when(r), r.id or 0))
     agg = pdict.actual_cfg(key).get("agg", "mean")
     vals = [r.value for r in grp]
     if agg == "last":
@@ -151,6 +170,9 @@ class RunActuals:
 def recompute_run(db: Session, run: ProcessRun) -> None:
     """공정런의 모든 시편(원판·쿠폰·조각) 대표값 캐시를 다시 계산합니다."""
     db.flush()
+    # PostgreSQL: 같은 공정런을 두 요청이 동시에 다시 계산하면 DELETE→INSERT가 엇갈려 PK 충돌이나
+    # 상대의 실측이 빠진 캐시가 생기므로 공정런 행을 잠가 차례로 계산합니다(SQLite는 쓰기가 원래 직렬).
+    db.execute(select(ProcessRun.id).where(ProcessRun.id == run.id).with_for_update())
     ra = RunActuals(db, run)
     specs = db.scalars(select(Specimen).where(Specimen.process_run_id == run.id)).all()
     if not specs:
@@ -195,7 +217,7 @@ def add_actual(db: Session, run: ProcessRun, key: str, value, *, specimen: Speci
                note: str | None = None, stats: dict | None = None) -> ParamActual:
     if pdict.param(key) is None:
         raise ValueError(f"파라미터 사전에 없는 키입니다: {key}")
-    fv = _to_float(value)
+    fv = _measured(value)
     if points:
         pts = [float(p) for p in points]
         stats = {"points": pts, "min": min(pts), "max": max(pts), "n": len(pts)}
@@ -217,7 +239,7 @@ def set_manual_cell(db: Session, run: ProcessRun, key: str, value, *, specimen: 
                                   ParamActual.source == "manual", ParamActual.is_deleted.is_(False))
     q = q.where(ParamActual.specimen_id == specimen.id) if specimen else q.where(ParamActual.specimen_id.is_(None))
     existing = db.scalars(q).all()
-    fv = _to_float(value)
+    fv = _measured(value)
     if fv is None:
         for r in existing:
             r.is_deleted = True

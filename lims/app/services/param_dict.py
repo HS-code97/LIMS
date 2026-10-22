@@ -6,15 +6,35 @@ from __future__ import annotations
 
 import copy
 import json
+from datetime import datetime
 from functools import lru_cache
 
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
 from ..config import SEED_DIR
+from ..models import ParamActualCfg
+
+
+# 관리 화면에서 고친 실측 설정 (param_actual_cfg 테이블). rev가 바뀌면 다시 읽습니다.
+_db_cfg: dict = {"rev": None, "overrides": {}}
 
 
 @lru_cache
 def load() -> dict:
+    """시드 사전(코드와 함께 배포) 위에 DB의 실측 설정을 덮어쓴 사전."""
     with open(SEED_DIR / "param_dictionary.json", encoding="utf-8") as f:
-        return json.load(f)
+        d = json.load(f)
+    for s in d["sections"]:
+        for p in s["p"]:
+            key = f"{s['id']}.{p['k']}"
+            if key in _db_cfg["overrides"]:
+                cfg = _db_cfg["overrides"][key]
+                if cfg:
+                    p["actual"] = cfg
+                else:
+                    p.pop("actual", None)
+    return d
 
 
 def reload() -> None:
@@ -22,28 +42,31 @@ def reload() -> None:
     params.cache_clear()
 
 
-def update_actual_cfg(key: str, cfg: dict) -> dict:
-    """키의 actual 블록(수준·허용편차·대표값 계산·빠른 입력·방법)을 갱신하고 사전 파일에 저장.
+def sync(db: Session) -> None:
+    """DB의 실측 설정이 바뀌었으면(다른 worker에서 고친 것 포함) 다시 읽습니다. 요청마다 get_db가 부릅니다(쿼리 1회)."""
+    rev = db.scalar(select(func.max(ParamActualCfg.rev)))
+    if rev == _db_cfg["rev"]:
+        return
+    _db_cfg["overrides"] = {r.param_key: r.cfg for r in db.scalars(select(ParamActualCfg))}
+    _db_cfg["rev"] = rev
+    reload()
+
+
+def update_actual_cfg(db: Session, key: str, cfg: dict, user_id: int | None) -> dict:
+    """키의 actual 블록(수준·허용편차·대표값 계산·빠른 입력·방법)을 DB에 저장 (감사 로그는 자동).
     키·구간 구조는 바꾸지 않으므로 dict_version은 그대로 둡니다(과거 공정런 해석에 영향 없음)."""
-    path = SEED_DIR / "param_dictionary.json"
-    with open(path, encoding="utf-8") as f:
-        d = json.load(f)
-    sec_id, pk = key.split(".", 1)
-    for s in d["sections"]:
-        if s["id"] != sec_id:
-            continue
-        for p in s["p"]:
-            if p["k"] == pk:
-                before = p.get("actual")
-                new = {k: v for k, v in cfg.items() if v not in (None, "", [])}
-                if new:
-                    p["actual"] = new
-                else:
-                    p.pop("actual", None)
-                path.write_text(json.dumps(d, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-                reload()
-                return {"before": before, "after": p.get("actual")}
-    raise KeyError(key)
+    p = param(key)
+    if p is None:
+        raise KeyError(key)
+    before = p.get("actual")
+    new = {k: v for k, v in cfg.items() if v not in (None, "", [])} or None
+    row = db.get(ParamActualCfg, key) or ParamActualCfg(param_key=key)
+    row.cfg, row.updated_by, row.updated_at = new, user_id, datetime.now()
+    row.rev = (db.scalar(select(func.max(ParamActualCfg.rev))) or 0) + 1
+    db.add(row)
+    db.flush()
+    sync(db)
+    return {"before": before, "after": new}
 
 
 def version() -> str:

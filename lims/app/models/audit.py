@@ -19,12 +19,15 @@ def _jsonable(v):
     return str(v)
 
 
-def _row_id(obj) -> int:
-    ident = inspect(obj).identity
-    if not ident:
-        return 0
-    first = ident[0]
-    return first if isinstance(first, int) else 0
+def _pk(obj):
+    """기본키 값. flush 직후라 새 행도 채워져 있습니다(identity는 아직 없음). 복합키는 리스트."""
+    vals = inspect(obj).mapper.primary_key_from_instance(obj)
+    return vals[0] if len(vals) == 1 else list(vals)
+
+
+def _row_id(pk) -> int:
+    """정수 단일키만 row_id에 넣고, 문자열·복합키(projects, master_codes)는 0 + before/after의 _pk로 식별."""
+    return pk if isinstance(pk, int) and not isinstance(pk, bool) else 0
 
 
 def _snapshot(obj) -> dict:
@@ -36,12 +39,13 @@ def _audit_after_flush(session: Session, _ctx):
     from .common import AuditLog
 
     rows = []
-    uid = current_user_id.get()
+    # 웹 요청은 auth가 세션에 적은 사용자, 스크립트·감시·테스트는 contextvar
+    uid = session.info["user_id"] if "user_id" in session.info else current_user_id.get()
     for obj in session.new:
         t = getattr(obj, "__tablename__", None)
         if not t or t in SKIP_TABLES:
             continue
-        rows.append(dict(table_name=t, row_id=_row_id(obj), action="INSERT", before=None,
+        rows.append(dict(table_name=t, row_id=_row_id(_pk(obj)), action="INSERT", before=None,
                          after=_snapshot(obj), user_id=uid))
     for obj in session.dirty:
         t = getattr(obj, "__tablename__", None)
@@ -57,6 +61,9 @@ def _audit_after_flush(session: Session, _ctx):
         if not after:
             continue
         action = "DELETE" if after.get("is_deleted") is True else "UPDATE"
-        rows.append(dict(table_name=t, row_id=_row_id(obj), action=action, before=before, after=after, user_id=uid))
+        pk = _pk(obj)
+        if not _row_id(pk):
+            before["_pk"] = after["_pk"] = pk
+        rows.append(dict(table_name=t, row_id=_row_id(pk), action=action, before=before, after=after, user_id=uid))
     if rows:
         session.connection().execute(AuditLog.__table__.insert(), rows)

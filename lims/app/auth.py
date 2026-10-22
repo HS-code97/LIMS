@@ -38,6 +38,9 @@ def optional_user(request: Request, db: Session = Depends(get_db)) -> User | Non
     user = db.get(User, uid) if uid else None
     if user is not None and not user.is_active:
         user = None
+    # 감사 로그용 사용자. sync 의존성은 스레드풀에서 돌아 contextvar가 엔드포인트까지 전달되지 않으므로,
+    # 같은 요청의 엔드포인트와 공유되는 세션(get_db는 요청마다 캐시)에 함께 적어 둡니다.
+    db.info["user_id"] = user.id if user else None
     current_user_id.set(user.id if user else None)
     request.state.user = user
     return user

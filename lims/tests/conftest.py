@@ -6,6 +6,10 @@ from pathlib import Path
 
 _tmp = Path(tempfile.mkdtemp(prefix="lims_test_"))
 os.environ["LIMS_VAR_DIR"] = str(_tmp)
+# 운영 .env가 export된 셸에서 돌려도 운영 파일 폴더·비밀키를 건드리지 않도록 모두 덮어씁니다.
+os.environ["LIMS_FILES_DIR"] = str(_tmp / "files")
+os.environ["LIMS_TMP_DIR"] = str(_tmp / "tmp")
+os.environ["LIMS_SECRET_KEY"] = "test-only-" + "x" * 40
 # 회사 컨테이너에서 PostgreSQL로 돌릴 때: LIMS_TEST_DATABASE_URL=postgresql+psycopg://lims:...@localhost/lims_test
 # (빈 테스트 전용 DB를 쓰세요. 테스트가 스키마를 만들고 데이터를 넣습니다.)
 os.environ["LIMS_DATABASE_URL"] = os.getenv("LIMS_TEST_DATABASE_URL") or f"sqlite:///{(_tmp / 'test.db').as_posix()}"

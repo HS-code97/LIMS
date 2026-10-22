@@ -238,7 +238,6 @@ def edit_actual_cfg(key: str = Form(...), level: str = Form("panel"), tol: str =
                     agg: str = Form("mean"), quick: str = Form(""), methods: str = Form(""),
                     user: User = Depends(require_admin), db: Session = Depends(get_db)):
     """실측 항목·허용편차 (11.3 '키별 허용편차 초안' 확정용). 편차는 색 표시에만 쓰입니다(D-36)."""
-    from ..db import current_user_id
     from ..models import AuditLog, ProcessRun
     from ..services import param_dict as pdict
     if pdict.param(key) is None:
@@ -260,7 +259,7 @@ def edit_actual_cfg(key: str = Form(...), level: str = Form("panel"), tol: str =
             cfg[k] = pk["actual"][k]
     change = pdict.update_actual_cfg(key, cfg)
     db.add(AuditLog(table_name="param_dictionary", row_id=0, action="UPDATE", before={key: change["before"]},
-                    after={key: change["after"]}, user_id=current_user_id.get()))
+                    after={key: change["after"]}, user_id=user.id))
     # 허용편차가 바뀌면 대표값 캐시의 편차 표시를 다시 계산
     for run in db.scalars(select(ProcessRun)):
         actuals.recompute_run(db, run)

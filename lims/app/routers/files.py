@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import uuid
+from pathlib import PurePath
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -97,13 +98,25 @@ def _path(att: Attachment, which: str):
     return p
 
 
+# 브라우저에서 바로 열어도 스크립트가 돌지 않는 형식만 인라인으로 보여 줍니다.
+# HTML·SVG·XML 등은 앱 주소에서 열리면 저장형 XSS가 되므로 항상 내려받기로 줍니다.
+INLINE_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".gif": "image/gif",
+                ".webp": "image/webp", ".bmp": "image/bmp", ".pdf": "application/pdf"}
+NOSNIFF = {"X-Content-Type-Options": "nosniff"}
+
+
 @router.get("/files/{att_id}")
 def download(att_id: int, dl: int = 0, user: User = Depends(require_user), db: Session = Depends(get_db)):
     att = db.get(Attachment, att_id)
     if att is None:
         raise HTTPException(404)
-    return FileResponse(_path(att, "orig"), filename=att.original_name,
-                        content_disposition_type="attachment" if dl else "inline")
+    media = INLINE_TYPES.get(PurePath(att.original_name).suffix.lower())
+    if media and not dl:
+        return FileResponse(_path(att, "orig"), filename=att.original_name, media_type=media,
+                            content_disposition_type="inline",
+                            headers={**NOSNIFF, "Content-Security-Policy": "sandbox"})
+    return FileResponse(_path(att, "orig"), filename=att.original_name, media_type="application/octet-stream",
+                        content_disposition_type="attachment", headers=NOSNIFF)
 
 
 @router.get("/files/{att_id}/thumb")
@@ -112,4 +125,4 @@ def thumb(att_id: int, size: str = "s", user: User = Depends(require_user), db: 
     if att is None:
         raise HTTPException(404)
     return FileResponse(_path(att, "large" if size == "l" else "thumb"), media_type="image/webp",
-                        headers={"Cache-Control": "private, max-age=86400"})
+                        headers={"Cache-Control": "private, max-age=86400", **NOSNIFF})

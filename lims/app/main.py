@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from .auth import LoginRequired
-from .config import APP_DIR, SECRET_KEY
+from .config import APP_DIR, session_secret
 from .db import Base, engine
 from .routers import (admin, analysis, files, home, presets, process_runs, search, specimens,
                       templates_admin, test_runs)
@@ -24,7 +24,7 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="도금강판 R&D LIMS", version="2.2", lifespan=lifespan)
-app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, session_cookie="lims_session",
+app.add_middleware(SessionMiddleware, secret_key=session_secret(), session_cookie="lims_session",
                    max_age=14 * 24 * 3600, same_site="lax")
 app.mount("/static", StaticFiles(directory=str(APP_DIR / "static")), name="static")
 

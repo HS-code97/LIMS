@@ -1,6 +1,7 @@
 """경로·DB URL·업로드 한도 (환경변수로 덮어쓰기)."""
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
@@ -14,7 +15,10 @@ VAR_DIR = Path(os.getenv("LIMS_VAR_DIR", BASE_DIR / "var"))
 DATABASE_URL = os.getenv("LIMS_DATABASE_URL", f"sqlite:///{(VAR_DIR / 'lims.db').as_posix()}")
 FILES_DIR = Path(os.getenv("LIMS_FILES_DIR", VAR_DIR / "files"))   # 운영: /data/lims/files
 TMP_DIR = Path(os.getenv("LIMS_TMP_DIR", VAR_DIR / "tmp"))
-SECRET_KEY = os.getenv("LIMS_SECRET_KEY", "dev-only-change-me")
+SECRET_KEY = os.getenv("LIMS_SECRET_KEY", "")
+DEV_SECRET_KEY = "dev-only-change-me"
+# 예시 파일·옛 기본값 그대로의 키는 공개된 값이라 세션 쿠키 위조에 쓰일 수 있습니다.
+_KNOWN_SECRET_KEYS = {DEV_SECRET_KEY, "change-me-to-a-long-random-string"}
 MAX_UPLOAD_MB = int(os.getenv("LIMS_MAX_UPLOAD_MB", "200"))
 THUMB_SIZES = (400, 1600)
 
@@ -37,3 +41,16 @@ LABEL_CODE = os.getenv("LIMS_LABEL_CODE", "datamatrix")                      # d
 
 for d in (VAR_DIR, FILES_DIR, TMP_DIR):
     d.mkdir(parents=True, exist_ok=True)
+
+
+def session_secret(db_url: str = DATABASE_URL, key: str = SECRET_KEY) -> str:
+    """세션 서명 키. 개발용 SQLite만 기본 키를 허용하고, 운영 DB에서는 안전한 키가 없으면 기동을 막습니다."""
+    if db_url.startswith("sqlite"):
+        if not key:
+            logging.getLogger("lims").warning("LIMS_SECRET_KEY 미설정 — 개발용 기본 키로 세션을 서명합니다.")
+        return key or DEV_SECRET_KEY
+    if not key or key in _KNOWN_SECRET_KEYS or len(key) < 32:
+        raise RuntimeError(
+            "LIMS_SECRET_KEY가 없거나 안전하지 않습니다(32자 이상, 예시 값 금지). "
+            "생성: python -c \"import secrets; print(secrets.token_urlsafe(48))\"")
+    return key

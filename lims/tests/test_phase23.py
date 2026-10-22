@@ -73,18 +73,24 @@ def test_excel_import(client):
     assert any("이미 쓰인" in e for e in again["errors"])
 
 
-def test_dictionary_edit(client):
-    path = SEED_DIR / "param_dictionary.json"
-    backup = path.read_text(encoding="utf-8")
+def test_dictionary_edit(client, tmp_path, monkeypatch):
+    # 저장소의 시드 사전은 건드리지 않고 임시 복사본에 씁니다.
+    seed_file = SEED_DIR / "param_dictionary.json"
+    mtime = seed_file.stat().st_mtime_ns
+    shutil.copy(seed_file, tmp_path / "param_dictionary.json")
+    monkeypatch.setattr(pdict, "SEED_DIR", tmp_path)
+    pdict.reload()
     try:
         r = client.post("/admin/dictionary", data={"key": "ak.P", "level": "panel", "tol": "5", "agg": "mean",
                                                    "quick": "on", "methods": "압력계, PV"}, follow_redirects=False)
         assert r.status_code == 303
         assert pdict.actual_cfg("ak.P")["tol"] == 5.0
+        path = tmp_path / "param_dictionary.json"
         assert json.loads(path.read_text(encoding="utf-8"))["dict_version"] == pdict.version()
     finally:
-        path.write_text(backup, encoding="utf-8")
+        monkeypatch.undo()
         pdict.reload()
+    assert seed_file.stat().st_mtime_ns == mtime
 
 
 def test_pv_receive(client, run):

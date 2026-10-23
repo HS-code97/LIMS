@@ -12,6 +12,7 @@ from app.models import Material, ParamActual, ProcessPreset, TestRun, TestTempla
 from app.schemas import ProcessRunIn, SeriesSpec, SplitIn
 from app.services import actuals, numbering, workflow
 from app.services import param_dict as pdict
+from helpers import api_blanks, blanks
 
 
 def _login(emp_no: str) -> TestClient:
@@ -42,13 +43,13 @@ def m2():
         return {"id": p.id, "recipe": pdict.preset_recipe(p.overrides)}
 
 
-def _run_body(m2, start: int, n: int = 2, **kw) -> dict:
-    return {"dict_version": pdict.version(), "preset_id": m2["id"], "project_code": "26P4", "run_date": "2026-10-22",
-            "coating_weight_target": 60, "panel_count": n, "serial_start": start, "recipe": m2["recipe"], **kw}
+def _run_body(m2, marks: list[str], **kw) -> dict:
+    return {"dict_version": pdict.version(), "preset_id": m2["id"], "project_code": "A6", "run_date": "2026-10-22",
+            "coating_weight_target": 60, "specimens": marks, "recipe": m2["recipe"], **kw}
 
 
-def _make_run(client, m2, start: int, n: int = 2) -> dict:
-    r = client.post("/api/process-runs", json=_run_body(m2, start, n))
+def _make_run(client, m2, n: int = 2) -> dict:
+    r = client.post("/api/process-runs", json=_run_body(m2, api_blanks(client, n)))
     assert r.status_code == 200, r.text
     return r.json()
 
@@ -62,10 +63,10 @@ def _tpl_id() -> int:
 def test_series_base_is_merged_recipe(db, user_id, m2):
     recipe = pdict.merge(m2["recipe"], {"out.cw": 60})          # 화면 원본은 60, 목표 부착량 칸은 45
     run = workflow.create_process_run(db, ProcessRunIn(
-        dict_version=pdict.version(), preset_id=m2["id"], project_code="26P4", run_date=date(2026, 10, 22),
-        coating_weight_target=45, panel_count=3, serial_start=7001, recipe=recipe,
+        dict_version=pdict.version(), preset_id=m2["id"], project_code="A6", run_date=date(2026, 10, 22),
+        coating_weight_target=45, specimens=[b.short_id for b in blanks(db, user_id, 3)], recipe=recipe,
         series=SeriesSpec(key="out.cw", values=[90, 60, 30])), user_id)
-    panels = sorted(run.panels, key=lambda p: p.serial_no)
+    panels = sorted(run.panels, key=lambda p: p.short_id)
     assert [p.target_overrides for p in panels] == [{"out.cw": 90}, {"out.cw": 60}, {"out.cw": 30}]
     assert [p.condition_code[2:4] for p in panels] == ["09", "06", "03"]
 
@@ -83,11 +84,16 @@ def test_test_run_number_past_999(db, user_id):
     assert numbering.next_test_run_no(db, "ZZQ", date(2026, 3, 1)) == "TR-ZZQ-261001"
 
 
-# ── 상태 규칙: 폐기는 탑승·분기 금지, 소진은 분기만 ──────────────────────────
+# ── 상태 규칙: 폐기는 탑승·자르기·도금 금지, 소진은 자르기만 ─────────────────────
 def test_scrap_and_consumed_rules(db, user_id, m2):
-    run = workflow.create_process_run(db, ProcessRunIn(**{**_run_body(m2, 7011), "run_date": date(2026, 10, 22)}),
+    marks = [b.short_id for b in blanks(db, user_id, 3)]
+    workflow.find_specimen(db, marks[2]).status = "SCRAP"
+    with pytest.raises(workflow.Invalid):                       # 폐기 블랭크는 도금 못 함
+        workflow.create_process_run(db, ProcessRunIn(**{**_run_body(m2, marks), "run_date": date(2026, 10, 22)}),
+                                    user_id)
+    run = workflow.create_process_run(db, ProcessRunIn(**{**_run_body(m2, marks[:2]), "run_date": date(2026, 10, 22)}),
                                       user_id)
-    p1, p2 = sorted(run.panels, key=lambda p: p.serial_no)
+    p1, p2 = sorted(run.panels, key=lambda p: p.short_id)
     tpl = db.scalar(select(TestTemplate).where(TestTemplate.code == "BEND_0T"))
     tr = TestRun(test_run_no="TR-ZZS-26001", test_type="ZZS", template_id=tpl.id, start_date=date(2026, 10, 22),
                  owner_id=user_id)
@@ -98,19 +104,19 @@ def test_scrap_and_consumed_rules(db, user_id, m2):
     with pytest.raises(workflow.Invalid):
         workflow.board(db, tr, p1, None)
     with pytest.raises(workflow.Invalid):
-        workflow.split(db, p1, SplitIn(stage="C", count=1, serial_start=7011), user_id)
+        workflow.split(db, p1, SplitIn(count=1, start=1), user_id)
 
-    workflow.split(db, p2, SplitIn(stage="C", count=1, serial_start=7012, mark_parent_consumed=True), user_id)
+    workflow.split(db, p2, SplitIn(count=1, start=1, mark_parent_consumed=True), user_id)
     assert p2.status == "CONSUMED"
     with pytest.raises(workflow.Invalid):
         workflow.board(db, tr, p2, None)
-    workflow.split(db, p2, SplitIn(stage="S", count=1, serial_start=7012), user_id)   # 남은 조각은 허용
+    workflow.split(db, p2, SplitIn(count=1, start=2), user_id)   # 남은 조각은 허용
     assert p2.status == "CONSUMED"
 
 
 # ── NaN·무한대·길이 → 422, 저장된 값이 남지 않음 ───────────────────────────
 def test_nan_and_length_rejected(hhs, m2):
-    run = _make_run(hhs, m2, 7021)
+    run = _make_run(hhs, m2)
     run_no, p1 = run["run_no"], run["panels"][0]["short_id"]
     tr = hhs.post("/api/test-runs", json={"template_id": _tpl_id(), "start_date": "2026-10-22",
                                           "specimens": [{"short_id": p1}]}).json()["test_run_no"]
@@ -125,20 +131,22 @@ def test_nan_and_length_rejected(hhs, m2):
     assert hhs.post(f"/api/process-runs/{run_no}/actuals", content=raw,
                     headers={"content-type": "application/json"}).status_code == 422
 
-    r = hhs.post(f"/api/specimens/{p1}/split", json={"stage": "C", "count": 1, "serial_start": 7021,
-                                                     "rolling_direction": "TOO-LONG"})
+    r = hhs.post(f"/api/specimens/{p1}/split", json={"count": 1, "start": 1, "rolling_direction": "TOO-LONG"})
     assert r.status_code == 422 and any("rolling_direction" in x for x in r.json()["items"]), r.text
-    assert hhs.get(f"/api/specimens/26P4-C7021").status_code == 404
+    assert hhs.get(f"/api/specimens/{p1}-01").status_code == 404
 
 
 # ── 오류 응답: 범위·FK·경합·손상 파일 → 422/409 (이전에는 500) ──────────────
 def test_errors_map_to_4xx(hhs, m2, monkeypatch):
-    assert hhs.post("/api/process-runs", json=_run_body(m2, 9999, 2)).status_code == 422       # 9999 넘음
-    assert hhs.post("/api/process-runs", json=_run_body(m2, 7031, 1, material_id=987654)).status_code == 422
-    first = _make_run(hhs, m2, 7032, 1)
+    marks = api_blanks(hhs, 3)
+    sheet = marks[0].rsplit("-", 1)[0] + "-" + marks[0].split("-")[1][0]
+    assert hhs.post(f"/api/specimens/{sheet}/split", json={"count": 2, "start": 99}).status_code == 422   # 99 넘음
+    assert hhs.post("/api/process-runs", json=_run_body(m2, ["QV3-1"], project_code="A66")).status_code == 422
+    assert hhs.post("/api/process-runs", json=_run_body(m2, marks[:1], material_id=987654)).status_code == 422
+    first = _make_run(hhs, m2, 1)
     # 두 사람이 동시에 저장해 같은 공정런 번호를 받은 상황 → UNIQUE 위반 → 409
     monkeypatch.setattr(numbering, "next_run_no", lambda db, d: first["run_no"])
-    r = hhs.post("/api/process-runs", json=_run_body(m2, 7033, 1))
+    r = hhs.post("/api/process-runs", json=_run_body(m2, marks[1:2]))
     assert r.status_code == 409, r.text
     monkeypatch.undo()
     r = hhs.post("/api/import/excel", files={"file": ("broken.xlsx", b"not a zip")}, data={"dry_run": "true"})
@@ -147,13 +155,16 @@ def test_errors_map_to_4xx(hhs, m2, monkeypatch):
 
 # ── §8 대상별 권한 ───────────────────────────────────────────────────
 def test_permissions_by_target(hhs, kim, m2):
-    run = _make_run(hhs, m2, 7041)                                      # hhs의 공정런·원판
-    run_no, p1, p2 = run["run_no"], run["panels"][0]["short_id"], run["panels"][1]["short_id"]
+    run = _make_run(hhs, m2, 3)                                         # hhs의 공정런·원판
+    run_no, p1, p2, p3 = (run["run_no"], *[p["short_id"] for p in run["panels"]])
     tr = hhs.post("/api/test-runs", json={"template_id": _tpl_id(), "start_date": "2026-10-22",
                                           "specimens": [{"short_id": p1}]}).json()["test_run_no"]
     ev = {"event_type": "SCRAP", "event_date": "2026-10-22"}
-    assert kim.post(f"/api/specimens/{p1}/split", json={"stage": "C", "count": 1, "serial_start": 7041}).status_code == 403
+    # 다른 연구원도 남의 시편을 잘라 자기 과제로 쓸 수 있음 (시편번호 체계 3.6절) — 부모 상태·위치는 못 바꿈
+    r = kim.post(f"/api/specimens/{p3}/split", json={"count": 1, "start": 1, "project_code": "B6"})
+    assert r.status_code == 200 and r.json()["children"][0]["display_id"].split("-")[1] == "B6", r.text
     assert kim.post(f"/api/specimens/{p1}/events", json=ev).status_code == 403
+    assert kim.patch(f"/api/specimens/{p1}", json={"storage_location": "x"}).status_code == 403
     assert kim.post(f"/api/test-runs/{tr}/board", json=[{"short_id": p2}]).status_code == 403
     assert kim.post(f"/api/test-runs/{tr}/unload", json={"short_id": p1}).status_code == 403
     assert kim.post(f"/api/test-runs/{tr}/cycles", json={"delta": 1}).status_code == 403
@@ -174,7 +185,8 @@ def test_permissions_by_target(hhs, kim, m2):
 
 # ── 대표값: 가장 최근 측정의 출처 (D-37) ───────────────────────────────────
 def test_latest_measurement_wins(db, user_id, m2):
-    run = workflow.create_process_run(db, ProcessRunIn(**{**_run_body(m2, 7051, 1), "run_date": date(2026, 10, 22)}),
+    marks = [b.short_id for b in blanks(db, user_id, 1)]
+    run = workflow.create_process_run(db, ProcessRunIn(**{**_run_body(m2, marks), "run_date": date(2026, 10, 22)}),
                                       user_id)
     panel = run.panels[0]
     t0 = datetime(2026, 10, 22, 9, 0)
@@ -193,4 +205,4 @@ def test_latest_measurement_wins(db, user_id, m2):
 
 def test_material_fixture_present():
     with SessionLocal() as db:
-        assert db.scalar(select(Material.id).where(Material.coil_no == "POS-26-8891"))
+        assert db.scalar(select(Material.coil_code).where(Material.coil_no == "CQV3141")) == "QV3"

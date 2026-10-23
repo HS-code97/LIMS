@@ -83,9 +83,9 @@ def seed(db, demo: bool = False, admin: tuple[str, str] | None = None) -> None:
             db.add(owner)
     db.flush()
 
-    yy = f"{date.today():%y}"
-    for code, name in ((f"{yy}X0", "팀 공통 실험·기초 데이터"), (f"{yy}X1", "탐색 실험(과제 착수 전)"),
-                       (f"{yy}X9", "고객 클레임·현장 문제 분석")):
+    y = f"{date.today().year % 10}"       # 공용 과제코드: X 공통 · Y 선행 · Z 기타 + 연도 끝자리 (시편번호 체계 3.3절)
+    for code, name in ((f"X{y}", "팀 공통 실험·기초 데이터"), (f"Y{y}", "선행·탐색 실험(과제 착수 전)"),
+                       (f"Z{y}", "기타 (고객 클레임·현장 문제 분석 등)")):
         if db.get(Project, code) is None:
             db.add(Project(project_code=code, project_name=name, is_common=True))
 
@@ -121,12 +121,20 @@ def seed(db, demo: bool = False, admin: tuple[str, str] | None = None) -> None:
         obj.team_id = teams[t["team"]].id if t.get("team") in teams else None
 
     if demo:
-        if db.get(Project, "26P4") is None:
-            db.add(Project(project_code="26P4", company_project_no="2026P1234",
+        if db.get(Project, "A6") is None:
+            db.add(Project(project_code="A6", company_project_no="2026P1234",
                            project_name="M계 Al-Zn-Si-Mg 도금강판 내식성 향상", manager_id=users["hhs"].id))
-        if db.scalar(select(Material).where(Material.coil_no == "POS-26-8891")) is None:
-            db.add(Material(coil_no="POS-26-8891", steel_grade="SPCC", thickness_mm=0.8,
-                            received_date=date(2026, 10, 1), note="기준 시나리오 원소재"))
+        if db.get(Project, "B6") is None:
+            db.add(Project(project_code="B6", company_project_no="2026P5678",
+                           project_name="도장 후 내식성 평가", manager_id=users["kim"].id))
+        if db.scalar(select(Material).where(Material.coil_no == "CQV3141")) is None:
+            db.add(Material(coil_no="CQV3141", coil_code="QV3", steel_grade="SPCC", thickness_mm=0.8,
+                            received_date=date(2026, 10, 1), note="기준 시나리오 코일"))
+        # 열처리(H)·전처리(T)·도장(P) 코드표 예시 — 운영 항목은 관리 > 코드표에서 정합니다(미결 3)
+        for cat, code, name in (("HEAT", "01", "열처리 예시 (조건 미정)"), ("PRETREAT", "01", "화성처리 예시 (조건 미정)"),
+                                ("PAINT", "01", "도장 예시 (조건 미정)")):
+            if db.get(MasterCode, (cat, code)) is None:
+                db.add(MasterCode(category=cat, code=code, name=name))
     db.commit()
 
 

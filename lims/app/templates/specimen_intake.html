@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}전폭시편 입고{% endblock %}
+{% block content %}
+<div x-data="intakePage()" x-cloak>
+<div class="page-head"><div><div class="crumb"><a href="/specimens">시편</a> › 입고</div><h1 style="font-family:var(--f-body)">전폭시편 입고</h1></div>
+  <div class="acts small muted">현장 코일에서 가져온 전폭시편을 보관함에 넣을 때 등록합니다. 아직 GA·GI 같은 실험 조건은 몰라도 됩니다.</div></div>
+
+<div class="grid2">
+  <section class="card">
+    <header><h2>{{ icon('spec') }}입고 정보</h2><span class="meta">각인번호 = 코일코드-전폭번호 (예: QV3-1)</span></header>
+    <div class="body form">
+      <div class="row">
+        <label class="f">현장 코일번호<input class="in mono" x-model="f.coil_no" @input.debounce.300ms="suggest()" placeholder="CQV3141T" autofocus></label>
+        <label class="f">코일코드 (각인용 3자리)<input class="in mono" x-model="f.coil_code" maxlength="3" style="width:90px" :readonly="s.existing"></label>
+      </div>
+      <div class="small" x-show="s.coil_no">
+        <span x-show="s.existing">이미 등록된 코일입니다 — 같은 코드 <b class="mono" x-text="s.coil_code"></b>를 쓰고 전폭번호가 이어집니다.</span>
+        <span x-show="!s.existing && s.derived">현장 번호에서 만든 제안: <b class="mono" x-text="s.coil_code"></b> (영문 뒤 2자리 + 일련번호 첫 숫자, 겹치면 변형)</span>
+        <span x-show="!s.existing && !s.derived" class="mk-dev">현장 번호에서 만든 후보가 모두 쓰여 임의 코드 <b class="mono" x-text="s.coil_code"></b>를 제안합니다.</span>
+      </div>
+      <div class="row">
+        <label class="f">과제<select class="in mono" x-model="f.project_code">
+          {% for p in projects %}<option value="{{ p.project_code }}">{{ p.project_code }}{% if p.company_project_no %} = {{ p.company_project_no }}{% endif %} · {{ p.project_name[:20] }}</option>{% endfor %}</select></label>
+        <label class="f">매수<input class="in num" type="number" min="1" max="9" x-model.number="f.count" @input.debounce.300ms="suggest()"></label>
+        <label class="f">시작 전폭번호<input class="in num mono" type="number" min="1" max="9" x-model.number="f.sheet_start"></label>
+        <label class="f">채취위치<input class="in mono" x-model="f.coil_position" maxlength="2" style="width:60px" :placeholder="s.position || ''"></label>
+      </div>
+      <div class="row">
+        <label class="f">강종<input class="in" x-model="f.steel_grade" placeholder="SPCC"></label>
+        <label class="f">두께 (mm)<input class="in num" type="number" step="0.01" x-model.number="f.thickness_mm"></label>
+        <label class="f">크기<input class="in" x-model="f.size_text"></label>
+      </div>
+      <label class="f">보관 위치<input class="in" x-model="f.storage_location" placeholder="보관함 A-3"></label>
+      <label class="f">메모<input class="in" x-model="f.note" placeholder="가져온 목적 (예: 도금 실험용)"></label>
+      <div class="small mono">→ 각인번호 <b x-text="preview()"></b></div>
+    </div>
+    <footer style="padding:12px 16px;display:flex;gap:8px;justify-content:flex-end"><button class="btn primary lg" :disabled="busy || !f.coil_no" @click="save()">{{ icon('check', 18) }} 입고 저장</button></footer>
+  </section>
+
+  <section class="card">
+    <header><h2>{{ icon('tree') }}번호 규칙</h2></header>
+    <div class="body small">
+      <p style="margin-top:0">시편에는 <b>각인번호</b>만 새깁니다: <span class="mono">코일-가지[-후절단][-조각]</span></p>
+      <ul>
+        <li><span class="mono">QV3-1</span> 전폭시편 1번 (이 화면)</li>
+        <li><span class="mono">QV3-102</span> 전폭 1번을 자른 2번 블랭크 (시편 상세 › 자르기)</li>
+        <li><span class="mono">QV3-102-01</span> 도금판을 자른 실험편, <span class="mono">QV3-102-01-3</span> 분석조각</li>
+      </ul>
+      <p>과제·단계·조건은 DB의 <b>전체번호</b>에만 있습니다: <span class="mono">QV3-A6-C-102-M206K</span>. 도금·열처리·도장을 해도 각인번호는 그대로이고 단계와 꼬리만 바뀝니다.</p>
+      <p class="muted" style="margin-bottom:0">같은 현장 코일(채취위치만 다르거나 다시 가져온 경우)은 같은 코일코드를 쓰고 전폭번호가 이어집니다. 자세한 규칙: 저장소의 <span class="mono">시편번호 체계.md</span></p>
+    </div>
+    {% if coils %}
+    <header><h2>최근 코일</h2></header>
+    <div class="tablewrap"><table class="t"><tr><th>코드</th><th>코일번호</th><th>강종</th><th>입고</th></tr>
+      {% for m in coils %}<tr><td class="mono"><a href="/specimens?coil={{ m.coil_code }}"><b>{{ m.coil_code }}</b></a></td><td class="mono"><a href="#" @click.prevent="f.coil_no='{{ m.coil_no }}'; suggest()">{{ m.coil_no }}</a></td>
+        <td>{{ m.steel_grade or '' }}</td><td class="mono small">{{ m.received_date|d }}</td></tr>{% endfor %}</table></div>
+    {% endif %}
+  </section>
+</div>
+
+<div class="modal" x-show="done" x-transition.opacity style="display:none">
+  <div class="dlg">
+    <header><h3>입고 완료</h3><button class="btn ghost sm x" @click="done=null">{{ icon('x', 16) }}</button></header>
+    <div class="body"><table class="t"><tr><th>각인번호</th><th>전체번호</th></tr>
+      <template x-for="s in (done ? done.specimens : [])"><tr><td class="mono"><a :href="'/specimens/' + s.short_id"><b x-text="s.short_id"></b></a></td><td class="mono small" x-text="s.display_id"></td></tr></template></table></div>
+    <footer><a class="btn" :href="done && done.engrave_csv">{{ icon('csv', 16) }} 각인 CSV</a><a class="btn" target="_blank" :href="done && done.label_pdf">{{ icon('label', 16) }} 라벨 출력</a>
+      <button class="btn primary" @click="done=null; suggest()">계속 입고</button></footer>
+  </div>
+</div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function intakePage() {
+  return {
+    f: {coil_no: "", coil_code: "", project_code: "{{ projects[0].project_code if projects else '' }}", count: 2, sheet_start: 1,
+        coil_position: "", steel_grade: "", thickness_mm: null, size_text: "1200x600", storage_location: "", note: ""},
+    s: {}, busy: false, done: null,
+    async suggest() {
+      if (!this.f.coil_no.trim()) { this.s = {}; return; }
+      try {
+        this.s = await LIMS.api("GET", `/api/coils/suggest?coil_no=${encodeURIComponent(this.f.coil_no)}&count=${this.f.count || 1}`);
+        this.f.coil_code = this.s.coil_code; this.f.sheet_start = this.s.sheet_start;
+        if (!this.f.coil_position && this.s.position) this.f.coil_position = this.s.position;
+      } catch (e) { LIMS.fail(e); }
+    },
+    preview() {
+      const c = (this.f.coil_code || "???").toUpperCase(), a = this.f.sheet_start || 1, n = this.f.count || 1;
+      return n > 1 ? `${c}-${a} ~ ${c}-${a + n - 1} (${n}장)` : `${c}-${a}`;
+    },
+    async save() {
+      this.busy = true;
+      try {
+        const body = Object.assign({}, this.f, {coil_code: this.f.coil_code || null, thickness_mm: this.f.thickness_mm || null});
+        this.done = await LIMS.api("POST", "/api/specimens/intake", body);
+        LIMS.toast(`${this.done.specimens.length}장 입고`, "ok");
+      } catch (e) { LIMS.fail(e); } finally { this.busy = false; }
+    },
+  };
+}
+</script>
+{% endblock %}

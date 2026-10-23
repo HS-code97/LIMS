@@ -88,3 +88,51 @@ def test_alembic_head_matches_models(tmp_path):
                            capture_output=True, text=True, encoding="utf-8")
         assert r.returncode == 0, (args, r.stdout, r.stderr)
     assert "No new upgrade operations" in r.stdout + r.stderr
+
+
+def test_alembic_0004_migrates_v23_numbers(tmp_path):
+    """v2.3 데이터(26P4-P0101·C·S) → v3.0 각인번호(코일-가지-후절단-조각), 과제 A6, 옛 번호는 legacy_id."""
+    import sqlite3
+    db_file = tmp_path / "old.db"
+    env = {**os.environ, "LIMS_VAR_DIR": str(tmp_path), "LIMS_DATABASE_URL": f"sqlite:///{db_file.as_posix()}",
+           "PYTHONDONTWRITEBYTECODE": "1", "PYTHONIOENCODING": "utf-8"}
+
+    def alembic(*args):
+        r = subprocess.run([sys.executable, "-m", "alembic", *args], cwd=LIMS_DIR, env=env,
+                           capture_output=True, text=True, encoding="utf-8")
+        assert r.returncode == 0, (args, r.stdout, r.stderr)
+
+    alembic("upgrade", "0003")
+    c = sqlite3.connect(db_file)
+    c.executescript("""
+        INSERT INTO projects (project_code, company_project_no, project_name, is_common) VALUES
+            ('26P4', '2026P1234', '과제', 0), ('26X1', NULL, '탐색', 1);
+        INSERT INTO materials (id, coil_no) VALUES (1, 'CQV3141');
+        INSERT INTO process_runs (id, run_no, run_date, project_code, material_id, source, dict_version, recipe,
+                                  base_condition_code) VALUES (1, 'PR-26-0001', '2026-10-21', '26P4', 1, 'manual', 'v', '{}', 'M206K');
+        INSERT INTO specimens (id, project_code, stage, serial_no, engraved_label, parent_id, process_run_id, material_id,
+                               condition_code, status, is_deleted) VALUES
+            (1, '26P4', 'P', '0101', 'M206K-26P4-P0101', NULL, 1, 1, 'M206K', 'AVAILABLE', 0),
+            (2, '26P4', 'P', '0102', 'M206K-26P4-P0102', NULL, 1, 1, 'M206K', 'AVAILABLE', 0),
+            (3, '26P4', 'C', '0102', 'M206K-26P4-C0102', 2, 1, 1, 'M206K', 'AVAILABLE', 0),
+            (4, '26P4', 'S', '0102', 'M206K-26P4-S0102', 3, 1, 1, 'M206K', 'AVAILABLE', 0),
+            (5, '26P4', 'S', '0101', 'M206K-26P4-S0101', 1, 1, 1, 'M206K', 'AVAILABLE', 0),
+            (6, '26X1', 'C', '0001', NULL, NULL, NULL, NULL, NULL, 'AVAILABLE', 0);
+    """)
+    c.commit()
+    c.close()
+    alembic("upgrade", "head")
+    alembic("check")
+    c = sqlite3.connect(db_file)
+    rows = dict((r[0], r[1:]) for r in c.execute(
+        "SELECT legacy_id, short_id, project_code, stage, is_panel FROM specimens"))
+    assert rows["26P4-P0101"] == ("QV3-101", "A6", "C", 1)
+    assert rows["26P4-P0102"] == ("QV3-102", "A6", "C", 1)
+    assert rows["26P4-C0102"] == ("QV3-102-01", "A6", "C", 0)
+    assert rows["26P4-S0102"] == ("QV3-102-01-1", "A6", "C", 0)
+    assert rows["26P4-S0101"] == ("QV3-101-01", "A6", "C", 0)
+    assert rows["26X1-C0001"][1:] == ("Y6", "B", 0)                      # 코일 없던 시편 → '이관-26X1' 코일
+    assert {r[0] for r in c.execute("SELECT project_code FROM projects")} == {"A6", "Y6"}
+    assert c.execute("SELECT coil_code FROM materials WHERE coil_no = 'CQV3141'").fetchone() == ("QV3",)
+    assert c.execute("SELECT count(*) FROM specimen_events WHERE event_type = 'NOTE'").fetchone() == (6,)
+    assert c.execute("PRAGMA foreign_key_check").fetchall() == []

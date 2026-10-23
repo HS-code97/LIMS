@@ -17,7 +17,7 @@ cd ..
 개발용 계정(`--demo` 시드 전용, `lims/scripts/seed.py`): `hhs` / `lims1234`(관리자), `kim` / `lims1234`, `admin` / `admin1234`.
 이 계정은 개발용 SQLite에서만 만들어지고, 운영 시드(`--demo` 없이)는 만들지 않습니다.
 
-개발 DB는 `lims/var/lims.db`(SQLite)이며, 파일은 `lims/var/files/{yyyy}/{약식번호}/`에 저장됩니다.
+개발 DB는 `lims/var/lims.db`(SQLite)이며, 파일은 `lims/var/files/{yyyy}/{각인번호}/`에 저장됩니다(이관 전에 올린 파일은 옛 번호 폴더에 그대로 있고, DB가 경로를 기억합니다).
 
 ## 테스트
 
@@ -48,7 +48,7 @@ PostgreSQL에서 같은 테스트를 돌리려면 빈 테스트 DB를 만들고 
    `LIMS_SECRET_KEY`는 `python -c "import secrets; print(secrets.token_urlsafe(48))"`로 만듭니다.
    PostgreSQL에서는 키가 없거나 32자 미만이거나 예시 값이면 앱이 기동을 거부합니다(세션 쿠키 위조 방지).
 3. 스키마: `cd lims && alembic upgrade head` (검토용 DDL은 `lims/db/schema_postgres.sql`, `python -m scripts.dump_ddl`로 다시 생성).
-   마이그레이션별 SQL은 `lims/db/migration_000N_postgres.sql`입니다. `0002`는 관리 화면 실측 설정 테이블(`param_actual_cfg`)과 `serial_no` 숫자 검사를, `0003`은 장비 API 키(`api_keys`)를 더합니다.
+   마이그레이션별 SQL은 `lims/db/migration_000N_postgres.sql`입니다. `0002`는 관리 화면 실측 설정 테이블(`param_actual_cfg`)과 `serial_no` 숫자 검사를, `0003`은 장비 API 키(`api_keys`)를 더하고, `0004`는 시편번호 체계 v3.0(각인번호·단계 A~E·과제 `A6`·코일코드)으로 바꾸며 기존 데이터를 이관합니다(옛 번호는 `legacy_id`로 계속 조회). `0004`의 데이터 이관은 온라인 `alembic upgrade head`에서만 돕니다.
    **업그레이드 순서:** 코드를 바꾼 뒤 서버를 다시 띄우기 전에 `alembic upgrade head`를 실행하세요. 테이블이 없으면 모든 요청이 실패합니다.
    DB 시간대: `ALTER DATABASE lims SET timezone = 'Asia/Seoul';` (기록 시각 기본값 `now()`가 KST가 되도록)
 4. 기준 정보: `python -m scripts.seed` — 관리자가 아직 없으면 첫 관리자 사번·비밀번호(10자 이상)를 묻습니다.
@@ -68,19 +68,19 @@ PostgreSQL에서 같은 테스트를 돌리려면 빈 테스트 DB를 만들고 
 
 | 설계서 | 구현 위치 |
 | :--- | :--- |
-| 3장 시편번호 (약식 10자 유일, 정식 16자, 숫자 4자리 자율 + 다음 빈 번호 제안, 일괄 발번 충돌 검사) | `services/numbering.py`, `models/lineage.py` (`short_id` 생성 컬럼, `uq_short`) |
-| 3.2 조건부 5자 (원판 단위·목표 기준, 실측 기준은 표시만) | `services/condition_code.py`, `services/actuals.actual_condition_code` |
-| 3.3 과제코드 압축 (`2026P1234 → 26P4`, 겹치면 `26PA`…), 공통 `26X0/X1/X9` | `routers/admin.project_code_for`, `scripts/seed.py` |
-| 3.6 각인 CSV·라벨 PDF (DataMatrix = 약식번호) | `services/export.py`, `/api/labels/engrave.csv`, `/api/labels/print.pdf` |
+| 3장 시편번호 → **v3.0 [`시편번호 체계.md`](시편번호%20체계.md)**: 각인번호 `QV3-102-01-3`(유일키 `short_id`), 전체번호 `QV3-A6-C-102-01-M206K`, 단계 A~E, 입고·자르기·도금·공정, 다음 빈 번호 제안·충돌 검사 | `services/marking.py`, `services/numbering.py`, `services/workflow.py`, `models/lineage.py`, `alembic/versions/0004` |
+| 3.2 조건부 5자 (원판 단위·목표 기준, 실측 기준은 표시만) — v3.0에서 전체번호 꼬리의 도금 블록 | `services/condition_code.py`, `services/actuals.actual_condition_code` |
+| 3.3 과제코드 → v3.0: 그해 등록 순서 영문 + 연도 끝자리 (`A6`, `B6` …), 공용 `X6/Y6/Z6` | `services/marking.next_project_code`, `routers/admin.project_code_for`, `scripts/seed.py` |
+| 3.6 각인 CSV·라벨 PDF (각인·DataMatrix = 각인번호, 라벨에 전체번호) | `services/export.py`, `/api/labels/engrave.csv`, `/api/labels/print.pdf` |
 | 5장 화면 6개 | `templates/home · process_run_new/detail · specimen_detail · test_run_detail · search · admin` |
 | 6.1 HMI 재사용 (사전 단일 원본, cycle/checks/drawMimic 공통 모듈) | `data/seed/param_dictionary.json`, `static/hmi/hmi-core.js`, `static/hmi/hmi-lims.js` |
 | 6.2 프리셋 3단계·지난 공정런 복제 | `routers/presets.py`, 공정런 등록 화면 |
 | 6.3~6.4 저장 페이로드·서버 처리 순서 (범위 재검증 → 시리즈 → 조건부 → 409 → 한 트랜잭션) | `services/workflow.create_process_run` |
 | 6.6~6.8 목표·실측 이중 기록, 대표값 규칙, 4경로(수기·욕 분석·시험 `maps_to`·PV API) | `services/actuals.py`, `param_actuals`, `effective_params` |
 | 6.9 시리즈 실험 (원판별 `target_overrides`, ◆/● 구분) | `workflow.series_overrides`, 시리즈 설정 대화상자 |
-| 6.10 목표 정정 (사유 필수, 현재 조건부 재생성, 각인 유지) | `workflow.correct_targets`, `refresh_condition_codes`, 공정런 화면 [목표 정정] |
+| 6.10 목표 정정 (사유 필수, 전체번호 꼬리의 조건부 재생성, 각인번호 유지) | `workflow.correct_targets`, `refresh_condition_codes`, 공정런 화면 [목표 정정] |
 | 7장 P1~P8 | `services/workflow.py`, `file_ingest.py`, `lineage.py`, `search.py`, `export.py`, `workers/watcher.py`, `scripts/backup.sh`, `scripts/restore_check.sh` |
-| 8장 DDL·운영 규칙 (논리 삭제·되살리기, RESTRICT, 감사 로그, 저장 직전 값 검사, 대상별 권한표, API 키, 배포 기본값) | `models/`, `models/audit.py`, `models/guards.py`, `auth.py`, `config.py`, `alembic/versions/0001~0003` |
+| 8장 DDL·운영 규칙 (논리 삭제·되살리기, RESTRICT, 감사 로그, 저장 직전 값 검사, 대상별 권한표, API 키, 배포 기본값) | `models/`, `models/audit.py`, `models/guards.py`, `auth.py`, `config.py`, `alembic/versions/0001~0004` |
 | 9장 시험 템플릿 8종 (JSON 시드, 템플릿 외 키 저장 거부) | `data/seed/test_templates/*.json`, `services/templates_engine.py` |
 | 10장 API | `routers/*.py` (개발 서버 `/docs`에서 확인, 운영은 `LIMS_API_DOCS=1`일 때만) |
 

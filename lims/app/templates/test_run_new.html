@@ -31,10 +31,10 @@
   <section class="card">
     <header><h2>{{ icon('scan') }}2. 시편 탑승</h2><span class="meta" x-text="rows.length + '개'"></span></header>
     <div class="body form">
-      <label class="f">시편 스캔 또는 약식번호 입력 후 Enter
-        <input class="in mono" x-ref="scan" x-model="scan" @keydown.enter.prevent="add()" placeholder="26P4-C0102" autofocus></label>
+      <label class="f">시편 스캔 또는 각인번호 입력 후 Enter
+        <input class="in mono" x-ref="scan" x-model="scan" @keydown.enter.prevent="add()" placeholder="QV3-102-01" autofocus></label>
       <div class="tablewrap"><table class="t">
-        <tr><th>#</th><th>약식번호</th><th>정식번호</th><th>상태</th><th>슬롯</th><th></th></tr>
+        <tr><th>#</th><th>각인번호</th><th>전체번호</th><th>상태</th><th>슬롯</th><th></th></tr>
         <template x-for="(r, i) in rows" :key="r.short_id">
           <tr><td class="mono small" x-text="i+1"></td><td class="mono"><b x-text="r.short_id"></b></td><td class="mono small" x-text="r.display_id"></td>
             <td><span class="chip" :class="'st-' + r.status" x-text="r.status"></span></td>

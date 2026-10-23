@@ -1,4 +1,4 @@
-"""업무 흐름: 공정런 저장(P1), 분기(P2), 시험런·탑승(P3), 결과 저장(P4), 실측 붙여넣기."""
+"""업무 흐름: 입고(전폭시편), 공정런 도금(P1), 열처리·전처리·도장, 자르기(P2), 시험런·탑승(P3), 결과 저장(P4), 실측 붙여넣기."""
 from __future__ import annotations
 
 import copy
@@ -9,10 +9,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..errors import Conflict, Invalid  # noqa: F401  (기존 import 경로 workflow.Conflict·Invalid 유지)
-from ..models import (Material, ParamActual, ProcessPreset, ProcessRun, Project, RunSpecimen, Specimen,
-                      TestResult, TestRun, TestTemplate)
-from ..schemas import ProcessRunIn, SplitIn, TestRunIn
-from . import actuals
+from ..models import (MasterCode, Material, ParamActual, ProcessPreset, ProcessRun, Project, RunSpecimen, Specimen,
+                      SpecimenEvent, TestResult, TestRun, TestTemplate)
+from ..schemas import IntakeIn, ProcessRunIn, SplitIn, TestRunIn, TreatIn
+from . import actuals, marking
 from . import condition_code as cc
 from . import numbering
 from . import param_dict as pdict
@@ -47,13 +47,100 @@ def series_overrides(payload: ProcessRunIn, recipe: dict) -> list[dict]:
     return per_panel
 
 
+def _project(db: Session, code: str | None) -> Project:
+    proj = db.get(Project, code) if code else None
+    if proj is None:
+        raise Invalid(f"과제코드 {code}가 없습니다.")
+    return proj
+
+
+def _use(db: Session, spec: Specimen, user_id: int | None, project_code: str, what: str, when: date) -> None:
+    """다른 과제·다른 사람이 시편을 쓰면 과제·담당을 넘기고 이력(USE)을 남깁니다 (시편번호 체계 3.3·3.6절)."""
+    if spec.project_code == project_code and (user_id is None or spec.owner_id in (None, user_id)):
+        return
+    db.add(SpecimenEvent(specimen_id=spec.id, event_type="USE", event_date=when, user_id=user_id,
+                         params={"what": what, "from_project": spec.project_code, "to_project": project_code,
+                                 "from_owner": spec.owner.name if spec.owner else None}))
+    spec.project_code = project_code
+    if user_id is not None:
+        spec.owner_id = user_id
+
+
+def _raise_stage(spec: Specimen, stage: str | None) -> None:
+    if stage and marking.stage_rank(stage) > marking.stage_rank(spec.stage):
+        spec.stage = stage                    # 단계는 오르기만 합니다(건너뛰기 허용)
+
+
+def _unusable(spec: Specimen) -> str | None:
+    if spec.status in NO_BOARDING or spec.status == "IN_TEST":
+        return STATUS_NAME.get(spec.status, "시험 중")
+    return None
+
+
+# ── 입고: 전폭시편 (A) ─────────────────────────────────────────────
+def intake(db: Session, data: IntakeIn, user_id: int | None) -> list[Specimen]:
+    """현장 코일에서 가져온 전폭시편 N장 등록. 같은 현장 코일(앞 7자리)은 같은 코일코드, 전폭번호가 이어집니다."""
+    _project(db, data.project_code)
+    base, pos = marking.split_field_coil(data.coil_no)
+    if not base:
+        raise Invalid("현장 코일번호를 넣으세요 (예: CQV3141T).")
+    mat = db.scalar(select(Material).where(Material.coil_no == base))
+    want = (data.coil_code or "").strip().upper() or None
+    if want and not marking.COIL_CODE_RE.match(want):
+        raise Invalid("코일코드는 영문 2자리 + 숫자 1자리입니다 (예: QV3).")
+    if mat is not None and mat.coil_code and want and want != mat.coil_code:
+        raise Invalid(f"{base}의 코일코드는 이미 {mat.coil_code}입니다 (같은 코일은 같은 코드).")
+    code = (mat.coil_code if mat is not None else None) or want or marking.suggest_coil_code(db, base)[0]
+    other = db.scalar(select(Material).where(Material.coil_code == code))
+    if other is not None and (mat is None or other.id != mat.id):
+        raise Conflict(f"코일코드 {code}는 다른 코일 {other.coil_no}이 쓰고 있습니다.", [code])
+    if mat is None:
+        mat = Material(coil_no=base, coil_code=code, steel_grade=data.steel_grade or None,
+                       thickness_mm=data.thickness_mm, received_date=data.received_date or date.today())
+        db.add(mat)
+    else:
+        mat.coil_code = code
+        mat.steel_grade = mat.steel_grade or data.steel_grade or None
+        mat.thickness_mm = mat.thickness_mm or data.thickness_mm
+    db.flush()
+    start = data.sheet_start or numbering.next_sheet(db, code, data.count)
+    clash = numbering.sheet_conflicts(db, code, start, data.count)
+    if clash:
+        raise Conflict("이미 쓰인 전폭번호가 있습니다.", clash)
+    out = []
+    for n in range(start, start + data.count):
+        sp = Specimen(project_code=data.project_code, stage="A", coil_code=code, branch=str(n), material_id=mat.id,
+                      owner_id=user_id, coil_position=(data.coil_position or pos or None), steps=[],
+                      size_text=data.size_text or None, storage_location=data.storage_location or None,
+                      note=data.note or None)
+        sp.set_mark()
+        db.add(sp)
+        out.append(sp)
+    db.flush()
+    return out
+
+
+# ── P1. 공정런 → 시편 도금 (번호·레코드는 그대로, 같은 레코드가 C 단계로) ─────────────
 def create_process_run(db: Session, payload: ProcessRunIn, user_id: int | None) -> ProcessRun:
     if payload.dict_version != pdict.version():
         raise Invalid(f"파라미터 사전 버전이 다릅니다 (화면 {payload.dict_version}, 서버 {pdict.version()}). 새로고침하세요.")
-    if db.get(Project, payload.project_code) is None:
-        raise Invalid(f"과제코드 {payload.project_code}가 없습니다.")
+    _project(db, payload.project_code)
     if payload.material_id is not None and db.get(Material, payload.material_id) is None:
         raise Invalid(f"원소재 id {payload.material_id}가 없습니다.")
+    # 0. 도금할 시편: 있어야 하고, 쓸 수 있는 상태이며, 아직 도금하지 않은 것
+    specs, problems = [], []
+    for mk in payload.specimens:
+        sp = find_specimen(db, mk)
+        if sp is None:
+            problems.append(f"{mk}: 없는 시편")
+        elif sp.has_step("PLATE"):
+            problems.append(f"{sp.short_id}: 이미 도금한 시편 ({sp.display_id})")
+        elif _unusable(sp):
+            problems.append(f"{sp.short_id}: {_unusable(sp)} 상태")
+        else:
+            specs.append(sp)
+    if problems:
+        raise Invalid("도금할 수 없는 시편이 있습니다.", problems)
     # 1. 기본값 위에 화면 레시피를 얹고, 사전 min/max로 범위 재검증 (브라우저 검증은 신뢰하지 않음)
     recipe = pdict.merge(pdict.defaults(), payload.recipe)
     recipe.setdefault("out", {})["cw"] = payload.coating_weight_target
@@ -72,14 +159,11 @@ def create_process_run(db: Session, payload: ProcessRunIn, user_id: int | None) 
     preferred = preset.bath_code if preset else None
     base_code = cc.code_from_recipe(codes, sys_code, recipe, preferred)
 
-    # 3. 번호 충돌 검사
-    clash = numbering.conflicts(db, payload.project_code, "P", payload.serial_start, payload.panel_count)
-    if clash:
-        raise Conflict("이미 쓰인 원판 번호가 있습니다.", clash)
-
+    mats = {s.material_id for s in specs}
+    material_id = payload.material_id or (mats.pop() if len(mats) == 1 else None)
     server_warn = [c["msg"] for c in pdict.checks(recipe, sys_code)]
     run = ProcessRun(run_no=numbering.next_run_no(db, payload.run_date), run_date=payload.run_date,
-                     operator_id=user_id, project_code=payload.project_code, material_id=payload.material_id,
+                     operator_id=user_id, project_code=payload.project_code, material_id=material_id,
                      preset_id=preset.id if preset else None, source=payload.source, dict_version=pdict.version(),
                      recipe=recipe, changed_from_preset=payload.changed_from_preset,
                      coating_weight_target=payload.coating_weight_target, base_condition_code=base_code,
@@ -87,26 +171,51 @@ def create_process_run(db: Session, payload: ProcessRunIn, user_id: int | None) 
                      coating_system=sys_code)
     db.add(run)
     db.flush()
-    # 4. 같은 트랜잭션에서 원판 N매 (과제·원소재·조건 상속)
-    for i in range(payload.panel_count):
+    # 3. 같은 트랜잭션에서 시편마다 도금 단계로 (과제는 공정런 과제로, 다른 사람 시편이면 USE 이력)
+    for i, sp in enumerate(specs):
         ov = overrides[i] or None
-        panel_rcp = pdict.merge(recipe, ov)
-        code = cc.code_from_recipe(codes, sys_code, panel_rcp, preferred)
-        serial = numbering.serial_str(payload.serial_start + i)
-        sp = Specimen(project_code=payload.project_code, stage="P", serial_no=serial, process_run_id=run.id,
-                      material_id=payload.material_id, owner_id=user_id, target_overrides=ov,
-                      condition_code=code, size_text="200x300",
-                      engraved_label=f"{code}-{payload.project_code}-P{serial}")
-        db.add(sp)
+        code = cc.code_from_recipe(codes, sys_code, pdict.merge(recipe, ov), preferred)
+        _use(db, sp, user_id, payload.project_code, f"도금 {run.run_no}", payload.run_date)
+        sp.process_run_id, sp.is_panel, sp.target_overrides, sp.condition_code = run.id, True, ov, code
+        sp.steps = [*(sp.steps or []), {"k": "PLATE", "run": run.run_no, "date": payload.run_date.isoformat()}]
+        _raise_stage(sp, "C")
+        db.add(SpecimenEvent(specimen_id=sp.id, event_type="PLATE", event_date=payload.run_date, user_id=user_id,
+                             params={"run": run.run_no, "code": code}))
     db.flush()
+    db.expire(run, ["panels"])
     actuals.recompute_run(db, run)
     return run
 
 
-# ── 목표 정정 (3.1 "각인 라벨 ≠ 현재 조건", 6.7 목표 변경 시 재계산) ─────────────
+# ── 자르지 않는 공정: 열처리(D)·전처리(단계 유지)·도장(E) ──────────────────────
+def treat(db: Session, spec: Specimen, data: TreatIn, user_id: int | None) -> Specimen:
+    kind = data.kind.upper()
+    t = marking.TREATMENTS.get(kind)
+    if t is None or kind == "PLATE":
+        raise Invalid("공정 종류: HEAT(열처리) · PRETREAT(전처리) · PAINT(도장). 도금은 공정런으로 등록합니다.")
+    code = (data.code or "").strip()
+    if not re.fullmatch(r"\d{2}", code):
+        raise Invalid(f"{t['name']} 조건 코드는 숫자 2자리입니다 (예: {t['prefix']}03의 03).")
+    mc = db.get(MasterCode, (kind, code))
+    if mc is None or not mc.is_active:
+        raise Invalid(f"{t['name']} 코드표에 {t['prefix']}{code}가 없습니다. 관리 > 코드표에서 먼저 등록하세요.")
+    if _unusable(spec):
+        raise Invalid(f"{spec.short_id}은 {_unusable(spec)} 상태라 {t['name']}할 수 없습니다.")
+    project = data.project_code or spec.project_code
+    _project(db, project)
+    _use(db, spec, user_id, project, t["name"], data.event_date)
+    spec.steps = [*(spec.steps or []), {"k": kind, "code": code, "date": data.event_date.isoformat()}]
+    _raise_stage(spec, t["stage"])
+    db.add(SpecimenEvent(specimen_id=spec.id, event_type=kind, event_date=data.event_date, user_id=user_id,
+                         params={"code": f"{t['prefix']}{code}", "name": mc.name, **(data.params or {})}))
+    db.flush()
+    return spec
+
+
+# ── 목표 정정 (6.7 목표 변경 시 재계산) ─────────────────────────────────
 def refresh_condition_codes(db: Session, run: ProcessRun, codes: cc.CodeBook | None = None) -> int:
-    """공정런 시편들의 현재 조건부(목표 기준)를 다시 만듭니다. 각인 라벨(engraved_label)은 그대로 두므로,
-    달라지면 화면에 "각인 라벨 ≠ 현재 조건"이 표시됩니다(신원 = 약식번호는 불변, D-10). 바뀐 시편 수를 돌려줌."""
+    """공정런 시편들(원판과 자른 실험편)의 현재 조건부(목표 기준)를 다시 만듭니다. 조건부는 전체번호의 꼬리라
+    DB에만 있으므로 바로 바뀌고, 각인번호는 그대로입니다(시편번호 체계 3.3절). 바뀐 시편 수를 돌려줌."""
     codes = codes or cc.CodeBook.load(db)
     preferred = run.preset.bath_code if run.preset else None
     run.base_condition_code = cc.code_from_recipe(codes, run.coating_system, run.recipe, preferred)
@@ -144,7 +253,7 @@ def correct_targets(db: Session, run: ProcessRun, changes: list, reason: str, wh
                 ov.pop(ch.key, None)            # 기본값과 같아지면 원판별 변경을 지움
             else:
                 ov[ch.key] = ch.value
-            notes.append(f"{sid[5:]} {pdict.label(ch.key)} {old}→{ch.value:g}")
+            notes.append(f"{sid} {pdict.label(ch.key)} {old}→{ch.value:g}")
         else:
             old = pdict.get(recipe, ch.key)
             if any(ch.key in ov for ov in overrides.values()):
@@ -176,33 +285,44 @@ def clone_payload(run: ProcessRun) -> dict:
     return {"run_no": run.run_no, "recipe": run.recipe, "preset_id": run.preset_id,
             "coating_system": run.coating_system, "coating_weight_target": run.coating_weight_target,
             "project_code": run.project_code, "material_id": run.material_id,
-            "panel_count": len(run.panels)}
+            "panels": [p.short_id for p in run.panels]}
 
 
-# ── P2. 분기 ─────────────────────────────────────────────────────
+# ── P2. 자르기 (분기) ──────────────────────────────────────────────
+DEFAULT_SIZE = {"branch": None, "cut": "70x150", "piece": "20x20"}
+
+
 def split(db: Session, parent: Specimen, data: SplitIn, user_id: int | None) -> list[Specimen]:
-    stage = data.stage.upper()
-    allowed = {"P": ("C", "S"), "C": ("S",), "S": ()}[parent.stage]
-    if stage not in allowed:
-        raise Invalid(f"{parent.stage} 단계에서는 {', '.join(allowed) or '더 이상'} 분기할 수 없습니다.")
+    """자식 시편 일괄 생성. 처음 자를 때(전폭 A → 블랭크 B)만 단계가 바뀌고, 그 뒤는 단계·꼬리를 물려받은 채
+    번호만 덧붙습니다(시편번호 체계 3.4절). 자식 과제는 고를 수 있습니다(다른 과제가 가져다 씀)."""
+    level = numbering.child_level(parent)
+    if level is None:
+        raise Invalid(f"{parent.short_id}은 분석조각이라 더 자를 수 없습니다.")
     if parent.status in NO_SPLIT:
-        raise Invalid(f"{parent.short_id}은 {STATUS_NAME[parent.status]} 상태라 분기할 수 없습니다.")
-    clash = numbering.conflicts(db, parent.project_code, stage, data.serial_start, data.count)
+        raise Invalid(f"{parent.short_id}은 {STATUS_NAME[parent.status]} 상태라 자를 수 없습니다.")
+    project = data.project_code or parent.project_code
+    _project(db, project)
+    clash = numbering.child_conflicts(db, parent, data.start, data.count)
     if clash:
         raise Conflict("이미 쓰인 번호가 있습니다.", clash)
+    stage = "B" if parent.stage == "A" else parent.stage
     kids = []
-    for i in range(data.count):
-        serial = numbering.serial_str(data.serial_start + i)
-        k = Specimen(project_code=parent.project_code, stage=stage, serial_no=serial, parent_id=parent.id,
+    for n in range(data.start, data.start + data.count):
+        k = Specimen(project_code=project, stage=stage, coil_code=parent.coil_code, parent_id=parent.id,
                      process_run_id=parent.process_run_id, material_id=parent.material_id, owner_id=user_id,
-                     condition_code=parent.condition_code,
+                     condition_code=parent.condition_code, steps=list(parent.steps or []),
+                     coil_position=parent.coil_position,
                      sample_position=data.sample_position, rolling_direction=data.rolling_direction,
-                     surface_side=data.surface_side,
-                     size_text=data.size_text or ("70x150" if stage == "C" else "20x20"),
-                     storage_location=data.storage_location)
-        k.engraved_label = f"{parent.condition_code or 'XXXXX'}-{parent.project_code}-{stage}{serial}"
+                     surface_side=data.surface_side, size_text=data.size_text or DEFAULT_SIZE[level],
+                     storage_location=data.storage_location or parent.storage_location,
+                     **numbering.child_parts(parent, n))
+        k.set_mark()
         db.add(k)
         kids.append(k)
+    if project != parent.project_code or (user_id is not None and parent.owner_id not in (None, user_id)):
+        db.add(SpecimenEvent(specimen_id=parent.id, event_type="USE", event_date=date.today(), user_id=user_id,
+                             params={"what": f"자르기 {kids[0].short_id}" + (f" ~ {kids[-1].short_id}" if len(kids) > 1 else ""),
+                                     "to_project": project}))
     if data.mark_parent_consumed:
         parent.status = "CONSUMED"
     db.flush()
@@ -213,8 +333,18 @@ def split(db: Session, parent: Specimen, data: SplitIn, user_id: int | None) -> 
 
 # ── P3. 시험런 생성·탑승 ───────────────────────────────────────────
 def find_specimen(db: Session, short_id: str) -> Specimen | None:
-    return db.scalar(select(Specimen).where(Specimen.short_id == short_id.strip().upper(),
-                                            Specimen.is_deleted.is_(False)))
+    """각인번호(QV3-102-01)로 찾습니다. 전체번호(QV3-A6-C-102-01-M206K)를 넣어도 됩니다."""
+    raw = (short_id or "").strip().upper()
+    mk = marking.find_mark(raw) or raw
+    spec = db.scalar(select(Specimen).where(Specimen.short_id == mk, Specimen.is_deleted.is_(False)))
+    if spec is None and raw:        # v2.3 번호가 각인된 이관 시편 (26P4-P0101, M206K-26P4-P0101)
+        m = LEGACY_RE.search(raw)
+        if m:
+            spec = db.scalar(select(Specimen).where(Specimen.legacy_id == m.group(0), Specimen.is_deleted.is_(False)))
+    return spec
+
+
+LEGACY_RE = re.compile(r"\d{2}[A-Z][0-9A-Z]-[PCS]\d{4}")
 
 
 def create_test_run(db: Session, data: TestRunIn, user_id: int | None) -> TestRun:
@@ -242,12 +372,14 @@ def board(db: Session, tr: TestRun, spec: Specimen, slot: str | None, when: date
         raise Invalid(f"{spec.short_id}은 {STATUS_NAME[spec.status]} 상태라 탑승할 수 없습니다.")
     rs = db.get(RunSpecimen, (tr.id, spec.id))
     if rs is None:
-        rs = RunSpecimen(test_run_id=tr.id, specimen_id=spec.id, slot=slot, loaded_at=when or date.today())
+        rs = RunSpecimen(test_run_id=tr.id, specimen_id=spec.id, slot=slot, loaded_at=when or date.today(),
+                         display_at=spec.display_id[:60])
         db.add(rs)
         tr.boardings.append(rs)
     else:
         rs.slot = slot or rs.slot
         rs.unloaded_at = None
+        rs.display_at = spec.display_id[:60]
     spec.status = "IN_TEST"
     return rs
 
@@ -343,9 +475,6 @@ def split_table(text: str) -> list[list[str]]:
     return rows
 
 
-SHORT_RE = re.compile(r"\d{2}[A-Z][0-9A-Z]-[PCS]\d{4}")
-
-
 def parse_results_paste(db: Session, tr: TestRun, text: str) -> tuple[list[dict], list[str]]:
     """시험런 붙여넣기. 첫 행 머리글: 시편 | W00 | W01 … (grid 필드 값) 또는 시편 | 회차 | 필드키…"""
     rows = split_table(text)
@@ -360,11 +489,10 @@ def parse_results_paste(db: Session, tr: TestRun, text: str) -> tuple[list[dict]
     wide = all(re.fullmatch(r"[WC]\d{1,3}", h) for h in head[1:]) and len(head) > 1
     for r in rows[1:]:
         sid = (r[0] if r else "").upper()
-        m = SHORT_RE.search(sid)
-        if not m:
-            errors.append(f"약식번호를 읽지 못한 행: {' | '.join(r)}")
+        sid = marking.find_mark(sid)
+        if not sid:
+            errors.append(f"각인번호를 읽지 못한 행: {' | '.join(r)}")
             continue
-        sid = m.group(0)
         if wide:
             for h, v in zip(head[1:], r[1:]):
                 if v != "":
@@ -406,10 +534,9 @@ def parse_actuals_paste(run: ProcessRun, text: str) -> tuple[list[dict], list[st
     items = []
     for r in rows[1:]:
         who = r[0].strip().upper() if r else ""
-        m = SHORT_RE.search(who)
-        sid = m.group(0) if m else (None if who in ("세션", "SESSION", "공통", "RUN") else "?")
+        sid = marking.find_mark(who) or (None if who in ("세션", "SESSION", "공통", "RUN") else "?")
         if sid == "?":
-            errors.append(f"약식번호(또는 '세션')를 읽지 못한 행: {' | '.join(r)}")
+            errors.append(f"각인번호(또는 '세션')를 읽지 못한 행: {' | '.join(r)}")
             continue
         for k, v in zip(keys, r[1:]):
             if k and v not in ("", "·", "-"):

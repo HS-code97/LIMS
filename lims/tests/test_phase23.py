@@ -28,10 +28,10 @@ def run(client):
     with SessionLocal() as db:
         m2 = db.scalar(select(ProcessPreset).where(ProcessPreset.name == "M2"))
         pid, over = m2.id, m2.overrides
-    start = client.get("/api/numbering/next?project=26X0&stage=P&count=2").json()["suggest"]
+    from helpers import api_blanks
     r = client.post("/api/process-runs", json={
-        "dict_version": pdict.version(), "preset_id": pid, "project_code": "26X0", "run_date": "2026-10-25",
-        "coating_weight_target": 60, "panel_count": 2, "serial_start": start, "recipe": pdict.preset_recipe(over)})
+        "dict_version": pdict.version(), "preset_id": pid, "project_code": "X6", "run_date": "2026-10-25",
+        "coating_weight_target": 60, "specimens": api_blanks(client, 2, project="X6"), "recipe": pdict.preset_recipe(over)})
     assert r.status_code == 200, r.text
     return r.json()
 
@@ -54,20 +54,23 @@ def test_template_editor(client):
 def test_excel_import(client):
     wb_bytes = client.get("/api/import/template.xlsx").content
     wb = load_workbook(io.BytesIO(wb_bytes))
-    ws = wb["공정런"]
-    ws["B2"], ws["G2"], ws["H2"] = "26X1", 801, "POS-25-0001"
-    wb["분기"]["A2"], wb["분기"]["D2"] = "26X1-P0801", 801
-    wb["시험결과"]["E2"] = wb["시험결과"]["E3"] = "26X1-C0801"
-    wb["실측"]["B3"] = "26X1-P0801"
+    # 양식 예시 그대로(CQV3141T → QV3)는 기준 시나리오와 겹치므로 새 코일 CXM5123 → XM5로 바꿈
+    wb["입고"]["A2"], wb["입고"]["B2"] = "CXM5123T", "Y6"
+    wb["전단"]["A2"] = "XM5-1"
+    wb["공정런"]["B2"], wb["공정런"]["F2"], wb["공정런"]["G2"] = "Y6", "XM5-101~103", "CXM5123"
+    wb["분기"]["A2"] = "XM5-101"
+    wb["실측"]["B3"] = "XM5-101"
+    wb["시험결과"]["E2"] = wb["시험결과"]["E3"] = "XM5-101-01"
     buf = io.BytesIO()
     wb.save(buf)
     files = {"file": ("imp.xlsx", buf.getvalue())}
     dry = client.post("/api/import/excel", files=files, data={"dry_run": "true"}).json()
     assert not dry["errors"], dry["errors"]
-    assert not dry["saved"] and client.get("/api/specimens/26X1-P0801").status_code == 404
+    assert not dry["saved"] and client.get("/api/specimens/XM5-101").status_code == 404
     real = client.post("/api/import/excel", files=files, data={"dry_run": "false"}).json()
     assert real["saved"] and real["created"]["results"] == 2, real
-    p = client.get("/api/specimens/26X1-P0801/params").json()
+    assert client.get("/api/specimens/XM5-101-01").json()["display_id"] == "XM5-Y6-C-101-01-M206K"
+    p = client.get("/api/specimens/XM5-101/params").json()
     assert p["out.cw_top"]["actual"] == 57 and p["pot.T"]["badge"] == "세션"
     again = client.post("/api/import/excel", files=files, data={"dry_run": "true"}).json()
     assert any("이미 쓰인" in e for e in again["errors"])

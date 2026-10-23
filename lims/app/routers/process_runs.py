@@ -11,7 +11,7 @@ from ..auth import ensure_can_edit, require_user
 from ..db import get_db
 from ..models import BathAnalysis, Material, ParamActual, ProcessRun, Project, Specimen, User
 from ..schemas import ActualsIn, ApplyIn, BathAnalysisIn, PasteIn, ProcessRunIn, TargetCorrectionIn
-from ..services import actuals, numbering, workflow
+from ..services import actuals, workflow
 from ..services import param_dict as pdict
 from ..services.condition_code import CodeBook
 from ..web import render
@@ -29,7 +29,7 @@ def get_run(db: Session, run_no: str) -> ProcessRun:
 
 def run_specimens(db: Session, run: ProcessRun) -> list[Specimen]:
     return db.scalars(select(Specimen).where(Specimen.process_run_id == run.id, Specimen.is_deleted.is_(False))
-                      .order_by(Specimen.stage.desc(), Specimen.serial_no)).all()
+                      .order_by(Specimen.short_id)).all()
 
 
 # ── 화면 ─────────────────────────────────────────────────────────
@@ -134,19 +134,6 @@ def param_dictionary():
     return pdict.load()
 
 
-@router.get("/api/numbering/next")
-def numbering_next(project: str, stage: str = "P", count: int = 1, prefer: int | None = None,
-                   start: int | None = None, user: User = Depends(require_user), db: Session = Depends(get_db)):
-    project, stage = project.upper(), stage.upper()
-    try:
-        suggest = numbering.next_free(db, project, stage, count, prefer)
-        clash = numbering.conflicts(db, project, stage, start, count) if start is not None else []
-    except numbering.NumberingError as e:
-        raise HTTPException(422, str(e))
-    return {"project": project, "stage": stage, "count": count, "suggest": suggest,
-            "suggest_label": f"{stage}{suggest:04d}", "conflicts": clash}
-
-
 @router.post("/api/process-runs")
 def create_run(data: ProcessRunIn, user: User = Depends(require_user), db: Session = Depends(get_db)):
     run = workflow.create_process_run(db, data, user.id)
@@ -157,7 +144,7 @@ def create_run(data: ProcessRunIn, user: User = Depends(require_user), db: Sessi
 @router.post("/api/process-runs/{run_no}/targets")
 def correct_targets(run_no: str, data: TargetCorrectionIn, user: User = Depends(require_user),
                     db: Session = Depends(get_db)):
-    """저장한 목표값 정정 (작성자·관리자). 현재 조건부를 다시 만들고, 각인 라벨이 달라지면 화면에 표시됩니다."""
+    """저장한 목표값 정정 (작성자·관리자). 전체번호 꼬리의 조건부를 다시 만듭니다(각인번호는 그대로)."""
     run = get_run(db, run_no)
     ensure_can_edit(user, run.operator_id)
     out = workflow.correct_targets(db, run, data.changes, data.reason, user.name, data.confirm_out_of_range)

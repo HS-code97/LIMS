@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import re
-import string
 from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -15,13 +14,13 @@ from ..auth import API_SCOPES, hash_api_key, hash_password, new_api_key, require
 from ..db import get_db
 from ..models import (ApiKey, BathAnalysis, Material, MasterCode, ProcessPreset, ProcessRun, Project, Team,
                       TestTemplate, User)
-from ..services import actuals, workflow
+from ..services import actuals, marking, workflow
 from ..services.condition_code import CodeBook
 from ..web import render
 
 router = APIRouter()
 
-TABS = [("projects", "과제"), ("materials", "원소재"), ("bath", "욕 분석"), ("codes", "코드표"),
+TABS = [("projects", "과제"), ("materials", "코일"), ("bath", "욕 분석"), ("codes", "코드표"),
         ("presets", "프리셋"), ("templates", "시험 템플릿"), ("dictionary", "실측 항목·허용편차"),
         ("import", "엑셀 가져오기"), ("users", "사용자"), ("apikeys", "API 키"),
         ("settings", "시스템 설정")]
@@ -30,18 +29,15 @@ PROJECT_NO = re.compile(r"^(?P<y>\d{4})(?P<k>[A-Z])(?P<n>\d+)$")
 
 
 def project_code_for(db: Session, company_no: str) -> str:
-    """사내 과제번호 2026P1234 → 26P4. 같은 해 끝자리가 겹치면 26PA, 26PB… (3.3절, D-08)."""
+    """사내 과제번호 2026P1234 → 그해 등록 순서 영문 + 연도 끝자리 (A6, B6, …). 사내 번호는 DB에 연결
+    (시편번호 체계 3.3절, D-13). X·Y·Z는 공용 코드로 예약."""
     m = PROJECT_NO.match(company_no.strip().upper())
     if not m:
         raise HTTPException(422, "사내 과제번호 형식: 2026P1234 (연도4 + 성격1 + 일련번호)")
-    head = f"{m['y'][2:]}{m['k']}"
-    first = f"{head}{m['n'][-1]}"
-    if db.get(Project, first) is None:
-        return first
-    for ch in string.ascii_uppercase:
-        if db.get(Project, head + ch) is None:
-            return head + ch
-    raise HTTPException(409, "이 연도·성격의 과제코드를 모두 썼습니다.")
+    try:
+        return marking.next_project_code(db, int(m["y"]))
+    except marking.MarkingError as e:
+        raise HTTPException(409, str(e))
 
 
 def _back(tab: str, msg: str = "") -> RedirectResponse:
@@ -137,8 +133,8 @@ def add_project(company_project_no: str = Form(""), project_name: str = Form(...
                 common_code: str = Form(""), user: User = Depends(require_admin), db: Session = Depends(get_db)):
     if common_code:
         code = common_code.strip().upper()
-        if not re.fullmatch(r"\d{2}X\d", code):
-            raise HTTPException(422, "공통 과제코드 형식: 26X0")
+        if not re.fullmatch(r"[XYZ]\d", code):
+            raise HTTPException(422, "공용 과제코드 형식: X6(공통)·Y6(선행)·Z6(기타) — 영문 + 연도 끝자리")
         if db.get(Project, code):
             return _back("projects", f"{code} 이미 있음")
         db.add(Project(project_code=code, project_name=project_name, is_common=True, manager_id=manager_id))
@@ -154,13 +150,15 @@ def add_project(company_project_no: str = Form(""), project_name: str = Form(...
 def add_material(coil_no: str = Form(...), steel_grade: str = Form(""), thickness_mm: float | None = Form(None),
                  received_date: date | None = Form(None), note: str = Form(""), user: User = Depends(require_user),
                  db: Session = Depends(get_db)):
-    coil = coil_no.strip().upper()
+    """코일만 등록(시편 없이). 전폭시편까지 함께 등록하려면 시편 > 입고를 씁니다."""
+    coil, _ = marking.split_field_coil(coil_no)
     if db.scalar(select(Material).where(Material.coil_no == coil)):
         return _back("materials", f"{coil} 이미 있음")
-    db.add(Material(coil_no=coil, steel_grade=steel_grade or None, thickness_mm=thickness_mm,
+    code, _ = marking.suggest_coil_code(db, coil)
+    db.add(Material(coil_no=coil, coil_code=code, steel_grade=steel_grade or None, thickness_mm=thickness_mm,
                     received_date=received_date, note=note or None))
     db.commit()
-    return _back("materials", f"{coil} 등록")
+    return _back("materials", f"{coil} 등록 (코일코드 {code})")
 
 
 @router.post("/admin/bath")
@@ -186,7 +184,10 @@ def add_bath(pot: str = Form(...), sampled_at: datetime = Form(...), method: str
 def edit_code(category: str = Form(...), code: str = Form(...), name: str = Form(...), spec: str = Form(""),
               description: str = Form(""), is_active: str = Form("on"), user: User = Depends(require_admin),
               db: Session = Depends(get_db)):
-    obj = db.get(MasterCode, (category, code.strip().upper())) or MasterCode(category=category, code=code.strip().upper())
+    code = code.strip().upper()
+    if category in ("HEAT", "PRETREAT", "PAINT") and not re.fullmatch(r"\d{2}", code):
+        raise HTTPException(422, "열처리(H)·전처리(T)·도장(P) 코드는 숫자 2자리입니다 (예: 03 → 꼬리 H03).")
+    obj = db.get(MasterCode, (category, code)) or MasterCode(category=category, code=code)
     try:
         obj.spec = json.loads(spec) if spec.strip() else None
     except json.JSONDecodeError as e:
@@ -194,7 +195,7 @@ def edit_code(category: str = Form(...), code: str = Form(...), name: str = Form
     obj.name, obj.description, obj.is_active = name, description or None, is_active == "on"
     db.add(obj)
     db.flush()
-    # 코드표가 바뀌면 현재 조건부를 다시 만듭니다. 각인 라벨은 그대로 → 달라진 시편은 "각인 ≠ 현재"로 표시(3.1절)
+    # 코드표가 바뀌면 전체번호 꼬리의 조건부를 다시 만듭니다. 각인번호는 그대로(시편번호 체계 3.3절)
     codes = CodeBook.load(db)
     n = sum(workflow.refresh_condition_codes(db, run, codes) for run in db.scalars(select(ProcessRun)))
     db.commit()

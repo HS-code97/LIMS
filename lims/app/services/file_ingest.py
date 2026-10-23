@@ -1,8 +1,9 @@
 """파일 수집·자동 매칭 (7장 P5).
 
-파일명 규칙(권장): {약식번호}_{태그}_{자유}.{확장자}
-  26P4-C0102_W03_front.jpg      → C0102 시편, 회차 3
-  26P4-S0102_SEM_x5000_bse.tif  → S0102 시편, SEM
+파일명 규칙(권장): {각인번호}_{태그}_{자유}.{확장자}
+  QV3-102-01_W03_front.jpg       → QV3-102-01 실험편, 회차 3
+  QV3-102-01-3_SEM_x5000_bse.tif → QV3-102-01-3 분석조각, SEM
+전체번호(QV3-A6-C-102-01-M206K_W03.jpg)로 지어도 각인번호로 바꿔 연결합니다.
 """
 from __future__ import annotations
 
@@ -19,9 +20,9 @@ from sqlalchemy.orm import Session
 
 from ..config import FILES_DIR
 from ..models import Attachment, Specimen, TestResult, TestRun
+from . import marking
 from .thumbnails import make_thumbnails
 
-SHORT_ID = re.compile(r"(?P<proj>\d{2}[A-Z][0-9A-Z])-(?P<stage>[PCS])(?P<serial>\d{4})")
 CYCLE = re.compile(r"_(?:W|C)(?P<n>\d{1,3})(?=[_.])")
 SAFE = re.compile(r"[^0-9A-Za-z가-힣._()\-]+")
 
@@ -35,11 +36,11 @@ class ParsedName:
 
 def parse_filename(name: str) -> ParsedName:
     up = Path(name).name.upper()
-    m = SHORT_ID.search(up)
     c = CYCLE.search(up)
     stem = Path(up).stem
     tags = [t for t in stem.split("_")[1:] if t]
-    return ParsedName(m.group(0) if m else None, int(c.group("n")) if c else None, tags)
+    return ParsedName(marking.find_mark(stem.split("_")[0]) or marking.find_mark(stem),
+                      int(c.group("n")) if c else None, tags)
 
 
 def kind_of(name: str, tags: list[str]) -> str:
@@ -103,7 +104,7 @@ def ingest(db: Session, tmp: Path, original_name: str, **kw) -> IngestResult:
 def _ingest(db: Session, tmp: Path, original_name: str, stored: list[Path], *, user_id: int | None,
             test_run: TestRun | None = None, source: str = "upload",
             default_spec: Specimen | None = None, auto_test_run: bool = False) -> IngestResult:
-    """default_spec: 시편 상세 화면에서 올린 경우, 파일명에 약식번호가 없으면 이 시편에 연결."""
+    """default_spec: 시편 상세 화면에서 올린 경우, 파일명에 각인번호가 없으면 이 시편에 연결."""
     sha = sha256_of(tmp)
     dup = db.scalar(select(Attachment).where(Attachment.sha256 == sha))
     if dup is not None and dup.is_deleted:
@@ -162,7 +163,7 @@ def _ingest(db: Session, tmp: Path, original_name: str, stored: list[Path], *, u
     db.add(att)
     db.flush()
     if spec is None:
-        why = "파일명에서 약식번호를 찾지 못했습니다" if not parsed.short_id else f"{parsed.short_id} 시편이 없습니다"
+        why = "파일명에서 각인번호를 찾지 못했습니다" if not parsed.short_id else f"{parsed.short_id} 시편이 없습니다"
         return IngestResult(original_name, "unmatched", att.id, None, parsed.cycle, f"미분류함으로 이동 — {why}")
     return IngestResult(original_name, "matched", att.id, spec.short_id, parsed.cycle if result else None, msg)
 

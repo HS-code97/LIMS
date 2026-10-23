@@ -1,7 +1,8 @@
 """조건부 5자 자동 생성 (3.2절, D-11~D-13, D-31, D-32).
 
 자리: 1 도금 계열 · 2 욕 조성 숫자(허용오차 밖이면 X) · 3~4 단면 부착량 round_half_up(g/m²÷10) · 5 소둔 코드
-각인·라벨에는 목표 기준(basis="target")만 씁니다. 실측 기준은 시편 상세 표시용입니다.
+전체번호 꼬리의 도금 블록(시편번호 체계 3.3절)으로 목표 기준(basis="target")을 씁니다. 각인하지 않습니다.
+실측 기준은 시편 상세 표시용입니다.
 """
 from __future__ import annotations
 
@@ -109,8 +110,9 @@ def code_from_recipe(codes: CodeBook, sys_code: str | None, recipe: dict, prefer
 
 
 def panel_of(spec: Specimen) -> Specimen | None:
+    """도금한 원판(자신 또는 조상). 원판을 자른 실험편·조각은 원판의 목표를 물려받습니다."""
     node = spec
-    while node is not None and node.stage != "P":
+    while node is not None and not node.is_panel:
         node = node.parent
     return node
 

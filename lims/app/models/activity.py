@@ -39,6 +39,8 @@ class RunSpecimen(Base):
     slot: Mapped[str | None] = mapped_column(String(20))
     loaded_at: Mapped[date | None] = mapped_column(Date)
     unloaded_at: Mapped[date | None] = mapped_column(Date)
+    # 탑승 당시 전체번호(과제·단계·꼬리 포함). 시편은 나중에 도장 등으로 바뀌어도 시험 기록은 그때 상태를 남김.
+    display_at: Mapped[str | None] = mapped_column(String(60))
 
     test_run: Mapped[TestRun] = relationship(back_populates="boardings")
     specimen: Mapped[Specimen] = relationship()

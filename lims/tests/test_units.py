@@ -3,10 +3,9 @@ from datetime import date
 
 import pytest
 
-from app.models import Specimen
 from app.services import condition_code as cc
 from app.services import file_ingest as fi
-from app.services import numbering
+from app.services import marking, numbering
 from app.services import param_dict as pdict
 from app.services.templates_engine import MetricsError, validate_metrics
 
@@ -52,25 +51,52 @@ def test_condition_code_nonstandard(db):
 
 
 def test_parse_filename():
-    p = fi.parse_filename("26P4-C0102_W03_front.jpg")
-    assert (p.short_id, p.cycle) == ("26P4-C0102", 3)
-    p = fi.parse_filename("26p4-s0102_SEM_x5000_bse.tif")
-    assert p.short_id == "26P4-S0102" and p.cycle is None
-    assert fi.kind_of("26P4-S0102_SEM_x5000_bse.tif", p.tags) == "SEM"
+    p = fi.parse_filename("QV3-102-01_W03_front.jpg")
+    assert (p.short_id, p.cycle) == ("QV3-102-01", 3)
+    p = fi.parse_filename("qv3-102-01-3_SEM_x5000_bse.tif")
+    assert p.short_id == "QV3-102-01-3" and p.cycle is None
+    assert fi.kind_of("QV3-102-01-3_SEM_x5000_bse.tif", p.tags) == "SEM"
     assert fi.parse_filename("IMG_2031.jpg").short_id is None
-    assert fi.parse_filename("26PA-P0001_C12.png").cycle == 12
-    assert fi.parse_filename("26P4-C0102_W3_x.jpg").cycle == 3
+    assert fi.parse_filename("QV3-1_C12.png").cycle == 12
+    assert fi.parse_filename("QV3-102-01_W3_x.jpg").cycle == 3
+    # 전체번호로 지어도 각인번호로
+    assert fi.parse_filename("QV3-A6-C-102-01-M206K-P12_W02.jpg").short_id == "QV3-102-01"
+
+
+def test_marking_formats():
+    assert marking.mark_id("QV3", "102", "01", "3") == "QV3-102-01-3"
+    assert marking.find_mark("QV3-A6-C-102-M206K") == "QV3-102"
+    assert marking.find_mark("QV3-A6-C-102-01-M206K-H03-T02-P12") == "QV3-102-01"   # 꼬리 블록을 조각으로 읽지 않음
+    assert marking.find_mark("QV3-B6-E-105-P12") == "QV3-105"
+    assert marking.find_mark("QV3-A6-A-1") == "QV3-1"
+    assert marking.find_mark("qv3-102-01-a") == "QV3-102-01-A"
+    assert marking.find_mark("QV3-10") is None and marking.find_mark("26P4-C0102") is None
+    assert marking.tail_blocks([{"k": "PLATE"}, {"k": "HEAT", "code": "03"}, {"k": "PAINT", "code": "12"}],
+                               "M206K") == ["M206K", "H03", "P12"]
+    assert marking.full_id("QV3", "A6", "E", "105", None, None, ["T02", "P12"]) == "QV3-A6-E-105-T02-P12"
+    assert marking.piece_char(9) == "9" and marking.piece_char(10) == "A" and "I" not in marking.PIECE_CHARS
+
+
+def test_coil_code_candidates():
+    assert marking.split_field_coil("CQV3141T") == ("CQV3141", "T")
+    c = marking.coil_code_candidates("CQV3141T")
+    assert c[:5] == ["QV3", "QV1", "QV4", "CV3", "CQ3"]       # 첫 숫자 → 나머지 숫자 → 다른 영문 조합
+    assert all(marking.COIL_CODE_RE.match(x) for x in c)
 
 
 def test_numbering(db, user_id):
-    db.add_all([Specimen(project_code="26X0", stage="C", serial_no=f"{n:04d}") for n in (101, 102, 104)])
-    db.flush()
-    assert numbering.conflicts(db, "26X0", "C", 100, 6) == ["26X0-C0101", "26X0-C0102", "26X0-C0104"]
-    assert numbering.next_free(db, "26X0", "C", 1) == 105
-    assert numbering.next_free(db, "26X0", "C", 2, prefer=102) == 105
-    assert numbering.next_free(db, "26X0", "C", 1, prefer=103) == 103
+    from helpers import blanks
+    b1, b2, b3 = blanks(db, user_id, 3)
+    sheet = b1.parent
+    assert numbering.child_level(sheet) == "branch" and numbering.child_level(b1) == "cut"
+    assert numbering.child_conflicts(db, sheet, 2, 3) == [b2.short_id, b3.short_id]
+    assert numbering.next_child(db, sheet, 1) == 4
+    assert numbering.next_child(db, sheet, 2, prefer=2) == 4
+    assert numbering.next_child(db, sheet, 1, prefer=50) == 50
+    assert numbering.next_sheet(db, sheet.coil_code) == 2
+    assert numbering.label_of(b1, 1) == f"{b1.short_id}-01"
     with pytest.raises(numbering.NumberingError):
-        numbering.conflicts(db, "26X0", "C", 9999, 2)
+        numbering.child_conflicts(db, sheet, 99, 2)            # 조각 번호는 01~99
 
 
 def test_run_numbers(db):

@@ -1,4 +1,4 @@
--- 도금강판 R&D LIMS v2.3 — PostgreSQL 15+ DDL (app/models에서 자동 생성, 직접 고치지 마세요)
+-- 도금강판 R&D LIMS v2.3 (시편번호 v3.0) — PostgreSQL 15+ DDL (app/models에서 자동 생성, 직접 고치지 마세요)
 -- 운영 적용은 Alembic(alembic upgrade head)을 쓰고, 이 파일은 검토·대조용입니다.
 
 CREATE TABLE master_codes (
@@ -14,13 +14,15 @@ CREATE TABLE master_codes (
 CREATE TABLE materials (
 	id SERIAL NOT NULL, 
 	coil_no VARCHAR(50) NOT NULL, 
+	coil_code VARCHAR(3), 
 	steel_grade VARCHAR(50), 
 	thickness_mm NUMERIC, 
 	composition JSONB, 
 	received_date DATE, 
 	note TEXT, 
 	PRIMARY KEY (id), 
-	UNIQUE (coil_no)
+	UNIQUE (coil_no), 
+	UNIQUE (coil_code)
 );
 
 CREATE TABLE teams (
@@ -191,9 +193,15 @@ CREATE TABLE specimens (
 	id BIGSERIAL NOT NULL, 
 	project_code VARCHAR(4) NOT NULL, 
 	stage VARCHAR(1) NOT NULL, 
-	serial_no VARCHAR(4) NOT NULL, 
-	short_id VARCHAR(10) GENERATED ALWAYS AS (project_code || '-' || stage || serial_no) STORED NOT NULL, 
-	engraved_label VARCHAR(16), 
+	coil_code VARCHAR(3) NOT NULL, 
+	branch VARCHAR(3) NOT NULL, 
+	cut_no VARCHAR(2), 
+	piece_no VARCHAR(1), 
+	short_id VARCHAR(16) NOT NULL, 
+	coil_position VARCHAR(2), 
+	steps JSONB, 
+	is_panel BOOLEAN NOT NULL, 
+	legacy_id VARCHAR(20), 
 	parent_id BIGINT, 
 	process_run_id BIGINT, 
 	material_id INTEGER, 
@@ -210,9 +218,9 @@ CREATE TABLE specimens (
 	is_deleted BOOLEAN NOT NULL, 
 	created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now() NOT NULL, 
 	PRIMARY KEY (id), 
-	CONSTRAINT uq_short UNIQUE (project_code, stage, serial_no), 
-	CONSTRAINT ck_stage CHECK (stage IN ('P','C','S')), 
-	CONSTRAINT ck_serial_len CHECK (length(serial_no) = 4), 
+	CONSTRAINT ck_stage CHECK (stage IN ('A','B','C','D','E')), 
+	CONSTRAINT ck_coil_code_len CHECK (length(coil_code) = 3), 
+	CONSTRAINT ck_branch_len CHECK (length(branch) IN (1, 3)), 
 	FOREIGN KEY(project_code) REFERENCES projects (project_code), 
 	UNIQUE (short_id), 
 	FOREIGN KEY(parent_id) REFERENCES specimens (id) ON DELETE RESTRICT, 
@@ -220,9 +228,11 @@ CREATE TABLE specimens (
 	FOREIGN KEY(material_id) REFERENCES materials (id), 
 	FOREIGN KEY(owner_id) REFERENCES users (id)
 );
+CREATE INDEX idx_spec_coil ON specimens (coil_code);
 CREATE INDEX idx_spec_owner ON specimens (owner_id);
 CREATE INDEX idx_spec_parent ON specimens (parent_id);
 CREATE INDEX idx_spec_run ON specimens (process_run_id);
+CREATE INDEX ix_specimens_legacy_id ON specimens (legacy_id);
 
 CREATE TABLE effective_params (
 	specimen_id BIGINT NOT NULL, 
@@ -247,6 +257,7 @@ CREATE TABLE run_specimens (
 	slot VARCHAR(20), 
 	loaded_at DATE, 
 	unloaded_at DATE, 
+	display_at VARCHAR(60), 
 	PRIMARY KEY (test_run_id, specimen_id), 
 	FOREIGN KEY(test_run_id) REFERENCES test_runs (id) ON DELETE RESTRICT, 
 	FOREIGN KEY(specimen_id) REFERENCES specimens (id) ON DELETE RESTRICT
@@ -339,5 +350,5 @@ CREATE TABLE param_actuals (
 CREATE INDEX idx_act_run_key ON param_actuals (process_run_id, param_key) WHERE NOT is_deleted;
 CREATE INDEX idx_act_spec_key ON param_actuals (specimen_id, param_key) WHERE NOT is_deleted;
 
--- serial_no 형식 (PostgreSQL 전용 정규식 검사)
-ALTER TABLE specimens ADD CONSTRAINT ck_serial_digits CHECK (serial_no ~ '^[0-9]{4}$');
+-- 각인번호 형식 (PostgreSQL 전용 정규식 검사, 시편번호 체계 3.2절)
+ALTER TABLE specimens ADD CONSTRAINT ck_short_id_format CHECK (short_id ~ '^[A-Z]{2}[0-9]-[0-9]([0-9]{2})?(-[0-9]{2}(-[1-9A-Z])?)?$');

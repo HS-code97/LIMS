@@ -39,7 +39,7 @@ def specimens_xlsx(db: Session, specs: list[Specimen], keys: list[str], basis: s
     ws = wb.active
     ws.title = "시편"
     keys = keys or pdict.quick_keys()
-    head = ["약식번호", "정식번호", "단계", "상태", "과제", "공정런", "공정일", "원소재"]
+    head = ["각인번호", "전체번호", "단계", "상태", "과제", "공정런", "공정일", "코일"]
     for k in keys:
         p = pdict.param(k)
         head += [f"{p['section_nm']} {p['l']} ({p['u']})", "출처"]
@@ -96,9 +96,9 @@ def test_run_xlsx(db: Session, tr: TestRun, base_url: str = "") -> bytes:
     cycles = tr.cycles or tpl.default_cycles or 1
     for f in [x for x in tpl.field_schema if x.get("type") != "text"]:
         ws = wb.create_sheet(f["label"][:28])
-        ws.append(["시편", "슬롯", "정식번호"] + [f"W{c:02d}" for c in range(cycles)])
+        ws.append(["시편", "슬롯", "전체번호(탑승 당시)"] + [f"W{c:02d}" for c in range(cycles)])
         for b in sorted(tr.boardings, key=lambda b: b.specimen.short_id):
-            row = [b.specimen.short_id, b.slot or "", b.specimen.display_id]
+            row = [b.specimen.short_id, b.slot or "", b.display_at or b.specimen.display_id]
             for c in range(cycles):
                 res = results.get((b.specimen_id, c))
                 row.append((res.metrics or {}).get(f["key"]) if res else None)
@@ -118,8 +118,9 @@ def test_run_xlsx(db: Session, tr: TestRun, base_url: str = "") -> bytes:
 
 
 def engrave_csv(specs: list[Specimen]) -> bytes:
-    """레이저 각인 CSV. 열·구분자·인코딩은 각인기 형식(11.3)에 맞춰 설정합니다.
-    가능한 열: short_id, display_id, datamatrix_text(= 약식번호), condition_code, project_code, stage, serial_no"""
+    """레이저 각인 CSV. 각인하는 글자는 각인번호(short_id)뿐입니다(시편번호 체계 3.2절). 열·구분자·인코딩은
+    각인기 형식(11.3)에 맞춰 설정합니다. 가능한 열: short_id(= 각인번호), datamatrix_text(= 각인번호),
+    display_id(전체번호, 참고용), condition_code, project_code, stage, coil_code"""
     from ..config import ENGRAVE_COLUMNS, ENGRAVE_DELIMITER, ENGRAVE_ENCODING, ENGRAVE_HEADER
     buf = io.StringIO()
     w = csv.writer(buf, delimiter=ENGRAVE_DELIMITER, lineterminator="\r\n")
@@ -127,15 +128,16 @@ def engrave_csv(specs: list[Specimen]) -> bytes:
     if ENGRAVE_HEADER:
         w.writerow(cols)
     for s in specs:
-        vals = {"short_id": s.short_id, "display_id": s.engraved_label or s.display_id, "datamatrix_text": s.short_id,
+        vals = {"short_id": s.short_id, "display_id": s.display_id, "datamatrix_text": s.short_id,
                 "condition_code": s.condition_code or "", "project_code": s.project_code, "stage": s.stage,
-                "serial_no": s.serial_no}
+                "coil_code": s.coil_code}
         w.writerow([vals.get(c, "") for c in cols])
     return buf.getvalue().encode(ENGRAVE_ENCODING, errors="replace")
 
 
 def labels_pdf(specs: list[Specimen], test_run: TestRun | None = None, slots: dict[int, str] | None = None) -> bytes:
-    """라벨프린터용 PDF: 라벨 1장 = DataMatrix/QR(약식번호) + 정식번호 (+ 시험런·슬롯).
+    """라벨프린터용 PDF (봉투·보관함용): 라벨 1장 = DataMatrix/QR(각인번호) + 각인번호 + 전체번호(꼬리 포함)
+    (+ 시험런·슬롯). 시스템 없이 조건을 봐야 할 때 이 라벨을 봅니다(시편번호 체계 Q12).
     크기·코드 종류는 라벨프린터 모델(11.3)에 맞춰 LIMS_LABEL_SIZE_MM, LIMS_LABEL_CODE로 설정."""
     from ..config import LABEL_CODE, LABEL_SIZE_MM
     from reportlab.graphics import renderPDF
@@ -162,7 +164,7 @@ def labels_pdf(specs: list[Specimen], test_run: TestRun | None = None, slots: di
         c.setFont("Courier-Bold", 9)
         c.drawString(tx, H - 7 * mm, s.short_id)
         c.setFont("Courier", 6.5)
-        c.drawString(tx, H - 10.5 * mm, s.engraved_label or s.display_id)
+        c.drawString(tx, H - 10.5 * mm, s.display_id)
         if test_run is not None:
             slot = (slots or {}).get(s.id) or ""
             c.drawString(tx, H - 15 * mm, f"{test_run.test_run_no}{' / ' + slot if slot else ''}")

@@ -8,7 +8,7 @@
 
 {% if tab == 'projects' %}
 <div class="grid2">
-  <section class="card"><header><h2>과제</h2><span class="meta">사내 과제번호 → 4자 과제코드 (끝자리가 겹치면 26PA, 26PB…)</span></header>
+  <section class="card"><header><h2>과제</h2><span class="meta">사내 과제번호 → 2자 과제코드 = 그해 등록 순서 영문 + 연도 끝자리 (A6, B6 …, X·Y·Z는 공용)</span></header>
     <div class="tablewrap"><table class="t"><tr><th>코드</th><th>사내 번호</th><th>과제명</th><th>책임자</th><th>구분</th></tr>
       {% for p in projects %}<tr><td class="mono"><b>{{ p.project_code }}</b></td><td class="mono">{{ p.company_project_no or '' }}</td><td>{{ p.project_name }}</td>
         <td>{{ p.manager.name if p.manager else '' }}</td><td>{% if p.is_common %}<span class="chip">공통</span>{% endif %}</td></tr>{% endfor %}</table></div></section>
@@ -16,7 +16,7 @@
   <section class="card"><header><h2>과제 추가</h2></header>
     <form class="body form" method="post" action="/admin/projects">
       <label class="f">사내 과제번호<input class="in mono" name="company_project_no" placeholder="2026P1234"></label>
-      <label class="f">또는 공통 과제코드<input class="in mono" name="common_code" placeholder="26X0 (과제 미연계 업무)"></label>
+      <label class="f">또는 공통 과제코드<input class="in mono" name="common_code" placeholder="X6 공통 · Y6 선행 · Z6 기타"></label>
       <label class="f">과제명<input class="in" name="project_name" required></label>
       <label class="f">책임자<select class="in" name="manager_id"><option value="">-</option>{% for u in users %}<option value="{{ u.id }}">{{ u.name }}</option>{% endfor %}</select></label>
       <button class="btn primary">추가 (코드 자동 배정)</button></form></section>
@@ -25,13 +25,13 @@
 
 {% elif tab == 'materials' %}
 <div class="grid2">
-  <section class="card"><header><h2>원소재 로트</h2><span class="meta">블랭크는 번호 대신 코일 로트로 관리 (D-23)</span></header>
-    <div class="tablewrap"><table class="t"><tr><th>코일번호</th><th>강종</th><th class="n">두께</th><th>입고</th><th>비고</th></tr>
-      {% for m in materials %}<tr><td class="mono"><a href="/search?q={{ m.coil_no }}">{{ m.coil_no }}</a></td><td>{{ m.steel_grade or '' }}</td><td class="n">{{ m.thickness_mm|num }}</td><td class="mono">{{ m.received_date|d }}</td><td class="small">{{ m.note or '' }}</td></tr>
-      {% else %}<tr class="empty-row"><td colspan="5">원소재가 없습니다.</td></tr>{% endfor %}</table></div></section>
-  <section class="card"><header><h2>원소재 등록</h2></header>
+  <section class="card"><header><h2>코일</h2><span class="meta">현장 코일번호(채취위치 제외) ↔ 각인용 코일코드 3자리 · 전폭시편은 시편 &gt; 입고</span></header>
+    <div class="tablewrap"><table class="t"><tr><th>코일코드</th><th>코일번호</th><th>강종</th><th class="n">두께</th><th>입고</th><th>비고</th></tr>
+      {% for m in materials %}<tr><td class="mono"><b>{% if m.coil_code %}<a href="/specimens?coil={{ m.coil_code }}">{{ m.coil_code }}</a>{% endif %}</b></td><td class="mono"><a href="/search?q={{ m.coil_no }}">{{ m.coil_no }}</a></td><td>{{ m.steel_grade or '' }}</td><td class="n">{{ m.thickness_mm|num }}</td><td class="mono">{{ m.received_date|d }}</td><td class="small">{{ m.note or '' }}</td></tr>
+      {% else %}<tr class="empty-row"><td colspan="6">코일이 없습니다.</td></tr>{% endfor %}</table></div></section>
+  <section class="card"><header><h2>코일 등록</h2><span class="meta">코일코드는 자동 제안 (CQV3141T → QV3)</span></header>
     <form class="body form" method="post" action="/admin/materials">
-      <label class="f">코일번호<input class="in mono" name="coil_no" required placeholder="POS-26-8891"></label>
+      <label class="f">코일번호<input class="in mono" name="coil_no" required placeholder="CQV3141T"></label>
       <div class="row"><label class="f">강종<input class="in" name="steel_grade" placeholder="SPCC"></label><label class="f">두께 (mm)<input class="in num" name="thickness_mm" type="number" step="0.01"></label></div>
       <label class="f">입고일<input class="in" type="date" name="received_date"></label>
       <label class="f">비고<input class="in" name="note"></label>
@@ -74,14 +74,14 @@
   {% if user.is_admin %}
   <section class="card"><header><h2>코드 추가·수정</h2></header>
     <form class="body form" method="post" action="/admin/codes" id="codeform">
-      <div class="row"><label class="f">분류<select class="in" name="category"><option>COATING_SYS</option><option>BATH</option><option>ANNEALING</option></select></label>
+      <div class="row"><label class="f">분류<select class="in" name="category"><option>COATING_SYS</option><option>BATH</option><option>ANNEALING</option><option value="HEAT">HEAT (열처리 H)</option><option value="PRETREAT">PRETREAT (전처리 T)</option><option value="PAINT">PAINT (도장 P)</option></select></label>
         <label class="f">코드<input class="in mono" name="code" required></label></div>
       <label class="f">이름<input class="in" name="name" required></label>
       <label class="f">spec (JSON)<textarea class="in" name="spec" rows="4" placeholder='BATH: {"el":{"Al":[70.5,1.0],"Si":[3,1.0],"Mg":[0.5,0.05]}}  ANNEALING: {"T":800,"t":60,"DP":-40,"tol":{"T":10,"t":10,"DP":5}}'></textarea></label>
       <label class="f">설명<input class="in" name="description"></label>
       <label class="small"><input type="checkbox" name="is_active" checked> 사용</label>
       <button class="btn primary">저장</button>
-      <p class="small muted" style="margin:0">코드표를 바꿔도 이미 각인한 조건부(engraved_label)는 바뀌지 않습니다. 화면에 "각인 라벨 ≠ 현재 조건"만 표시됩니다.</p></form></section>
+      <p class="small muted" style="margin:0">코드표를 바꾸면 전체번호 꼬리의 조건부가 다시 계산됩니다(DB에만 있음). 시편에 새긴 각인번호는 바뀌지 않습니다. 열처리·전처리·도장 코드는 숫자 2자리(꼬리 H03·T02·P12).</p></form></section>
   {% endif %}
 </div>
 

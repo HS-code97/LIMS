@@ -28,14 +28,14 @@
 {% if tab != 'actuals' %}
 <div class="grid2">
   <section class="card">
-    <header><h2>{{ icon('spec') }}원판과 자손</h2><span class="meta">조건부는 원판 단위·목표 기준으로 생성 (◆ = 원판별 목표 변경)</span></header>
+    <header><h2>{{ icon('spec') }}도금한 시편과 자손</h2><span class="meta">조건부(전체번호 꼬리)는 원판 단위·목표 기준으로 생성 (◆ = 원판별 목표 변경) · 각인번호는 도금 전 그대로</span></header>
     <div class="tablewrap"><table class="t">
-      <tr><th>약식번호</th><th>정식번호</th><th>목표 변경</th><th>상태</th><th>자식</th></tr>
+      <tr><th>각인번호</th><th>전체번호</th><th>목표 변경</th><th>상태</th><th>자식</th></tr>
       {% for p in panels %}
-      <tr><td><a class="mono" href="/specimens/{{ p.short_id }}"><b>{{ p.short_id }}</b></a></td><td class="mono">{{ p.display_id }}{% if p.label_mismatch %}<div class="small mk-dev" title="목표 정정·코드표 변경으로 현재 조건부가 각인과 다릅니다">각인 {{ p.engraved_label }}</div>{% endif %}</td>
+      <tr><td><a class="mono" href="/specimens/{{ p.short_id }}"><b>{{ p.short_id }}</b></a></td><td class="mono">{{ p.display_id }}</td>
         <td class="mono small">{% if p.target_overrides %}<span class="mk-intent">◆</span> {% for k, v in p.target_overrides.items() %}{{ pdict.label(k) }} {{ v|num }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}</td>
         <td><span class="chip st-{{ p.status }}">{{ p.status }}</span></td>
-        <td class="mono small">{% for c in p.children if not c.is_deleted %}<a href="/specimens/{{ c.short_id }}">{{ c.short_id[5:] }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</td></tr>
+        <td class="mono small">{% for c in p.children if not c.is_deleted %}<a href="/specimens/{{ c.short_id }}">{{ c.short_id[p.short_id|length + 1:] }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</td></tr>
       {% endfor %}
     </table></div>
   </section>
@@ -115,7 +115,7 @@
   </div>
 
   <div class="body" x-show="paste.open" style="border-top:1px solid var(--line-2);display:none">
-    <p class="small muted" style="margin-top:0">첫 행: <span class="mono">원판 | 최고 판온 | 나이프 압력 | 부착량 윗면 …</span> (키 <span class="mono">rth.T</span> 또는 라벨). 첫 열은 약식번호, 세션 공통값은 <span class="mono">세션</span> 행.</p>
+    <p class="small muted" style="margin-top:0">첫 행: <span class="mono">원판 | 최고 판온 | 나이프 압력 | 부착량 윗면 …</span> (키 <span class="mono">rth.T</span> 또는 라벨). 첫 열은 각인번호, 세션 공통값은 <span class="mono">세션</span> 행.</p>
     <textarea class="in" rows="6" style="width:100%" x-model="paste.text"></textarea>
     <div class="flash err" x-show="paste.errors.length" x-text="paste.errors.join(' / ')" style="margin-top:8px"></div>
     <div class="small mono" x-show="paste.items.length" x-text="paste.items.length + '칸 인식: ' + paste.items.slice(0,6).map(i => (i.specimen||'세션') + ' ' + i.key + '=' + i.value).join(', ') + (paste.items.length>6?' …':'')"></div>

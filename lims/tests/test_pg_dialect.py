@@ -16,9 +16,10 @@ def sql(stmt) -> str:
 def test_ddl_postgres():
     out = "\n".join(str(CreateTable(t).compile(dialect=PG)) for t in Base.metadata.sorted_tables)
     idx = "\n".join(str(CreateIndex(i).compile(dialect=PG)) for t in Base.metadata.sorted_tables for i in t.indexes)
-    assert "GENERATED ALWAYS AS (project_code || '-' || stage || serial_no) STORED" in out
-    assert out.count("JSONB") >= 15 and "BIGSERIAL" in out
-    assert "CONSTRAINT uq_short UNIQUE (project_code, stage, serial_no)" in out
+    assert "short_id VARCHAR(16) NOT NULL" in out and "UNIQUE (short_id)" in out          # 각인번호 = 유일키
+    assert "CONSTRAINT ck_stage CHECK (stage IN ('A','B','C','D','E'))" in out
+    assert "UNIQUE (coil_code)" in out
+    assert out.count("JSONB") >= 16 and "BIGSERIAL" in out
     assert "USING gin (recipe)" in idx and "USING gin (metrics)" in idx
     assert "WHERE NOT is_deleted" in idx and "WHERE specimen_id IS NULL" in idx
     assert "ON DELETE RESTRICT" in out and "CASCADE" not in out           # D-20
@@ -27,7 +28,7 @@ def test_ddl_postgres():
 def test_queries_postgres():
     q = sql(lineage.descendants_stmt(1))
     assert "WITH RECURSIVE" in q
-    qy = search.Query(q="26P4", project="26P4", stage="C", test_type="CCT", code="M2", basis="actual",
+    qy = search.Query(q="QV3-A6-C-102-M206K", project="A6", stage="C", test_type="CCT", code="M2", basis="actual",
                       params=[search.ParamFilter("out.cw_top", 50, 55), search.ParamFilter("rth.DP", None, -30)])
     s = sql(search.build(qy))
     assert s.count("JOIN effective_params AS") == 2 and "LIMIT" in s and "LIKE" in s

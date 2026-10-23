@@ -17,13 +17,14 @@
   <a class="brand" href="/">{{ icon('logo', 26) }}<div><b>PLATED-STEEL LIMS</b><small>표면연구그룹 · v2.3</small></div></a>
   <form class="gsearch" action="/go" method="get" x-data="suggestBox()" @submit="onSubmit($event)" autocomplete="off">
     <span class="ico">{{ icon('scan', 18) }}</span>
-    <input id="gq" name="q" placeholder="약식번호·코일번호·시험런·공정런 (스캐너 입력 가능)" aria-label="검색"
+    <input id="gq" name="q" placeholder="각인번호·코일번호·시험런·공정런 (스캐너 입력 가능)" aria-label="검색"
       hx-get="/search/suggest" hx-trigger="input changed delay:180ms, focus" hx-target="#suggest" hx-swap="innerHTML"
       @keydown.down.prevent="move(1)" @keydown.up.prevent="move(-1)" @keydown.escape="close()">
     <kbd>F2</kbd>
     <div id="suggest" @click.outside="close()"></div>
   </form>
   <div class="grow"></div>
+  <a class="btn" href="/specimens/intake">{{ icon('plus', 16) }}<span class="btn-label">입고</span></a>
   <a class="btn" href="/process-runs/new">{{ icon('plus', 16) }}<span class="btn-label">공정런</span></a>
   <a class="btn primary" href="/test-runs/new">{{ icon('plus', 16) }}<span class="btn-label">시험런</span></a>
   {% if user %}

@@ -1,4 +1,4 @@
-"""4단계 회귀 테스트: 장비 API 키, PV 재전송 대체, 목표 정정(각인 ≠ 현재), 첨부·시편 되살리기,
+"""4단계 회귀 테스트: 장비 API 키, PV 재전송 대체, 목표 정정(꼬리만 재계산), 첨부·시편 되살리기,
 각인 CSV의 삭제 시편 제외, 로그인 리다이렉트·실패 제한, API 문서 노출."""
 import re
 import uuid
@@ -12,6 +12,7 @@ from app.db import SessionLocal
 from app.main import app
 from app.models import ApiKey, Attachment, ParamActual, ProcessPreset, ProcessRun, Specimen, User
 from app.services import param_dict as pdict
+from helpers import api_blanks
 
 
 def _login(emp_no: str) -> TestClient:
@@ -35,13 +36,13 @@ def kim():
     c.__exit__(None, None, None)
 
 
-def _make_run(client, start: int, n: int = 2) -> dict:
+def _make_run(client, n: int = 2) -> dict:
     with SessionLocal() as db:
         m2 = db.scalar(select(ProcessPreset).where(ProcessPreset.name == "M2"))
         pid, over = m2.id, m2.overrides
     r = client.post("/api/process-runs", json={
-        "dict_version": pdict.version(), "preset_id": pid, "project_code": "26P4", "run_date": "2026-10-23",
-        "coating_weight_target": 60, "panel_count": n, "serial_start": start, "recipe": pdict.preset_recipe(over)})
+        "dict_version": pdict.version(), "preset_id": pid, "project_code": "A6", "run_date": "2026-10-23",
+        "coating_weight_target": 60, "specimens": api_blanks(client, n), "recipe": pdict.preset_recipe(over)})
     assert r.status_code == 200, r.text
     return r.json()
 
@@ -83,7 +84,7 @@ def _pv_csv(pot: int) -> bytes:
 
 
 def test_pv_resend_replaces(hhs):
-    run = _make_run(hhs, 7101, 1)
+    run = _make_run(hhs, 1)
     no = run["run_no"]
     for pot in (590, 600):
         assert hhs.post(f"/api/process-runs/{no}/pv", files={"file": ("cycle1.csv", _pv_csv(pot))}).status_code == 200
@@ -96,9 +97,9 @@ def test_pv_resend_replaces(hhs):
     assert sorted((r.note, r.value) for r in rows) == [("cycle1.csv", 600), ("cycle2.csv", 610)]
 
 
-# ── 목표 정정: 현재 조건부만 바뀌고 각인 라벨은 그대로 ───────────────────────
+# ── 목표 정정: 전체번호 꼬리(조건부)만 바뀌고 각인번호는 그대로 ─────────────────
 def test_target_correction(hhs, kim):
-    run = _make_run(hhs, 7111, 2)
+    run = _make_run(hhs, 2)
     no, p1, p2 = run["run_no"], run["panels"][0]["short_id"], run["panels"][1]["short_id"]
     body = {"changes": [{"key": "out.cw", "value": 45}], "reason": "목표 부착량 오입력"}
     assert kim.post(f"/api/process-runs/{no}/targets", json=body).status_code == 403          # 작성자·관리자만
@@ -112,11 +113,11 @@ def test_target_correction(hhs, kim):
         s1 = db.scalar(select(Specimen).where(Specimen.short_id == p1))
         s2 = db.scalar(select(Specimen).where(Specimen.short_id == p2))
         pr = db.scalar(select(ProcessRun).where(ProcessRun.run_no == no))
-        assert s1.condition_code[2:4] == "05" and s1.engraved_label.startswith("M206")
-        assert s1.label_mismatch and s2.condition_code[2:4] == "09" and s2.target_overrides == {"out.cw": 90}
+        assert s1.condition_code[2:4] == "05" and s1.engraved_label == p1 and s1.display_id.endswith("-M205K")
+        assert s2.condition_code[2:4] == "09" and s2.target_overrides == {"out.cw": 90}
         assert pr.coating_weight_target == 45 and "목표 부착량 오입력" in pr.note
     assert hhs.get(f"/api/specimens/{p1}/params").json()["out.cw_top"]["target"] == 45
-    assert "각인 M206" in hhs.get(f"/process-runs/{no}").text
+    assert "M205K" in hhs.get(f"/process-runs/{no}").text
 
 
 def test_target_correction_keeps_series_values(hhs):
@@ -125,8 +126,8 @@ def test_target_correction_keeps_series_values(hhs):
         m2 = db.scalar(select(ProcessPreset).where(ProcessPreset.name == "M2"))
         pid, over = m2.id, m2.overrides
     run = hhs.post("/api/process-runs", json={
-        "dict_version": pdict.version(), "preset_id": pid, "project_code": "26P4", "run_date": "2026-10-23",
-        "coating_weight_target": 60, "panel_count": 3, "serial_start": 7131, "recipe": pdict.preset_recipe(over),
+        "dict_version": pdict.version(), "preset_id": pid, "project_code": "A6", "run_date": "2026-10-23",
+        "coating_weight_target": 60, "specimens": api_blanks(hhs, 3), "recipe": pdict.preset_recipe(over),
         "series": {"key": "out.cw", "values": [90, 60, 30]}}).json()
     p = [x["short_id"] for x in run["panels"]]
     r = hhs.post(f"/api/process-runs/{run['run_no']}/targets",
@@ -149,9 +150,9 @@ def test_reupload_restores_deleted_attachment(kim):
 
 
 def test_specimen_restore_and_engrave_csv(hhs, kim):
-    run = _make_run(hhs, 7121, 1)
+    run = _make_run(hhs, 1)
     p1 = run["panels"][0]["short_id"]
-    kid = hhs.post(f"/api/specimens/{p1}/split", json={"stage": "C", "count": 1, "serial_start": 7121}).json()["children"][0]["short_id"]
+    kid = hhs.post(f"/api/specimens/{p1}/split", json={"count": 1, "start": 1}).json()["children"][0]["short_id"]
     assert hhs.patch(f"/api/specimens/{kid}", json={"is_deleted": True}).status_code == 200
     assert kid not in hhs.get(f"/api/labels/engrave.csv?ids={p1},{kid}").text                 # 삭제 시편은 각인 안 함
     assert kid in hhs.get("/specimens?deleted=1").text

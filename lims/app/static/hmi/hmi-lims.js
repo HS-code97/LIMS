@@ -1,5 +1,6 @@
 /* hmi-lims.js — LIMS 기록 모드 (설계서 5.2·6.2~6.4·6.9절).
- * HMI의 PLC 전송 대신 [저장]: 프리셋 1클릭 → 조정 → 원판 N매 생성. 프리셋·복제·시리즈·조건부 미리보기. */
+ * HMI의 PLC 전송 대신 [저장]: 프리셋 1클릭 → 조정 → 블랭크(각인번호) N장을 도금 단계로. 프리셋·복제·시리즈·조건부 미리보기.
+ * 도금은 번호를 새로 만들지 않습니다: 각인번호 그대로, 전체번호에 조건 꼬리만 붙음 (시편번호 체계 3.1절). */
 (function () {
   "use strict";
   const C = window.LIMS_HMI, H = HMICore.init(C.dict), $ = (id) => document.getElementById(id);
@@ -28,12 +29,10 @@
     st.bathCode = p ? p.bath_code : null; st.presetName = p ? p.name : "";
     st.srcLabel = `${r.run_no} 복제 (${r.code})`;
     if (r.coating_weight_target) $("cw").value = r.coating_weight_target;
-    if (r.panel_count) $("count").value = r.panel_count;
     if (r.project_code) $("project").value = r.project_code;
     if (r.material_id) $("material").value = r.material_id;
     drawPresets();
     renderAll();
-    suggestSerial();
   }
 
   function drawPresets() {
@@ -130,8 +129,33 @@
     return { recipe, coating_weight_target: cw, preset_id: st.presetId, coating_system: st.coatingSystem };
   }
 
+  /* 'QV3-101~105, QV3-201' → ['QV3-101', …] (범위는 마지막 숫자 자리) */
+  function marks() {
+    const out = [];
+    $("marks").value.toUpperCase().split(/[,\s;]+/).filter(Boolean).forEach((part) => {
+      const m = part.match(/^(.*-)(\d+)~(\d+)$/);
+      if (!m) return out.push(part);
+      const w = m[2].length;
+      for (let i = parseInt(m[2], 10); i <= parseInt(m[3], 10) && out.length < 200; i++) out.push(m[1] + String(i).padStart(w, "0"));
+    });
+    return out;
+  }
+
+  function onMarks() { $("count").value = marks().length; showConflicts([]); preview(); }
+
+  async function loadBlanks() {
+    const opt = $("material").selectedOptions[0], coil = opt ? opt.dataset.coil : "";
+    try {
+      const rows = await LIMS.api("GET", `/api/plating/candidates?coil=${encodeURIComponent(coil || "")}`);
+      if (!rows.length) return LIMS.toast(`도금 안 한 블랭크가 없습니다${coil ? " (코일 " + coil + ")" : ""}`, "err");
+      $("marks").value = rows.map((r) => r.short_id).join(", ");
+      onMarks();
+      LIMS.toast(`${rows.length}장 불러옴 — 쓸 것만 남기세요`, "ok");
+    } catch (e) { LIMS.fail(e); }
+  }
+
   function panelOverrides() {
-    const n = parseInt($("count").value, 10) || 0;
+    const n = marks().length;
     const out = Array.from({ length: n }, () => ({}));
     st.series.forEach((s) => s.values.forEach((v, i) => { if (i < n) out[i][s.key] = v; }));
     return out;
@@ -144,9 +168,9 @@
       try {
         const r = await LIMS.api("POST", "/api/process-runs/preview-code", Object.assign(payloadBase(), { panel_overrides: st.series.length ? panelOverrides() : [] }));
         $("code").textContent = r.code;
-        const n = parseInt($("count").value, 10) || 1, s = parseInt($("start").value, 10) || 0, proj = $("project").value;
-        const a = `${proj}-P${String(s).padStart(4, "0")}`, z = `P${String(s + n - 1).padStart(4, "0")}`;
-        $("range").textContent = `→ ${r.code}-${a}${n > 1 ? " ~ " + z : ""}`;
+        const ms = marks(), proj = $("project").value;
+        const full = (m) => { const [coil, ...rest] = m.split("-"); return `${coil}-${proj}-C-${rest.join("-")}-${r.code}`; };
+        $("range").textContent = ms.length ? `→ ${full(ms[0])}${ms.length > 1 ? " ~ " + ms[ms.length - 1] + ` (${ms.length}장)` : ""}` : "→ 도금할 각인번호를 넣으세요";
         if (st.series.length) {
           const codes = [...new Set(r.panel_codes)];
           $("series-summary").innerHTML = `<span class="mk-intent">◆</span> 시리즈 ${st.series.map((x) => `${esc(x.key)} = [${x.values.join(", ")}]`).join(" × ")} · 원판별 조건부 ${codes.join(", ")}`;
@@ -155,29 +179,10 @@
     }, 220);
   }
 
-  async function suggestSerial() {
-    const proj = $("project").value, n = parseInt($("count").value, 10) || 1;
-    try {
-      const r = await LIMS.api("GET", `/api/numbering/next?project=${proj}&stage=P&count=${n}`);
-      $("start").value = r.suggest;
-      showConflicts([]);
-    } catch (e) { LIMS.fail(e); }
-    preview();
-  }
-
-  async function checkSerial() {
-    const proj = $("project").value, n = parseInt($("count").value, 10) || 1, s = parseInt($("start").value, 10);
-    try {
-      const r = await LIMS.api("GET", `/api/numbering/next?project=${proj}&stage=P&count=${n}&start=${s}`);
-      showConflicts(r.conflicts);
-    } catch (e) { LIMS.fail(e); }
-    preview();
-  }
-
   function showConflicts(list) {
     const el = $("conflicts");
     el.classList.toggle("hidden", !list.length);
-    el.textContent = list.length ? `이미 쓰인 번호: ${list.join(", ")} — 시작 번호를 바꾸세요` : "";
+    el.textContent = list.length ? `도금할 수 없는 시편: ${list.join(" / ")}` : "";
   }
 
   /* ── 시리즈 설정 ── */
@@ -189,7 +194,7 @@
   C.dict.sections.forEach((s) => s.p.forEach((p) => { if (p.type !== "sel" && p.min !== undefined) numericKeys.push({ key: `${s.id}.${p.k}`, label: `${s.nm} ${p.l} (${p.u})` }); }));
 
   function openSeries() {
-    const n = parseInt($("count").value, 10) || 1;
+    const n = marks().length || 1;
     const rows = [0, 1].map((i) => {
       const s = st.series[i] || { key: i === 0 ? "ak.P" : "", values: [] };
       return `<label class="f">키 ${i + 1}<select class="in" id="sk${i}"><option value="">(없음)</option>${numericKeys.map((k) => `<option value="${k.key}" ${k.key === s.key ? "selected" : ""}>${k.label}</option>`).join("")}</select></label>
@@ -202,7 +207,7 @@
   }
 
   function readSeries() {
-    const n = parseInt($("count").value, 10) || 1, out = [], errs = [];
+    const n = marks().length || 1, out = [], errs = [];
     [0, 1].forEach((i) => {
       const key = $(`sk${i}`).value, raw = $(`sv${i}`).value.trim();
       if (!key) return;
@@ -215,9 +220,9 @@
   }
 
   function seriesPreview() {
-    const { out, errs } = readSeries(), n = parseInt($("count").value, 10) || 1, s0 = parseInt($("start").value, 10) || 0;
-    let h = `<tr><th>원판</th>${out.map((x) => `<th class="n">${esc(x.key)}</th>`).join("")}</tr>`;
-    for (let i = 0; i < n; i++) h += `<tr><td class="mono">P${String(s0 + i).padStart(4, "0")}</td>${out.map((x) => `<td class="n">${x.values[i] ?? ""}</td>`).join("")}</tr>`;
+    const { out, errs } = readSeries(), ms = marks();
+    let h = `<tr><th>시편</th>${out.map((x) => `<th class="n">${esc(x.key)}</th>`).join("")}</tr>`;
+    ms.forEach((m, i) => { h += `<tr><td class="mono">${esc(m)}</td>${out.map((x) => `<td class="n">${x.values[i] ?? ""}</td>`).join("")}</tr>`; });
     if (errs.length) h += `<tr><td colspan="3" class="mk-dev">${errs.join(" / ")}</td></tr>`;
     $("series-preview").innerHTML = h;
   }
@@ -226,11 +231,12 @@
   async function save(confirmRange) {
     const btn = $("btn-save");
     if (!st.sp) return LIMS.toast("프리셋을 고르거나 지난 공정런을 복제하세요", "err");
+    if (!marks().length) return LIMS.toast("도금할 시편의 각인번호를 넣으세요 (예: QV3-101~105)", "err");
     btn.disabled = true;
     const body = Object.assign(payloadBase(), {
       source: "manual", dict_version: C.dict.dict_version, project_code: $("project").value,
       material_id: $("material").value ? parseInt($("material").value, 10) : null, run_date: $("run_date").value,
-      panel_count: parseInt($("count").value, 10), serial_start: parseInt($("start").value, 10),
+      specimens: marks(),
       series: st.series.length ? st.series : null, changed_from_preset: changedKeys(),
       warnings: H.checks(st.sp, { coatingSystem: st.coatingSystem }).map((a) => a.msg), note: $("note").value,
       confirm_out_of_range: !!confirmRange,
@@ -239,7 +245,7 @@
       const r = await LIMS.api("POST", "/api/process-runs", body);
       done(r);
     } catch (e) {
-      if (e.status === 409 && e.data) showConflicts(e.data.conflicts || []);
+      if (e.status === 422 && e.data && /도금할 수 없는/.test(e.data.detail || "")) showConflicts(e.data.items || []);
       if (e.status === 422 && e.data && e.data.items && e.data.items.length && /허용 범위/.test(e.data.detail || "")) {
         if (confirm(`허용 범위 밖 값이 있습니다:\n\n${e.data.items.join("\n")}\n\n그대로 저장할까요?`)) { btn.disabled = false; return save(true); }
       } else LIMS.fail(e);
@@ -247,8 +253,8 @@
   }
 
   function done(r) {
-    $("done-title").textContent = `${r.run_no} 저장 완료 — 원판 ${r.panels.length}매`;
-    $("done-body").innerHTML = `<table class="t"><tr><th>약식번호</th><th>정식번호 (각인)</th><th>원판별 목표 변경</th></tr>` +
+    $("done-title").textContent = `${r.run_no} 저장 완료 — ${r.panels.length}장 도금`;
+    $("done-body").innerHTML = `<table class="t"><tr><th>각인번호 (그대로)</th><th>전체번호</th><th>원판별 목표 변경</th></tr>` +
       r.panels.map((p) => `<tr><td class="mono"><a href="/specimens/${p.short_id}">${p.short_id}</a></td><td class="mono"><b>${p.display_id}</b></td>
         <td class="small">${p.target_overrides ? '<span class="mk-intent">◆</span> ' + Object.entries(p.target_overrides).map(([k, v]) => `${esc(labelOf(k))} <b class="mono">${v}</b>`).join(", ") : ""}</td></tr>`).join("") + "</table>" +
       (r.warnings && r.warnings.length ? `<div class="flash warn" style="margin-top:10px">${r.warnings.map(esc).join("<br>")}</div>` : "");
@@ -278,9 +284,9 @@
   /* ── 이벤트 연결 ── */
   $("my-presets").onchange = (e) => { const p = C.presets.find((x) => x.id === +e.target.value); if (p) usePreset(p); };
   $("clone-runs").onchange = (e) => { const r = C.recent[+e.target.value]; if (r) useRun(r); e.target.value = ""; };
-  $("project").onchange = suggestSerial;
-  $("count").oninput = suggestSerial;
-  $("start").oninput = checkSerial;
+  $("project").onchange = preview;
+  $("marks").oninput = onMarks;
+  $("btn-load").onclick = loadBlanks;
   $("cw").oninput = preview;
   $("btn-series").onclick = openSeries;
   $("series-cancel").onclick = () => $("dlg-series").classList.add("hidden");
@@ -299,6 +305,7 @@
   else {
     const first = C.presets.find((p) => p.scope === "PUBLIC" && p.name === "M2") || C.presets[0];
     if (first) usePreset(first);
-    suggestSerial();
   }
+  const q = new URLSearchParams(location.search).get("specimens");   // 시편 상세 [도금] → 각인번호 채움
+  if (q) { $("marks").value = q; onMarks(); }
 })();

@@ -7,28 +7,29 @@
   <div class="page-head" style="margin:0">
     <div>
       <div class="crumb"><a href="/specimens">시편</a> › <a href="/specimens?project={{ spec.project_code }}">{{ spec.project_code }}</a>{% if spec.parent %} › <a href="/specimens/{{ spec.parent.short_id }}">{{ spec.parent.short_id }}</a>{% endif %} › {{ spec.short_id }}</div>
-      <h1>{{ spec.short_id }}<span class="sub">{{ spec.display_id }}</span></h1>
+      <h1>{{ spec.short_id }}<span class="sub" title="전체번호 = 코일-과제-단계-가지…-조건 꼬리 (DB에만)">{{ spec.display_id }}</span></h1>
     </div>
   </div>
   <div class="meta">
-    <span class="stage">{{ spec.stage }}</span><span class="chip">{{ spec.stage_name }}</span>
+    <span class="stage">{{ spec.stage }}</span><span class="chip">{{ spec.stage_name }}</span>{% if spec.kind_name != spec.stage_name %}<span class="chip">{{ spec.kind_name }}</span>{% endif %}
     <span class="chip st-{{ spec.status }}"><span class="dot"></span>{{ spec.status }}</span>
     <span class="chip">과제 <b>{{ spec.project.label }}</b></span>
     {% if spec.owner %}<span class="chip">담당 <b style="font-family:var(--f-body)">{{ spec.owner.name }}</b></span>{% endif %}
-    {% if spec.material %}<span class="chip">원소재 <b>{{ spec.material.label }}</b></span>{% endif %}
+    {% if spec.material %}<span class="chip">코일 <b>{{ spec.material.label }}</b>{% if spec.coil_position %} · 채취 {{ spec.coil_position }}{% endif %}</span>{% endif %}
     {% if spec.size_text %}<span class="chip">크기 <b>{{ spec.size_text }}</b></span>{% endif %}
     {% for v in [spec.sample_position, spec.rolling_direction, spec.surface_side] if v %}<span class="chip"><b>{{ v }}</b></span>{% endfor %}
   </div>
   <div class="facts">
-    <span>각인 <b>{{ (spec.engraved_label or spec.display_id)[:5] }}</b></span>
-    {% if actual_code %}<span>· 실측 기준 <b {% if actual_code != spec.condition_code %}class="mk-dev"{% endif %}>{{ actual_code }}</b></span>{% endif %}
-    {% if spec.label_mismatch %}<span class="mk-dev">· 각인 라벨 ≠ 현재 조건 ({{ spec.engraved_label }})</span>{% endif %}
+    <span>각인 <b class="mono">{{ spec.short_id }}</b></span>
+    <span>· 거친 공정 {% for pr in processes %}<b title="{{ pr.codes|join(', ') }}" {% if not pr.done %}class="muted" style="font-weight:400"{% endif %}>{{ pr.name }} {{ '✓' if pr.done else '–' }}</b>{% if not loop.last %} {% endif %}{% endfor %}</span>
+    {% if actual_code %}<span>· 실측 기준 조건부 <b {% if actual_code != spec.condition_code %}class="mk-dev"{% endif %}>{{ actual_code }}</b></span>{% endif %}
     {% if spec.storage_location %}<span>· 보관 <b>{{ spec.storage_location }}</b></span>{% endif %}
     <span>· 등록 {{ spec.created_at|d }}</span>
   </div>
   <div class="acts">
-    {% if spec.stage != 'S' %}<button class="btn primary lg" @click="openSplit()">{{ icon('split', 18) }} [분기] 자식 시편 생성</button>{% endif %}
-    <button class="btn lg" @click="ev.open=true">{{ icon('event', 18) }} 이벤트 추가</button>
+    {% if split %}<button class="btn primary lg" @click="openSplit()">{{ icon('split', 18) }} [자르기] {{ '블랭크' if split.level == 'branch' else ('실험편' if split.level == 'cut' else '분석조각') }} 만들기</button>{% endif %}
+    {% if spec.stage in ('A', 'B') and not spec.has_step('PLATE') %}<a class="btn lg" href="/process-runs/new?specimens={{ spec.short_id }}">{{ icon('run', 18) }} 도금 (공정런)</a>{% endif %}
+    <button class="btn lg" @click="ev.open=true">{{ icon('event', 18) }} 공정·이벤트 추가</button>
     <a class="btn lg" href="/api/labels/engrave.csv?ids={{ spec.short_id }}">{{ icon('csv', 18) }} 각인 CSV</a>
     <a class="btn lg" href="/api/labels/print.pdf?ids={{ spec.short_id }}" target="_blank">{{ icon('label', 18) }} 라벨 출력</a>
     <a class="btn lg" href="/test-runs/new?specimens={{ spec.short_id }}">{{ icon('test', 18) }} 시험런 탑승</a>
@@ -41,21 +42,21 @@
 </section>
 
 <section class="card" style="margin-bottom:16px">
-  <header><h2>{{ icon('tree') }}계보</h2><span class="meta">원소재 → 공정런 → 원판 → 쿠폰 → 조각 (부모-자식은 DB가 기억, 번호 길이 불변)</span></header>
+  <header><h2>{{ icon('tree') }}계보</h2><span class="meta">코일 → 전폭시편 → 블랭크 → (도금) → 실험편 → 분석조각 · 각인번호 앞부분이 곧 모시편</span></header>
   <div class="body">
     <div class="chain">
       {% for n in chain %}
         {% if not loop.first %}<span class="arrow">→</span>{% endif %}
         {% set cls = 'self' if n.kind == 'self' else '' %}
         {% if n.href and n.kind != 'self' %}<a class="node" href="{{ n.href }}">{% else %}<div class="node {{ cls }}">{% endif %}
-          <small>{{ loop.index }}. {{ {'material':'원소재 코일','run':'공정런','specimen':'상위 시편','self':'현재 시편'}[n.kind] }}</small>
+          <small>{{ loop.index }}. {{ {'material':'코일','run':'공정런(도금)','specimen':'상위 시편','self':'현재 시편'}[n.kind] }}</small>
           <b>{{ n.label }}</b><span>{{ n.sub }}</span>
         {% if n.href and n.kind != 'self' %}</a>{% else %}</div>{% endif %}
       {% endfor %}
       {% for t in tree %}
         <span class="arrow">→</span>
         <a class="node child" href="/specimens/{{ t.spec.short_id }}"><small>자식 시편</small><b>{{ t.spec.short_id }}</b>
-          <span>{{ t.spec.stage_name }}{% if t.children %} · 하위 {{ t.children|length }}{% endif %}</span></a>
+          <span>{{ t.spec.stage }} {{ t.spec.kind_name }}{% if t.spec.project_code != spec.project_code %} · {{ t.spec.project_code }}{% endif %}{% if t.children %} · 하위 {{ t.children|length }}{% endif %}</span></a>
       {% endfor %}
     </div>
   </div>
@@ -105,12 +106,12 @@
     </section>
 
     <section class="card">
-      <header><h2>{{ icon('clock') }}공정 이벤트</h2><span class="meta">자르지 않는 상태 변화(후처리·도장·열처리·이동)</span></header>
+      <header><h2>{{ icon('clock') }}공정·이력</h2><span class="meta">자르지 않는 변화(도금·열처리·전처리·도장 → 단계·꼬리), 사용·이동</span></header>
       {% if events %}
       <ul class="list">{% for e in events %}
         <li style="align-items:flex-start"><span class="mono small muted nowrap">{{ e.event_date|d }}</span>
           <span class="chip"><b>{{ e.event_type }}</b></span>
-          <div class="grow small">{{ EVENT_TYPES.get(e.event_type, '') }}{% for k, v in (e.params or {}).items() %} · {{ k }}={{ v }}{% endfor %}
+          <div class="grow small">{{ EVENT_NAMES.get(e.event_type, '') }}{% for k, v in (e.params or {}).items() if v is not none %} · {{ k }}={{ v }}{% endfor %}
             {% if e.specimen_id != spec.id %}<span class="bdg b-inherit">{{ e.specimen.short_id }}</span>{% endif %}</div>
           <span class="small muted">{{ e.user.name if e.user else '' }}</span></li>{% endfor %}</ul>
       {% else %}<div class="empty-note">기록된 이벤트가 없습니다.</div>{% endif %}
@@ -121,7 +122,7 @@
     <section class="card">
       <header><h2>{{ icon('image') }}사진·파일</h2><span class="meta">총 {{ files|length }}개</span></header>
       <div class="body">
-        <div class="drop" id="spec-drop">{{ icon('upload', 20) }}<div>여기로 끌어 놓으면 <b class="mono">{{ spec.short_id }}</b>에 연결됩니다 (파일명에 약식번호가 있으면 그 시편으로).</div></div>
+        <div class="drop" id="spec-drop">{{ icon('upload', 20) }}<div>여기로 끌어 놓으면 <b class="mono">{{ spec.short_id }}</b>에 연결됩니다 (파일명에 각인번호가 있으면 그 시편으로).</div></div>
         <ul class="upl-list" id="spec-upl"></ul>
       </div>
       {% if files %}
@@ -138,49 +139,57 @@
     {% if spec.children %}
     <section class="card">
       <header><h2>{{ icon('tree') }}자손 시편</h2></header>
-      <div class="body">{% macro branch(nodes) %}<ul class="tree">{% for t in nodes %}<li>└ <a href="/specimens/{{ t.spec.short_id }}">{{ t.spec.short_id }}</a> <span class="muted">{{ t.spec.stage_name }} · {{ t.spec.status }}</span>{% if t.children %}{{ branch(t.children) }}{% endif %}</li>{% endfor %}</ul>{% endmacro %}{{ branch(tree) }}</div>
+      <div class="body">{% macro branch(nodes) %}<ul class="tree">{% for t in nodes %}<li>└ <a href="/specimens/{{ t.spec.short_id }}">{{ t.spec.short_id }}</a> <span class="muted mono small">{{ t.spec.display_id }}</span> <span class="muted">{{ t.spec.kind_name }} · {{ t.spec.status }}</span>{% if t.children %}{{ branch(t.children) }}{% endif %}</li>{% endfor %}</ul>{% endmacro %}{{ branch(tree) }}</div>
     </section>
     {% endif %}
   </div>
 </div>
 
-<!-- 분기 대화상자 (7장 P2) -->
+<!-- 자르기 대화상자 (7장 P2, 시편번호 체계 3.2절) -->
+{% if split %}
 <div class="modal" x-show="sp.open" x-transition.opacity @keydown.escape.window="sp.open=false" style="display:none">
   <div class="dlg" @click.outside="sp.open=false">
-    <header><h3>분기 — {{ spec.short_id }}의 자식 시편 일괄 생성</h3><button class="btn ghost sm x" @click="sp.open=false">{{ icon('x', 16) }}</button></header>
+    <header><h3>자르기 — {{ spec.short_id }}의 자식 시편 일괄 생성</h3><button class="btn ghost sm x" @click="sp.open=false">{{ icon('x', 16) }}</button></header>
     <div class="body form">
+      <p class="small muted" style="margin:0">{{ split.name }} (1~{{ split.max }}). {% if split.level == 'branch' %}전폭 → 블랭크는 단계가 A → B로 바뀝니다.{% else %}단계({{ spec.stage }})·조건 꼬리는 그대로 물려받습니다.{% endif %}</p>
       <div class="row">
-        <label class="f">단계<select class="in" x-model="sp.stage" @change="suggest()">
-          {% for st, n in split_suggest.items() %}<option value="{{ st }}">{{ st }} · {{ {'C':'시험편','S':'분석 조각'}[st] }}</option>{% endfor %}</select></label>
-        <label class="f">개수<input class="in num" type="number" min="1" max="200" x-model.number="sp.count" @input="suggest()"></label>
-        <label class="f">시작 번호<input class="in num mono" type="number" min="0" max="9999" x-model.number="sp.start" @input.debounce.250ms="check()"></label>
+        <label class="f">개수<input class="in num" type="number" min="1" max="{{ split.max }}" x-model.number="sp.count" @input.debounce.250ms="suggest()"></label>
+        <label class="f">시작 번호<input class="in num mono" type="number" min="1" max="{{ split.max }}" x-model.number="sp.start" @input.debounce.250ms="check()"></label>
+        <label class="f">쓸 과제<select class="in mono" x-model="sp.project">
+          {% for p in projects %}<option value="{{ p.project_code }}">{{ p.project_code }} · {{ p.project_name[:16] }}</option>{% endfor %}</select></label>
       </div>
-      <div class="small mono">→ <b x-text="range()"></b> <span class="muted">(과제·공정런·원소재·조건부 상속)</span></div>
+      <div class="small mono">→ 각인번호 <b x-text="sp.range"></b> <span class="muted">(코일·공정런·조건 상속)</span></div>
+      <div class="small" x-show="sp.project !== PROJ">다른 과제(<b x-text="sp.project"></b>)로 씁니다 — 자식은 그 과제코드를 받고, {{ spec.short_id }}에는 사용 이력이 남습니다.</div>
       <div class="flash err" x-show="sp.conflicts.length" x-text="'이미 쓰인 번호: ' + sp.conflicts.join(', ')"></div>
       <div class="row">
-        <label class="f">크기<input class="in" x-model="sp.size_text" :placeholder="sp.stage==='C' ? '70x150' : '20x20'"></label>
-        <label class="f">채취 위치<select class="in" x-model="sp.sample_position"><option value="">-</option><option>DS</option><option>C</option><option>WS</option></select></label>
+        <label class="f">크기<input class="in" x-model="sp.size_text" placeholder="{{ {'branch':'200x300','cut':'70x150','piece':'20x20'}[split.level] }}"></label>
+        <label class="f">폭 위치<select class="in" x-model="sp.sample_position"><option value="">-</option><option>DS</option><option>C</option><option>WS</option></select></label>
         <label class="f">방향<select class="in" x-model="sp.rolling_direction"><option value="">-</option><option>RD</option><option>TD</option></select></label>
         <label class="f">평가면<select class="in" x-model="sp.surface_side"><option value="">-</option><option>TOP</option><option>BOTTOM</option></select></label>
       </div>
-      <label class="f">보관 위치<input class="in" x-model="sp.storage_location"></label>
+      <label class="f">보관 위치<input class="in" x-model="sp.storage_location" placeholder="{{ spec.storage_location or '' }}"></label>
       <label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox" x-model="sp.consume"> 부모 {{ spec.short_id }}를 모두 잘라 썼음 (상태 → CONSUMED)</label>
     </div>
-    <footer><button class="btn" @click="sp.open=false">취소</button><button class="btn primary" :disabled="sp.busy || sp.conflicts.length" @click="doSplit()">분기 저장</button></footer>
+    <footer><button class="btn" @click="sp.open=false">취소</button><button class="btn primary" :disabled="sp.busy || sp.conflicts.length > 0" @click="doSplit()">자르기 저장</button></footer>
   </div>
 </div>
+{% endif %}
 
 <!-- 이벤트 대화상자 -->
 <div class="modal" x-show="ev.open" x-transition.opacity style="display:none">
   <div class="dlg" @click.outside="ev.open=false">
-    <header><h3>공정 이벤트 추가</h3><button class="btn ghost sm x" @click="ev.open=false">{{ icon('x', 16) }}</button></header>
+    <header><h3>공정·이벤트 추가</h3><button class="btn ghost sm x" @click="ev.open=false">{{ icon('x', 16) }}</button></header>
     <div class="body form">
       <div class="row">
-        <label class="f">종류<select class="in" x-model="ev.type">{% for k, v in EVENT_TYPES.items() %}<option value="{{ k }}">{{ k }} · {{ v }}</option>{% endfor %}</select></label>
+        <label class="f">종류<select class="in" x-model="ev.type" @change="ev.code = ((CODES[ev.type] || [])[0] || [''])[0]">{% for k, v in EVENT_TYPES.items() %}<option value="{{ k }}">{{ k }} · {{ v }}</option>{% endfor %}</select></label>
         <label class="f">일자<input class="in" type="date" x-model="ev.date"></label>
+        <label class="f" x-show="CODES[ev.type]">조건 코드<select class="in mono" x-model="ev.code">
+          <template x-for="c in (CODES[ev.type] || [])"><option :value="c[0]" x-text="PREFIX[ev.type] + c[0] + ' · ' + c[1]"></option></template></select></label>
       </div>
-      <label class="f">내용 (키=값, 쉼표로 구분 · 예: type=Cr-free, product=XYZ, dry_T=150)<input class="in" x-model="ev.text"></label>
-      <p class="small muted" style="margin:0">MOVE는 location=…으로 보관 위치를 바꾸고, SCRAP은 상태를 SCRAP으로 바꿉니다.</p>
+      <label class="f">내용 (키=값, 쉼표로 구분 · 예: product=XYZ, dry_T=150)<input class="in" x-model="ev.text"></label>
+      <p class="small muted" style="margin:0">열처리(D)·도장(E)은 단계를 올리고, 전처리는 단계를 두고, 셋 다 전체번호 꼬리에 코드(H·T·P)를 붙입니다 — 각인번호는 그대로.
+        다른 사람 시편이면 과제·담당이 나에게 넘어오고 이력이 남습니다. 코드는 관리 › 코드표에서 등록합니다.
+        MOVE는 location=…으로 보관 위치를 바꾸고, SCRAP은 상태를 SCRAP으로 바꿉니다.</p>
     </div>
     <footer><button class="btn" @click="ev.open=false">취소</button><button class="btn primary" @click="addEvent()">저장</button></footer>
   </div>
@@ -190,39 +199,35 @@
 {% block scripts %}
 <script>
 const SID = "{{ spec.short_id }}", PROJ = "{{ spec.project_code }}";
-const SUG = {{ split_suggest|tojson }};
+const SPLIT = {{ split|tojson }};
+const CODES = {{ treat_codes|tojson }};
+const PREFIX = {HEAT: "H", PRETREAT: "T", PAINT: "P"};
 function specPage() {
-  const first = Object.keys(SUG)[0] || "C";
   return {
     basis: "eff",
-    sp: {open: false, stage: first, count: 1, start: SUG[first] || 1, conflicts: [], busy: false, size_text: "", sample_position: "",
-         rolling_direction: "", surface_side: "", storage_location: "", consume: false},
-    ev: {open: false, type: "POST_TREAT", date: new Date().toISOString().slice(0, 10), text: ""},
+    sp: {open: false, count: 1, start: SPLIT ? SPLIT.start : 1, project: PROJ, range: SPLIT ? SPLIT.label : "", conflicts: [],
+         busy: false, size_text: "", sample_position: "", rolling_direction: "", surface_side: "", storage_location: "", consume: false},
+    ev: {open: false, type: "HEAT", code: (CODES.HEAT[0] || [""])[0], date: new Date().toISOString().slice(0, 10), text: ""},
     openSplit() { this.sp.open = true; this.suggest(); },
-    range() {
-      const a = `${PROJ}-${this.sp.stage}${String(this.sp.start).padStart(4, "0")}`;
-      if (this.sp.count <= 1) return a;
-      return `${a} ~ ${this.sp.stage}${String(this.sp.start + this.sp.count - 1).padStart(4, "0")} (${this.sp.count}개)`;
-    },
     async suggest() {
-      const prefer = parseInt(SID.slice(-4), 10);
       try {
-        const r = await LIMS.api("GET", `/api/numbering/next?project=${PROJ}&stage=${this.sp.stage}&count=${this.sp.count || 1}&prefer=${prefer}`);
-        this.sp.start = r.suggest; this.sp.conflicts = [];
+        const r = await LIMS.api("GET", `/api/specimens/${SID}/next?count=${this.sp.count || 1}`);
+        this.sp.start = r.suggest; this.sp.conflicts = []; this.showRange(r);
       } catch (e) { LIMS.fail(e); }
     },
     async check() {
       try {
-        const r = await LIMS.api("GET", `/api/numbering/next?project=${PROJ}&stage=${this.sp.stage}&count=${this.sp.count || 1}&start=${this.sp.start}`);
-        this.sp.conflicts = r.conflicts;
-      } catch (e) { LIMS.fail(e); }
+        const r = await LIMS.api("GET", `/api/specimens/${SID}/next?count=${this.sp.count || 1}&start=${this.sp.start}`);
+        this.sp.conflicts = r.conflicts; this.showRange(r);
+      } catch (e) { this.sp.range = ""; LIMS.fail(e); }
     },
+    showRange(r) { this.sp.range = r.first === r.last ? r.first : `${r.first} ~ ${r.last} (${this.sp.count}개)`; },
     async doSplit() {
       this.sp.busy = true;
       const s = this.sp;
       try {
         const r = await LIMS.api("POST", `/api/specimens/${SID}/split`, {
-          stage: s.stage, count: s.count, serial_start: s.start, size_text: s.size_text || null,
+          count: s.count, start: s.start, project_code: s.project, size_text: s.size_text || null,
           sample_position: s.sample_position || null, rolling_direction: s.rolling_direction || null,
           surface_side: s.surface_side || null, storage_location: s.storage_location || null, mark_parent_consumed: s.consume});
         LIMS.toast(`${r.children.length}개 생성: ${r.children.map(c => c.short_id).join(", ")}`, "ok");
@@ -236,7 +241,7 @@ function specPage() {
     async addEvent() {
       const params = {};
       this.ev.text.split(",").forEach(p => { const [k, ...v] = p.split("="); if (k && k.trim()) params[k.trim()] = v.join("=").trim(); });
-      try { await LIMS.api("POST", `/api/specimens/${SID}/events`, {event_type: this.ev.type, event_date: this.ev.date, params}); location.reload(); }
+      try { await LIMS.api("POST", `/api/specimens/${SID}/events`, {event_type: this.ev.type, event_date: this.ev.date, params, code: CODES[this.ev.type] ? this.ev.code : null}); location.reload(); }
       catch (e) { LIMS.fail(e); }
     },
     async setStatus(v) {

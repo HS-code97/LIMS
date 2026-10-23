@@ -32,7 +32,7 @@ class Effective:
     actual: float | None
     effective: float
     source: str
-    level: str                       # target / run / P / C / S
+    level: str                       # target / run / 시편 단계(A~E)
     inherited_from: str | None = None
     deviation: float | None = None
     out_of_tol: bool = False
@@ -56,7 +56,7 @@ def badge_text(source: str, level: str, inherited_from: str | None) -> str:
         return "세션" if source == "manual" else f"세션·{SOURCE_LABEL.get(source, source)}"
     base = SOURCE_LABEL.get(source, source)
     if inherited_from:
-        return f"{base}·{inherited_from.split('-')[-1]}"
+        return f"{base}·{inherited_from.split('-', 1)[-1]}"
     return base
 
 

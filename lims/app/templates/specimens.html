@@ -1,28 +1,35 @@
 {% extends "base.html" %}
 {% block title %}시편{% endblock %}
 {% block content %}
-<div class="page-head"><div><div class="crumb">시편</div><h1 style="font-family:var(--f-body)">시편 목록</h1></div>
-  <div class="acts"><a class="btn" href="/api/export/xlsx?project={{ f.project }}&stage={{ f.stage }}&status={{ f.status }}">{{ icon('download', 16) }} Excel</a></div></div>
+<div class="page-head"><div><div class="crumb">시편</div><h1 style="font-family:var(--f-body)">시편 목록 · 재고</h1></div>
+  <div class="acts"><a class="btn primary" href="/specimens/intake">{{ icon('plus', 16) }} 전폭시편 입고</a>
+    <a class="btn" href="/api/export/xlsx?project={{ f.project }}&stage={{ f.stage }}&status={{ f.status }}">{{ icon('download', 16) }} Excel</a></div></div>
 <form class="card body" style="display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin-bottom:16px" method="get">
   <label class="f">과제<select class="in" name="project"><option value="">전체</option>{% for p in projects %}<option value="{{ p.project_code }}" {% if p.project_code == f.project %}selected{% endif %}>{{ p.label }}</option>{% endfor %}</select></label>
-  <label class="f">단계<select class="in" name="stage"><option value="">전체</option>{% for s, n in [('P','원판'),('C','시험편'),('S','조각')] %}<option value="{{ s }}" {% if s == f.stage %}selected{% endif %}>{{ s }} {{ n }}</option>{% endfor %}</select></label>
+  <label class="f">코일<input class="in mono" name="coil" value="{{ f.coil }}" placeholder="QV3" style="width:80px"></label>
+  <label class="f">단계<select class="in" name="stage"><option value="">전체</option>{% for s, n in STAGES.items() %}<option value="{{ s }}" {% if s == f.stage %}selected{% endif %}>{{ s }} {{ n }}</option>{% endfor %}</select></label>
+  <label class="f">도금<select class="in" name="plated"><option value="">전체</option><option value="1" {% if f.plated == '1' %}selected{% endif %}>도금함</option><option value="0" {% if f.plated == '0' %}selected{% endif %}>도금 안 함</option></select></label>
   <label class="f">상태<select class="in" name="status"><option value="">전체</option>{% for s in statuses %}<option {% if s == f.status %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></label>
   <label class="small" style="display:flex;gap:6px;align-items:center;height:34px"><input type="checkbox" name="mine" value="1" {% if f.mine %}checked{% endif %}> 내 시편만</label>
   {% if user.is_admin %}<label class="small" style="display:flex;gap:6px;align-items:center;height:34px"><input type="checkbox" name="deleted" value="1" {% if f.deleted %}checked{% endif %}> 삭제한 시편</label>{% endif %}
   <button class="btn primary">조회</button>
+  <a class="btn" href="/specimens?status=AVAILABLE">보관 중(쓸 수 있는 시편)</a>
 </form>
 <section class="card"><div class="tablewrap"><table class="t">
-  <tr><th>약식번호</th><th>정식번호</th><th>단계</th><th>상태</th><th>부모</th><th>공정런</th><th>원소재</th><th>크기</th><th>보관</th><th>담당</th></tr>
+  <tr><th>각인번호</th><th>전체번호</th><th>단계</th><th>모양</th><th>상태</th><th>부모</th><th>공정런</th><th>코일</th><th>크기</th><th>보관</th><th>담당</th></tr>
   {% for s in specs %}
   <tr><td><a class="mono" href="/specimens/{{ s.short_id }}"><b>{{ s.short_id }}</b></a></td><td class="mono small">{{ s.display_id }}</td>
-    <td><span class="stage">{{ s.stage }}</span></td><td><span class="chip st-{{ s.status }}">{{ s.status }}</span></td>
+    <td><span class="stage" title="{{ s.stage_name }}">{{ s.stage }}</span> <span class="small muted">{{ s.stage_name }}</span></td>
+    <td class="small">{{ s.kind_name }}</td><td><span class="chip st-{{ s.status }}">{{ s.status }}</span></td>
     <td class="mono small">{% if s.parent %}<a href="/specimens/{{ s.parent.short_id }}">{{ s.parent.short_id }}</a>{% endif %}</td>
     <td class="mono small">{% if s.process_run %}<a href="/process-runs/{{ s.process_run.run_no }}">{{ s.process_run.run_no }}</a>{% endif %}</td>
     <td class="mono small">{{ s.material.coil_no if s.material else '' }}</td><td class="mono small">{{ s.size_text or '' }}</td>
     <td class="small">{{ s.storage_location or '' }}</td><td class="small">{{ s.owner.name if s.owner else '' }}
       {% if f.deleted %}<button class="btn sm" onclick="restoreSpec('{{ s.short_id }}')">되살리기</button>{% endif %}</td></tr>
-  {% else %}<tr class="empty-row"><td colspan="10">조건에 맞는 시편이 없습니다.</td></tr>{% endfor %}
-</table></div></section>
+  {% else %}<tr class="empty-row"><td colspan="11">조건에 맞는 시편이 없습니다.</td></tr>{% endfor %}
+</table></div>
+<div class="body small muted">각인번호 = 시편에 새긴 번호(코일-가지-후절단-조각, 평생 그대로). 전체번호 = 코일-과제-단계-가지…-조건 꼬리(DB에만, 과제·단계·조건이 바뀌면 함께 바뀜).
+  단계 문자는 지금 상태일 뿐 앞 단계를 다 거쳤다는 뜻이 아닙니다 — 거친 공정은 꼬리와 상세 화면에서 확인합니다.</div></section>
 {% endblock %}
 {% block scripts %}
 {% if f.deleted %}<script>

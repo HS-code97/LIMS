@@ -18,11 +18,11 @@ router = APIRouter()
 
 @router.get("/go")
 def go(q: str, user: User = Depends(require_user), db: Session = Depends(get_db)):
-    """스캐너·검색창 Enter: 약식번호가 정확히 맞으면 바로 시편 상세로."""
+    """스캐너·검색창 Enter: 각인번호(또는 전체번호)가 맞으면 바로 시편 상세로."""
     q = q.strip().upper()
-    m = workflow.SHORT_RE.search(q)
-    if m and workflow.find_specimen(db, m.group(0)):
-        return RedirectResponse(f"/specimens/{m.group(0)}", 303)
+    spec = workflow.find_specimen(db, q)             # v2.3 번호(이관 시편)도 찾음
+    if spec is not None:
+        return RedirectResponse(f"/specimens/{spec.short_id}", 303)
     hits = search.autocomplete(db, q, 2)
     if len(hits) == 1:
         return RedirectResponse(hits[0]["href"], 303)

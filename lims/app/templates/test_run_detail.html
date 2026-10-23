@@ -25,7 +25,7 @@
 </section>
 
 <div class="drop" id="tr-drop" style="margin-bottom:16px">{{ icon('upload', 24) }}
-  <div><b>사진 폴더를 여기로 끌어 놓으세요</b> — 파일명이 <code>26P4-C0102_W03_front.jpg</code> 형식이면 시편·회차 셀에 자동 배치합니다. 매칭되지 않은 파일은 내 미분류함으로 갑니다.
+  <div><b>사진 폴더를 여기로 끌어 놓으세요</b> — 파일명이 <code>QV3-102-01_W03_front.jpg</code> 형식이면 시편·회차 셀에 자동 배치합니다. 매칭되지 않은 파일은 내 미분류함으로 갑니다.
   <ul class="upl-list" id="tr-upl"></ul></div></div>
 
 <div class="grid-wrap">
@@ -72,7 +72,7 @@
   <div class="dlg" @click.outside="bd.open=false">
     <header><h3>시편 탑승 — {{ tr.test_run_no }}</h3><button class="btn ghost sm x" @click="bd.open=false">{{ icon('x', 16) }}</button></header>
     <div class="body form">
-      <label class="f">약식번호 스캔 후 Enter (슬롯은 공백 뒤에: <span class="mono">26P4-C0104 A-05</span>)
+      <label class="f">각인번호 스캔 후 Enter (슬롯은 공백 뒤에: <span class="mono">QV3-104-01 A-05</span>)
         <input class="in mono" x-model="bd.scan" @keydown.enter.prevent="bd.list.push(bd.scan.trim()); bd.scan=''"></label>
       <ul class="upl-list"><template x-for="(x,i) in bd.list" :key="i"><li class="mono" x-text="x"></li></template></ul>
     </div>

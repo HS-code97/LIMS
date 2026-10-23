@@ -1,4 +1,5 @@
-"""시편 목록·상세·계보·분기·이벤트, 각인 CSV·라벨 (3.6절, 5.1 #3, 7장 P2)."""
+"""시편 입고·목록·상세·계보·자르기·공정(열처리·전처리·도장)·이벤트, 각인 CSV·라벨
+(시편번호 체계 v3.0, 5.1 #3, 7장 P2)."""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -9,18 +10,20 @@ from sqlalchemy.orm import Session
 
 from ..auth import can_edit, ensure_can_edit, require_admin, require_user
 from ..db import get_db
-from ..models import (Attachment, ProcessRun, Project, RunSpecimen, Specimen, SpecimenEvent, TestResult, TestRun,
-                      User)
-from ..schemas import EventIn, SplitIn
-from ..services import actuals, export, lineage, numbering, workflow
+from ..models import (Attachment, Material, MasterCode, ProcessRun, Project, RunSpecimen, Specimen, SpecimenEvent,
+                      TestResult, TestRun, User)
+from ..schemas import EventIn, IntakeIn, SplitIn, TreatIn
+from ..services import actuals, export, lineage, marking, numbering, workflow
 from ..services import param_dict as pdict
 from ..services.templates_engine import cell_text
 from ..web import render
 
 router = APIRouter()
 
-EVENT_TYPES = {"POST_TREAT": "후처리", "PAINT": "도장", "HEAT": "열처리", "MOVE": "보관 이동", "SCRAP": "폐기",
-               "NOTE": "메모"}
+# 직접 넣는 이벤트. HEAT·PRETREAT·PAINT는 단계·꼬리를 바꾸는 공정(workflow.treat), PLATE·USE는 시스템이 남김.
+EVENT_TYPES = {"HEAT": "열처리", "PRETREAT": "전처리(화성 등)", "PAINT": "도장", "MOVE": "보관 이동",
+               "SCRAP": "폐기", "NOTE": "메모"}
+EVENT_NAMES = EVENT_TYPES | {"PLATE": "도금", "USE": "사용(과제·담당 변경)", "POST_TREAT": "후처리(이전 기록)"}
 STATUSES = ("AVAILABLE", "IN_TEST", "CONSUMED", "SCRAP")
 
 
@@ -33,7 +36,9 @@ def get_spec(db: Session, short_id: str) -> Specimen:
 
 @router.get("/specimens")
 def list_page(request: Request, project: str = "", stage: str = "", status: str = "", mine: int = 0,
-              deleted: int = 0, user: User = Depends(require_user), db: Session = Depends(get_db)):
+              deleted: int = 0, coil: str = "", plated: str = "", user: User = Depends(require_user),
+              db: Session = Depends(get_db)):
+    """시편 재고: 단계·상태·코일·도금 여부로 거름. 보관함에 있는 쓸 수 있는 시편 찾기(상태 AVAILABLE)."""
     deleted = int(bool(deleted and user.is_admin))      # 삭제한 시편 보기·되살리기는 관리자만
     q = select(Specimen).where(Specimen.is_deleted.is_(bool(deleted)))
     if project:
@@ -44,10 +49,23 @@ def list_page(request: Request, project: str = "", stage: str = "", status: str 
         q = q.where(Specimen.status == status)
     if mine:
         q = q.where(Specimen.owner_id == user.id)
+    if coil:
+        q = q.where(Specimen.coil_code == coil.strip().upper())
     specs = db.scalars(q.order_by(Specimen.created_at.desc(), Specimen.id.desc()).limit(500)).all()
+    if plated in ("0", "1"):         # 거친 공정은 JSON이라 파이썬에서 거름
+        specs = [s for s in specs if s.has_step("PLATE") == (plated == "1")]
     projects = db.scalars(select(Project).order_by(Project.project_code.desc())).all()
     return render(request, "specimens.html", nav="spec", specs=specs, projects=projects, f=dict(
-        project=project, stage=stage, status=status, mine=mine, deleted=deleted), statuses=STATUSES)
+        project=project, stage=stage, status=status, mine=mine, deleted=deleted, coil=coil, plated=plated),
+        statuses=STATUSES, STAGES=marking.STAGES)
+
+
+@router.get("/specimens/intake")
+def intake_page(request: Request, user: User = Depends(require_user), db: Session = Depends(get_db)):
+    projects = db.scalars(select(Project).order_by(Project.is_common, Project.project_code.desc())).all()
+    coils = db.scalars(select(Material).where(Material.coil_code.is_not(None))
+                       .order_by(Material.received_date.desc().nulls_last(), Material.id.desc()).limit(50)).all()
+    return render(request, "specimen_intake.html", nav="spec", projects=projects, coils=coils)
 
 
 @router.post("/api/specimens/{short_id}/restore")
@@ -96,15 +114,25 @@ def detail_context(db: Session, spec: Specimen) -> dict:
                        .order_by(Attachment.uploaded_at.desc(), Attachment.id.desc())).all()
     events = db.scalars(select(SpecimenEvent).where(SpecimenEvent.specimen_id.in_(ids))
                         .order_by(SpecimenEvent.event_date.desc(), SpecimenEvent.id.desc())).all()
-    split_suggest = {}
-    for st in {"P": ("C", "S"), "C": ("S",), "S": ()}[spec.stage]:
+    split = None
+    level = numbering.child_level(spec)
+    if level is not None:
         try:
-            split_suggest[st] = numbering.next_free(db, spec.project_code, st, 1, prefer=int(spec.serial_no))
+            n = numbering.next_child(db, spec, 1)
+            split = {"level": level, "name": numbering.LEVELS[level][0], "start": n,
+                     "max": numbering.LEVELS[level][2], "label": numbering.label_of(spec, n),
+                     "stage": "B" if spec.stage == "A" else spec.stage}
         except numbering.NumberingError:
             pass
+    treat_codes = {k: [(c.code, c.name) for c in db.scalars(select(MasterCode).where(
+        MasterCode.category == k, MasterCode.is_active.is_(True)).order_by(MasterCode.code))]
+        for k in ("HEAT", "PRETREAT", "PAINT")}
+    projects = db.scalars(select(Project).order_by(Project.is_common, Project.project_code.desc())).all()
     return {"spec": spec, "chain": lineage.chain(spec), "tree": lineage.descendants_tree(spec), "params": params,
             "actual_code": actual_code, "tests": tests, "files": files, "events": events,
-            "split_suggest": split_suggest, "EVENT_TYPES": EVENT_TYPES, "STATUSES": STATUSES}
+            "split": split, "EVENT_TYPES": EVENT_TYPES, "EVENT_NAMES": EVENT_NAMES, "STATUSES": STATUSES,
+            "processes": lineage.processes(spec), "treat_codes": treat_codes, "projects": projects,
+            "TREATMENTS": marking.TREATMENTS}
 
 
 @router.get("/specimens/{short_id}")
@@ -117,8 +145,10 @@ def detail_page(request: Request, short_id: str, user: User = Depends(require_us
 # ── API ──────────────────────────────────────────────────────────
 def spec_json(s: Specimen) -> dict:
     return {"short_id": s.short_id, "display_id": s.display_id, "engraved_label": s.engraved_label,
-            "stage": s.stage, "status": s.status, "project_code": s.project_code,
-            "condition_code": s.condition_code, "parent": s.parent.short_id if s.parent else None,
+            "stage": s.stage, "stage_name": s.stage_name, "kind": s.kind_name, "status": s.status,
+            "project_code": s.project_code, "coil_code": s.coil_code, "tail": s.tail,
+            "steps": s.steps or [], "condition_code": s.condition_code,
+            "parent": s.parent.short_id if s.parent else None,
             "process_run": s.process_run.run_no if s.process_run else None,
             "material": s.material.coil_no if s.material else None, "size_text": s.size_text,
             "sample_position": s.sample_position, "rolling_direction": s.rolling_direction,
@@ -153,10 +183,64 @@ def get_params(short_id: str, user: User = Depends(require_user), db: Session = 
             for k, e in ra.all_for(spec).items()}
 
 
+@router.post("/api/specimens/intake")
+def intake_api(data: IntakeIn, user: User = Depends(require_user), db: Session = Depends(get_db)):
+    specs = workflow.intake(db, data, user.id)
+    db.commit()
+    ids = ",".join(s.short_id for s in specs)
+    return {"specimens": [spec_json(s) for s in specs], "coil_code": specs[0].coil_code,
+            "engrave_csv": "/api/labels/engrave.csv?ids=" + ids, "label_pdf": "/api/labels/print.pdf?ids=" + ids}
+
+
+@router.get("/api/coils/suggest")
+def coil_suggest(coil_no: str, count: int = 1, user: User = Depends(require_user), db: Session = Depends(get_db)):
+    """현장 코일번호 → 코일코드 제안 + 다음 전폭번호. 이미 등록된 코일이면 그 코드."""
+    base, pos = marking.split_field_coil(coil_no)
+    mat = db.scalar(select(Material).where(Material.coil_no == base))
+    count = max(1, min(count, 9))
+    try:
+        code, derived = marking.suggest_coil_code(db, base)
+        sheet = numbering.next_sheet(db, code, count)
+    except (marking.MarkingError, numbering.NumberingError) as e:
+        raise HTTPException(422, str(e))
+    return {"coil_no": base, "position": pos, "coil_code": code, "existing": bool(mat and mat.coil_code),
+            "derived": derived, "sheet_start": sheet,
+            "marks": [marking.mark_id(code, str(n)) for n in range(sheet, sheet + count)]}
+
+
+@router.get("/api/plating/candidates")
+def platable(coil: str = "", user: User = Depends(require_user), db: Session = Depends(get_db)):
+    """도금할 블랭크(B 단계, 아직 도금 안 함, 쓸 수 있는 상태, 더 자르지 않음): 공정런 등록 화면의 [블랭크 불러오기].
+    전폭시편(A)도 각인번호를 직접 넣으면 도금할 수 있습니다."""
+    q = select(Specimen).where(Specimen.is_deleted.is_(False), Specimen.status == "AVAILABLE", Specimen.stage == "B")
+    if coil:
+        q = q.where(Specimen.coil_code == coil.strip().upper())
+    specs = [s for s in db.scalars(q.order_by(Specimen.short_id).limit(300))
+             if not s.has_step("PLATE") and not any(not c.is_deleted for c in s.children)]
+    return [{"short_id": s.short_id, "display_id": s.display_id, "project_code": s.project_code,
+             "owner": s.owner.name if s.owner else None, "storage_location": s.storage_location} for s in specs]
+
+
+@router.get("/api/specimens/{short_id}/next")
+def next_numbers(short_id: str, count: int = 1, start: int | None = None, user: User = Depends(require_user),
+                 db: Session = Depends(get_db)):
+    """자를 때 다음 빈 번호 제안 + (start를 주면) 충돌 검사."""
+    parent = get_spec(db, short_id)
+    count = max(count, 1)
+    try:
+        n = numbering.next_child(db, parent, count)
+        clash = numbering.child_conflicts(db, parent, start, count) if start is not None else []
+        first = start if start is not None else n
+        labels = [numbering.label_of(parent, first), numbering.label_of(parent, first + count - 1)]
+    except (numbering.NumberingError, marking.MarkingError) as e:
+        raise HTTPException(422, str(e))
+    return {"suggest": n, "conflicts": clash, "first": labels[0], "last": labels[1]}
+
+
 @router.post("/api/specimens/{short_id}/split")
 def split_api(short_id: str, data: SplitIn, user: User = Depends(require_user), db: Session = Depends(get_db)):
+    """다른 연구원도 쓸 수 있는 시편을 잘라 자기 과제로 쓸 수 있습니다(부모에 USE 이력). 부모는 바뀌지 않음."""
     parent = get_spec(db, short_id)
-    ensure_can_edit(user, parent.owner_id)
     kids = workflow.split(db, parent, data, user.id)
     db.commit()
     return {"children": [spec_json(k) for k in kids], "parent_status": parent.status,
@@ -164,12 +248,26 @@ def split_api(short_id: str, data: SplitIn, user: User = Depends(require_user), 
             "label_pdf": "/api/labels/print.pdf?ids=" + ",".join(k.short_id for k in kids)}
 
 
+@router.post("/api/specimens/{short_id}/treat")
+def treat_api(short_id: str, data: TreatIn, user: User = Depends(require_user), db: Session = Depends(get_db)):
+    """열처리·전처리·도장: 같은 시편의 단계·꼬리가 바뀜(각인번호 그대로). 다른 사람 시편이면 과제·담당이 넘어옴."""
+    spec = workflow.treat(db, get_spec(db, short_id), data, user.id)
+    db.commit()
+    return spec_json(spec)
+
+
 @router.post("/api/specimens/{short_id}/events")
 def add_event(short_id: str, data: EventIn, user: User = Depends(require_user), db: Session = Depends(get_db)):
     spec = get_spec(db, short_id)
-    ensure_can_edit(user, spec.owner_id)        # SCRAP·MOVE는 상태·보관 위치를 바꾸므로 소유자·관리자만
     if data.event_type not in EVENT_TYPES:
         raise HTTPException(422, f"이벤트 종류: {', '.join(EVENT_TYPES)}")
+    if data.event_type in marking.TREATMENTS:     # 단계·꼬리를 바꾸는 공정
+        params = {k: v for k, v in data.params.items() if k != "code"}
+        spec = workflow.treat(db, spec, TreatIn(kind=data.event_type, code=data.code or str(data.params.get("code", "")),
+                                                event_date=data.event_date, params=params), user.id)
+        db.commit()
+        return {"id": None, "specimen": spec_json(spec)}
+    ensure_can_edit(user, spec.owner_id)        # SCRAP·MOVE는 상태·보관 위치를 바꾸므로 소유자·관리자만
     ev = SpecimenEvent(specimen_id=spec.id, event_type=data.event_type, params=data.params,
                        event_date=data.event_date, user_id=user.id)
     db.add(ev)

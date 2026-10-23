@@ -7,6 +7,7 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from ..models import EffectiveParam, Material, ProcessRun, RunSpecimen, Specimen, TestRun
+from . import marking
 from . import param_dict as pdict
 
 BASIS = {"effective": "대표값(실측 우선)", "target": "목표 기준", "actual": "실측 있는 것만"}
@@ -57,11 +58,13 @@ def build(qy: Query):
     """검색 SELECT 문 (DB 방언과 무관하게 구성 — PostgreSQL 컴파일 검사에도 씀)."""
     stmt = select(Specimen).where(Specimen.is_deleted.is_(False))
     if qy.q:
-        like = f"%{qy.q.upper()}%"
+        q = marking.find_mark(qy.q) or qy.q.upper()       # 전체번호를 넣으면 각인번호로
+        like = f"%{q}%"
         stmt = stmt.outerjoin(Material, Material.id == Specimen.material_id) \
                    .outerjoin(ProcessRun, ProcessRun.id == Specimen.process_run_id) \
                    .where(or_(Specimen.short_id.like(like), Material.coil_no.like(like),
-                              ProcessRun.run_no.like(like), Specimen.condition_code.like(like)))
+                              ProcessRun.run_no.like(like), Specimen.condition_code.like(like),
+                              Specimen.legacy_id.like(like)))
     if qy.project:
         stmt = stmt.where(Specimen.project_code == qy.project)
     if qy.stage:
@@ -83,7 +86,7 @@ def build(qy: Query):
         if f.hi is not None:
             conds.append(col <= f.hi)
         stmt = stmt.join(ep, and_(*conds))
-    return stmt.order_by(Specimen.project_code, Specimen.stage, Specimen.serial_no).limit(qy.limit)
+    return stmt.order_by(Specimen.short_id).limit(qy.limit)
 
 
 def run(db: Session, qy: Query) -> list[Specimen]:
@@ -99,19 +102,21 @@ def effective_map(db: Session, spec_ids: list[int], keys: list[str]) -> dict[tup
 
 
 def autocomplete(db: Session, q: str, limit: int = 10) -> list[dict]:
-    """상단 검색창 자동완성: 약식번호·코일번호·공정런·시험런."""
+    """상단 검색창 자동완성: 각인번호·코일번호·공정런·시험런."""
     q = q.strip().upper()
     if not q:
         return []
-    like = f"%{q}%"
+    like = f"%{marking.find_mark(q) or q}%"
     out = []
     for s in db.scalars(select(Specimen).where(Specimen.short_id.like(like), Specimen.is_deleted.is_(False))
                         .order_by(Specimen.short_id).limit(limit)):
         out.append({"label": s.short_id, "sub": f"{s.display_id} · {s.stage_name}", "href": f"/specimens/{s.short_id}"})
+    like = f"%{q}%"
     for t in db.scalars(select(TestRun).where(TestRun.test_run_no.like(like)).limit(5)):
         out.append({"label": t.test_run_no, "sub": f"시험런 · {t.equipment or ''}", "href": f"/test-runs/{t.test_run_no}"})
     for r in db.scalars(select(ProcessRun).where(ProcessRun.run_no.like(like)).limit(5)):
         out.append({"label": r.run_no, "sub": f"공정런 · {r.run_date}", "href": f"/process-runs/{r.run_no}"})
-    for m in db.scalars(select(Material).where(Material.coil_no.like(like)).limit(5)):
-        out.append({"label": m.coil_no, "sub": f"원소재 · {m.label}", "href": f"/search?q={m.coil_no}"})
+    for m in db.scalars(select(Material).where(or_(Material.coil_no.like(like), Material.coil_code == q)).limit(5)):
+        href = f"/specimens?coil={m.coil_code}" if m.coil_code else f"/search?q={m.coil_no}"
+        out.append({"label": m.coil_no, "sub": f"코일 · {m.label}", "href": href})
     return out[:limit + 5]

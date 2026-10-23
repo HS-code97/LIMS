@@ -35,7 +35,7 @@ BACKUP_TARGET = os.getenv("LIMS_BACKUP_TARGET", "")                          # �
 WATCH_DIRS = os.getenv("LIMS_WATCH_DIRS", "")                                # 장비 PC 공유 폴더
 PPT_TEMPLATE = os.getenv("LIMS_PPT_TEMPLATE", "")                            # 회사 표준 A4 가로 .pptx
 # 레이저 각인기 CSV 형식
-ENGRAVE_COLUMNS = os.getenv("LIMS_ENGRAVE_COLUMNS", "short_id,display_id,datamatrix_text").split(",")
+ENGRAVE_COLUMNS = os.getenv("LIMS_ENGRAVE_COLUMNS", "short_id,datamatrix_text").split(",")
 ENGRAVE_DELIMITER = os.getenv("LIMS_ENGRAVE_DELIMITER", ",").replace("\\t", "\t")
 ENGRAVE_ENCODING = os.getenv("LIMS_ENGRAVE_ENCODING", "utf-8-sig")           # 장비가 ANSI면 cp949
 ENGRAVE_HEADER = os.getenv("LIMS_ENGRAVE_HEADER", "1") == "1"

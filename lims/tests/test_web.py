@@ -11,6 +11,7 @@ from app.db import SessionLocal
 from app.main import app
 from app.models import Material, ProcessPreset, TestTemplate
 from app.services import param_dict as pdict
+from helpers import api_blanks
 
 
 @pytest.fixture(scope="module")
@@ -37,18 +38,32 @@ def test_login_required():
 def test_full_flow(client):
     with SessionLocal() as db:
         m2 = db.scalar(select(ProcessPreset).where(ProcessPreset.name == "M2"))
-        mat = db.scalar(select(Material).where(Material.coil_no == "POS-26-8891"))
+        mat = db.scalar(select(Material).where(Material.coil_no == "CQV3141"))
         cct = db.scalar(select(TestTemplate).where(TestTemplate.code == "CCT_STD"))
         m2_id, mat_id, cct_id, m2_over = m2.id, mat.id, cct.id, m2.overrides
 
     assert client.get("/api/param-dictionary").json()["dict_version"] == pdict.version()
     assert any(p["name"] == "M2" for p in client.get("/api/presets").json())
-    nxt = client.get("/api/numbering/next?project=26P4&stage=P&count=3").json()
-    start = nxt["suggest"]
+    # 입고 화면·제안: 등록된 코일이면 같은 코드, 다음 전폭번호
+    sug = client.get("/api/coils/suggest?coil_no=CQV3141H&count=2").json()
+    assert sug["coil_code"] == "QV3" and sug["existing"] and sug["position"] == "H"
+    r = client.post("/api/specimens/intake", json={"coil_no": "CQV3141H", "project_code": "A6", "count": 1,
+                                                   "sheet_start": sug["sheet_start"], "coil_code": "ZZ9"})
+    assert r.status_code == 422                                          # 같은 코일은 같은 코드
+    r = client.post("/api/specimens/intake", json={"coil_no": "CQV3141H", "project_code": "A6", "count": 1})
+    assert r.status_code == 200, r.text
+    sheet = r.json()["specimens"][0]["short_id"]
+    nxt = client.get(f"/api/specimens/{sheet}/next?count=3").json()
+    assert nxt["first"] == f"{sheet}{nxt['suggest']:02d}"                 # 전폭 QV3-3 → 블랭크 QV3-301
+    r = client.post(f"/api/specimens/{sheet}/split", json={"count": 3, "start": nxt["suggest"]})
+    assert r.status_code == 200, r.text
+    marks = [c["short_id"] for c in r.json()["children"]]
+    cands = {c["short_id"] for c in client.get("/api/plating/candidates?coil=QV3").json()}
+    assert set(marks) <= cands and sheet not in cands                    # 자른 전폭은 후보 아님
 
     recipe = pdict.preset_recipe(m2_over)
-    body = {"dict_version": pdict.version(), "preset_id": m2_id, "project_code": "26P4", "material_id": mat_id,
-            "run_date": "2026-10-21", "coating_weight_target": 60, "panel_count": 3, "serial_start": start,
+    body = {"dict_version": pdict.version(), "preset_id": m2_id, "project_code": "A6", "material_id": mat_id,
+            "run_date": "2026-10-21", "coating_weight_target": 60, "specimens": marks,
             "recipe": recipe, "changed_from_preset": [], "warnings": [], "note": "web test"}
     # 범위 밖 값은 확인 요구(422)
     bad = {**body, "recipe": pdict.merge(recipe, {"pot.T": 900})}
@@ -58,9 +73,9 @@ def test_full_flow(client):
     assert r.status_code == 200, r.text
     run = r.json()
     run_no, p1 = run["run_no"], run["panels"][0]["short_id"]
-    assert run["panels"][0]["display_id"].startswith("M206K-")
-    # 같은 번호 다시 → 409
-    assert client.post("/api/process-runs", json=body).status_code == 409
+    assert p1 == marks[0] and run["panels"][0]["display_id"] == p1.replace("QV3-", "QV3-A6-C-") + "-M206K"
+    # 이미 도금한 시편 다시 → 422
+    assert client.post("/api/process-runs", json=body).status_code == 422
 
     preview = client.post("/api/process-runs/preview-code", json={"recipe": recipe, "preset_id": m2_id,
                                                                   "coating_weight_target": 45}).json()
@@ -82,14 +97,17 @@ def test_full_flow(client):
     assert any(c["run_no"] == run_no for c in ba["candidates"])
     assert client.post(f"/api/bath-analyses/{ba['id']}/apply", json={"run_nos": [run_no]}).json()["applied_rows"] == 3
 
-    # 분기 → 쿠폰
-    r = client.post(f"/api/specimens/{p1}/split", json={"stage": "C", "count": 2, "serial_start": int(p1[-4:])})
+    # 자르기 → 실험편
+    r = client.post(f"/api/specimens/{p1}/split", json={"count": 2, "start": 1})
     assert r.status_code == 200, r.text
     kids = [k["short_id"] for k in r.json()["children"]]
-    assert client.post(f"/api/specimens/{p1}/split", json={"stage": "C", "count": 1,
-                                                           "serial_start": int(p1[-4:])}).status_code == 409
-    assert client.post(f"/api/specimens/{kids[0]}/events", json={"event_type": "POST_TREAT", "event_date": "2026-10-22",
-                                                                 "params": {"type": "Cr-free"}}).status_code == 200
+    assert kids == [f"{p1}-01", f"{p1}-02"]
+    assert client.post(f"/api/specimens/{p1}/split", json={"count": 1, "start": 1}).status_code == 409
+    r = client.post(f"/api/specimens/{kids[0]}/events", json={"event_type": "PRETREAT", "event_date": "2026-10-22",
+                                                              "code": "01", "params": {"type": "Cr-free"}})
+    assert r.status_code == 200 and r.json()["specimen"]["tail"] == ["M206K", "T01"], r.text
+    assert client.post(f"/api/specimens/{kids[0]}/events", json={"event_type": "NOTE", "event_date": "2026-10-22",
+                                                                 "params": {"memo": "x"}}).status_code == 200
 
     # 시험런 + 결과 + 붙여넣기 + 사진
     r = client.post("/api/test-runs", json={"template_id": cct_id, "equipment": "CCT-01", "conditions": {"salt_conc": 5},
@@ -117,14 +135,18 @@ def test_full_flow(client):
     # 화면 렌더링
     for url in ["/", "/process-runs", "/process-runs/new", f"/process-runs/new?clone={run_no}", f"/process-runs/{run_no}",
                 f"/process-runs/{run_no}?tab=actuals&add=rth.H2", "/specimens", f"/specimens/{p1}", f"/specimens/{kids[0]}",
+                "/specimens/intake", f"/specimens/{sheet}", "/specimens?coil=QV3&plated=0&stage=B",
+                f"/process-runs/new?specimens={marks[1]}",
                 "/test-runs", "/test-runs/new", f"/test-runs/new?specimens={kids[0]}", f"/test-runs/{tr}",
                 f"/test-runs/{tr}/cell/{kids[0]}/1", "/search",
-                "/search?k1=out.cw_top&lo1=50&hi1=55&basis=effective", f"/search?q=26P4&cmp={p1}&cmp={kids[0]}",
-                "/search/suggest?q=26P4"] + [f"/admin?tab={t}" for t in
+                "/search?k1=out.cw_top&lo1=50&hi1=55&basis=effective", f"/search?q=QV3&cmp={p1}&cmp={kids[0]}",
+                "/search/suggest?q=QV3"] + [f"/admin?tab={t}" for t in
                                              ("projects", "materials", "bath", "codes", "presets", "templates", "users")]:
         r = client.get(url)
         assert r.status_code == 200, (url, r.status_code, r.text[:500])
     assert client.get(f"/go?q={kids[0]}", follow_redirects=False).headers["location"] == f"/specimens/{kids[0]}"
+    full = client.get(f"/api/specimens/{kids[0]}").json()["display_id"]          # 전체번호로 스캔해도
+    assert client.get(f"/go?q={full}", follow_redirects=False).headers["location"] == f"/specimens/{kids[0]}"
 
     found = client.get("/api/search?k1=out.cw_top&lo1=50&hi1=55").json()
     assert {p1, *kids} <= {x["short_id"] for x in found["items"]}
@@ -133,7 +155,7 @@ def test_full_flow(client):
     assert client.get("/api/export/xlsx?k1=out.cw_top&lo1=50&hi1=55").content[:2] == b"PK"
     assert client.get(f"/api/test-runs/{tr}/export.xlsx").content[:2] == b"PK"
     csv = client.get(f"/api/labels/engrave.csv?run={run_no}").text
-    assert "short_id,display_id,datamatrix_text" in csv and f"{p1}" in csv
+    assert csv.lstrip("﻿").startswith("short_id,datamatrix_text") and f"{p1},{p1}" in csv and "M206K" not in csv   # 꼬리는 각인 안 함
     assert client.get(f"/api/labels/print.pdf?test_run={tr}").content[:4] == b"%PDF"
 
     assert client.post(f"/api/test-runs/{tr}/finish").json()["status"] == "DONE"
@@ -143,4 +165,4 @@ def test_full_flow(client):
 def test_admin_project_code(client):
     r = client.post("/admin/projects", data={"company_project_no": "2026P9994", "project_name": "테스트 과제"},
                     follow_redirects=False)
-    assert r.status_code == 303 and "26PA" in r.headers["location"]     # 26P4가 이미 있어 26PA
+    assert r.status_code == 303 and "C6" in r.headers["location"]       # A6·B6가 있어 다음 등록 순서 C6

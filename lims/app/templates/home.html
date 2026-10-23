@@ -56,7 +56,7 @@
     <section class="card">
       <header><h2>{{ icon('inbox') }}내 미분류 파일함</h2><span class="meta">파일명에서 시편을 찾지 못한 파일 (올린 사람에게만 보임)</span></header>
       <div class="body">
-        <div class="drop" id="home-drop">{{ icon('upload', 22) }}<div>파일·폴더를 끌어 놓으면 <code>26P4-C0102_W03_front.jpg</code>처럼 파일명의 약식번호로 자동 연결합니다.</div></div>
+        <div class="drop" id="home-drop">{{ icon('upload', 22) }}<div>파일·폴더를 끌어 놓으면 <code>QV3-102-01_W03_front.jpg</code>처럼 파일명의 각인번호로 자동 연결합니다.</div></div>
         <ul class="upl-list" id="home-upl"></ul>
       </div>
       {% if unmatched %}
@@ -66,7 +66,7 @@
           {% if a.thumb_path %}<img src="/files/{{ a.id }}/thumb" alt="" width="40" height="40" style="object-fit:cover;border-radius:3px">{% else %}<span class="chip">{{ a.kind }}</span>{% endif %}
           <div class="grow"><a class="mono small" href="/files/{{ a.id }}" target="_blank">{{ a.original_name }}</a>
             <div class="small muted">{{ a.uploaded_at|d }}</div></div>
-          <input class="in mono" style="width:130px" placeholder="26P4-C0102" x-model="sid" @keydown.enter="link({{ a.id }}, sid)">
+          <input class="in mono" style="width:130px" placeholder="QV3-102-01" x-model="sid" @keydown.enter="link({{ a.id }}, sid)">
           <button class="btn sm" @click="link({{ a.id }}, sid)">연결</button>
         </li>
         {% endfor %}
@@ -90,7 +90,7 @@
 <script>
 LIMS.uploader(document.getElementById("home-drop"), {list: document.getElementById("home-upl"), onDone: () => setTimeout(() => location.reload(), 1200)});
 async function link(id, sid) {
-  if (!sid) return LIMS.toast("약식번호를 입력하세요", "err");
+  if (!sid) return LIMS.toast("각인번호를 입력하세요", "err");
   try { await LIMS.api("PATCH", `/api/files/${id}`, {short_id: sid.trim().toUpperCase()}); LIMS.toast(`${sid.toUpperCase()}에 연결했습니다`, "ok"); setTimeout(() => location.reload(), 600); }
   catch (e) { LIMS.fail(e); }
 }

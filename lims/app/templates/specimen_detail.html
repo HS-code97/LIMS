@@ -67,24 +67,35 @@
   <div class="stack">
     <section class="card">
       <header><h2>{{ icon('gauge') }}공정 조건 (목표 → 실측)</h2>
-        <div class="r"><div class="seg" role="group" aria-label="기준">
+        <div class="r" style="display:flex;gap:8px;align-items:center">
+          {% if params and can_edit_actual %}
+          <button class="btn sm" x-show="!act.edit" @click="act.edit=true; basis='eff'">✎ 실측 수정</button>
+          <template x-if="act.edit"><span style="display:flex;gap:6px"><button class="btn sm" @click="act.edit=false">취소</button>
+            <button class="btn sm primary" :disabled="act.busy" @click="saveActuals()">{{ icon('check', 14) }} 저장</button></span></template>
+          {% endif %}
+          <div class="seg" role="group" aria-label="기준" x-show="!act.edit">
           <button :aria-pressed="basis==='eff'" @click="basis='eff'">대표값 기준</button>
           <button :aria-pressed="basis==='tgt'" @click="basis='tgt'">목표 기준</button></div></div></header>
       {% if params %}
+      <div class="flash" x-show="act.edit" style="margin:10px 16px 0">이 시편({{ spec.short_id }})의 실측을 넣습니다. 비우고 저장하면 이 시편에 넣은 값이 지워지고 원판 실측·목표값으로 돌아갑니다. 공정런 공통 항목은 실측 탭에서 넣습니다.</div>
       <div class="tablewrap"><table class="t">
-        <tr><th>파라미터</th><th class="n">목표</th><th class="n" x-text="basis==='eff' ? '실측 / 대표값' : '목표값'">실측 / 대표값</th><th class="n">편차</th><th>출처</th></tr>
+        <tr><th>파라미터</th><th class="n">목표</th><th class="n" x-text="act.edit ? '이 시편 실측 (대표값)' : (basis==='eff' ? '실측 / 대표값' : '목표값')">실측 / 대표값</th><th class="n">편차</th><th>출처</th></tr>
         {% for e in params %}{% set p = pdict.param(e.key) %}
         <tr class="{{ 'dev' if e.out_of_tol }}">
           <td>{{ p.l }} <span class="muted small mono">{{ p.section_nm }}</span>{% if e.is_override %} <span class="mk-intent" title="원판별 목표 변경(의도, 시리즈)">◆</span>{% endif %}</td>
           <td class="n">{{ e.target|num }} <span class="muted small">{{ p.u }}</span></td>
-          <td class="n dv"><b x-show="basis==='eff'">{{ e.effective|num }}</b><span x-show="basis==='tgt'">{{ e.target|num }}</span> <span class="muted small">{{ p.u }}</span></td>
+          <td class="n dv" x-show="act.edit">{% if e.key in run_keys %}<a class="small" href="/process-runs/{{ run.run_no }}?tab=actuals" title="공정런 전체에 적용되는 값">공정런 공통 · 실측 탭 →</a>
+            {% else %}<span style="display:inline-flex;gap:4px;align-items:center"><input class="in num" style="width:96px" data-act-key="{{ e.key }}"
+              value="{{ own_manual.get(e.key, '') }}" data-orig="{{ own_manual.get(e.key, '') }}"
+              placeholder="{{ e.effective|num }}" step="any" type="number"> <span class="muted small">{{ p.u }}</span></span>{% endif %}</td>
+          <td class="n dv" x-show="!act.edit"><b x-show="basis==='eff'">{{ e.effective|num }}</b><span x-show="basis==='tgt'">{{ e.target|num }}</span> <span class="muted small">{{ p.u }}</span></td>
           <td class="n dv">{% if e.deviation is not none %}{{ e.deviation|signed }}{% if e.deviation_pct is not none and p.u == 'g/m²' %} ({{ e.deviation_pct|signed }}%){% endif %}{% if e.out_of_tol %} <span class="mk-dev">●</span>{% endif %}{% endif %}</td>
           <td><span class="bdg {{ badge_class(e.source, e.level, e.inherited_from) }}">{{ e.badge }}</span></td>
         </tr>
         {% endfor %}
       </table></div>
       <div class="body small muted">● 허용편차 밖(색 표시만, 알림 없음) · ◆ 원판별 목표 변경(시리즈, 의도된 변화) · 실측이 없으면 목표값으로 간주합니다.
-        {% if run %}<a href="/process-runs/{{ run.run_no }}?tab=actuals">실측 입력 →</a>{% endif %}</div>
+        {% if run %}<a href="/process-runs/{{ run.run_no }}?tab=actuals">{{ run.run_no }} 실측 탭(공정런 전체) →</a>{% endif %}</div>
       {% else %}<div class="empty-note">공정런에 연결되지 않은 시편입니다.</div>{% endif %}
     </section>
 
@@ -199,7 +210,7 @@
 {% endblock %}
 {% block scripts %}
 <script>
-const SID = "{{ spec.short_id }}", PROJ = "{{ spec.project_code }}";
+const SID = "{{ spec.short_id }}", PROJ = "{{ spec.project_code }}", RUN = "{{ run.run_no if run else '' }}";
 const SPLIT = {{ split|tojson }};
 const CODES = {{ treat_codes|tojson }};
 const PREFIX = {HEAT: "H", PRETREAT: "T", PAINT: "P"};
@@ -207,6 +218,20 @@ function specPage() {
   return {
     basis: "eff",
     sp: Object.assign(shearForm(SID, PROJ), {open: false, start: SPLIT ? SPLIT.start : 1, range: SPLIT ? SPLIT.label : ""}),
+    act: {edit: false, busy: false},
+    /** 이 시편의 수기 실측 저장: 바뀐 칸만, 빈칸 = 이 시편 값 삭제 (공정런 실측 API, mode set) */
+    async saveActuals() {
+      const rows = [...document.querySelectorAll("input[data-act-key]")]
+        .filter(i => i.value.trim() !== i.dataset.orig)
+        .map(i => ({key: i.dataset.actKey, value: i.value.trim() === "" ? null : i.value.trim(), specimen: SID, mode: "set"}));
+      if (!rows.length) { this.act.edit = false; return LIMS.toast("바뀐 값이 없습니다"); }
+      this.act.busy = true;
+      try {
+        const r = await LIMS.api("POST", `/api/process-runs/${RUN}/actuals`, {rows, source: "manual"});
+        LIMS.toast(`실측 ${r.saved}칸 저장`, "ok");
+        setTimeout(() => location.reload(), 400);
+      } catch (e) { LIMS.fail(e); this.act.busy = false; }
+    },
     ev: {open: false, type: "HEAT", code: (CODES.HEAT[0] || [""])[0], date: new Date().toISOString().slice(0, 10), text: ""},
     openSplit() { this.sp.open = true; this.sp.suggest(); },
     async doSplit() {

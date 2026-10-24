@@ -132,6 +132,8 @@ def detail_context(db: Session, spec: Specimen) -> dict:
     # 공정 조건 (목표 → 실측): 사전 순서, 값이 있는 키만
     params = []
     actual_code = None
+    own_manual = {}             # 이 시편에 직접 넣은 수기 실측 (시편 상세에서 수정하는 값)
+    run_keys = set()            # 세션 공통 키: 공정런 전체 값이라 시편 화면에서는 고치지 않음
     if spec.process_run is not None:
         ra = actuals.RunActuals(db, spec.process_run)
         eff = ra.all_for(spec)
@@ -139,6 +141,11 @@ def detail_context(db: Session, spec: Specimen) -> dict:
         for k in [*quick, *[k for k in pdict.numeric_keys() if k not in quick]]:
             if k in eff and k != "out.cw":
                 params.append(eff[k])
+                if pdict.actual_cfg(k)["level"] == "run":
+                    run_keys.add(k)
+                man = [r for r in ra.rows.get((spec.id, k), []) if r.source == "manual" and r.value is not None]
+                if man:
+                    own_manual[k] = man[-1].value
         actual_code = actuals.actual_condition_code(db, spec)
     # 분석 이력: 자신 + 조상 (조각 상세에서도 원판·쿠폰 분석이 한 화면에, 11.2 #7)
     boardings = db.scalars(select(RunSpecimen).where(RunSpecimen.specimen_id.in_(ids))
@@ -176,14 +183,17 @@ def detail_context(db: Session, spec: Specimen) -> dict:
             "actual_code": actual_code, "tests": tests, "files": files, "events": events,
             "split": split, "EVENT_TYPES": EVENT_TYPES, "EVENT_NAMES": EVENT_NAMES, "STATUSES": STATUSES,
             "processes": lineage.processes(spec), "treat_codes": treat_codes, "projects": projects,
-            "TREATMENTS": marking.TREATMENTS}
+            "TREATMENTS": marking.TREATMENTS, "run": spec.process_run, "own_manual": own_manual,
+            "run_keys": run_keys}
 
 
 @router.get("/specimens/{short_id}")
 def detail_page(request: Request, short_id: str, user: User = Depends(require_user), db: Session = Depends(get_db)):
     spec = get_spec(db, short_id)
     ctx = detail_context(db, spec)
-    return render(request, "specimen_detail.html", nav="spec", can_edit=can_edit(user, spec.owner_id), **ctx)
+    run = spec.process_run
+    return render(request, "specimen_detail.html", nav="spec", can_edit=can_edit(user, spec.owner_id),
+                  can_edit_actual=bool(run) and can_edit(user, spec.owner_id, run.operator_id), **ctx)
 
 
 # ── API ──────────────────────────────────────────────────────────

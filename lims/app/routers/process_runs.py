@@ -207,14 +207,19 @@ def post_actuals(run_no: str, data: ActualsIn, user: User = Depends(require_user
     if data.source not in ("manual", "pv"):
         raise HTTPException(422, "이 경로의 출처는 manual 또는 pv입니다 (분석은 욕 분석 적용, 분석런은 결과 저장).")
     specs = {s.short_id: s for s in run_specimens(db, run)}
-    _check_actual_edit(user, run, [])
+    for row in data.rows:
+        if row.specimen and row.specimen.upper() not in specs:
+            raise HTTPException(422, f"{row.specimen}은 {run_no}의 시편이 아닙니다.")
+    # 시편 행만 있으면 그 시편들의 소유자도 저장 가능(시편 상세에서 수정). 세션 행이 있으면 작업자·관리자만.
+    if any(not row.specimen for row in data.rows):
+        _check_actual_edit(user, run, [])
+    else:
+        touched = {specs[row.specimen.upper()].id: specs[row.specimen.upper()] for row in data.rows}.values()
+        if not all(can_edit(user, run.operator_id, s.owner_id) for s in touched):
+            raise HTTPException(403, "작성자·시편 소유자·관리자만 수정할 수 있습니다.")
     n = 0
     for row in data.rows:
-        spec = None
-        if row.specimen:
-            spec = specs.get(row.specimen.upper())
-            if spec is None:
-                raise HTTPException(422, f"{row.specimen}은 {run_no}의 시편이 아닙니다.")
+        spec = specs[row.specimen.upper()] if row.specimen else None
         if pdict.param(row.key) is None:
             raise HTTPException(422, f"사전에 없는 키: {row.key}")
         if row.mode == "set" and data.source == "manual":

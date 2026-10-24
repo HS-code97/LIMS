@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..auth import ensure_can_edit, require_user
+from ..auth import can_edit, ensure_can_edit, require_user
 from ..db import get_db
 from ..models import BathAnalysis, Material, ParamActual, ProcessRun, Project, Specimen, User
 from ..schemas import ActualsIn, ApplyIn, BathAnalysisIn, PasteIn, ProcessRunIn, TargetCorrectionIn
@@ -75,7 +75,7 @@ def detail_page(request: Request, run_no: str, tab: str = "panels", add: str = "
         ParamActual.is_deleted.is_(False)))}
     return render(request, "process_run_detail.html", nav="pr", run=run, tab=tab, specs=run_specimens(db, run),
                   checks=pdict.checks(run.recipe, run.coating_system), near_ba=near, all_ba=all_ba,
-                  applied_ba=applied, add=",".join(extra), **ctx)
+                  applied_ba=applied, add=",".join(extra), can_edit_run=can_edit(user, run.operator_id), **ctx)
 
 
 def actuals_context(db: Session, run: ProcessRun, extra_keys: list[str] | None = None) -> dict:

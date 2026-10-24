@@ -5,11 +5,11 @@ import copy
 import re
 from datetime import date, datetime
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from ..errors import Conflict, Invalid  # noqa: F401  (기존 import 경로 workflow.Conflict·Invalid 유지)
-from ..models import (MasterCode, Material, ParamActual, ProcessPreset, ProcessRun, Project, RunSpecimen, Specimen,
+from ..models import (EffectiveParam, MasterCode, Material, ParamActual, ProcessPreset, ProcessRun, Project, RunSpecimen, Specimen,
                       SpecimenEvent, TestResult, TestRun, TestTemplate)
 from ..schemas import IntakeIn, ProcessRunIn, SplitIn, TestRunIn, TreatIn
 from . import actuals, marking
@@ -177,10 +177,45 @@ def create_process_run(db: Session, payload: ProcessRunIn, user_id: int | None) 
         code = cc.code_from_recipe(codes, sys_code, pdict.merge(recipe, ov), preferred)
         _use(db, sp, user_id, payload.project_code, f"도금 {run.run_no}", payload.run_date)
         sp.process_run_id, sp.is_panel, sp.target_overrides, sp.condition_code = run.id, True, ov, code
-        sp.steps = [*(sp.steps or []), {"k": "PLATE", "run": run.run_no, "date": payload.run_date.isoformat()}]
+        sp.steps = [*(sp.steps or []), {"k": "PLATE", "run": run.run_no, "date": payload.run_date.isoformat(),
+                                         "from": sp.stage}]     # 도금 취소 때 되돌릴 단계
         _raise_stage(sp, "C")
         db.add(SpecimenEvent(specimen_id=sp.id, event_type="PLATE", event_date=payload.run_date, user_id=user_id,
                              params={"run": run.run_no, "code": code}))
+    db.flush()
+    db.expire(run, ["panels"])
+    actuals.recompute_run(db, run)
+    return run
+
+
+def unplate(db: Session, spec: Specimen, user_id: int | None, reason: str | None = None) -> ProcessRun:
+    """도금 취소: 잘못 고른 시편을 공정런에서 빼고 도금 전 단계로 되돌립니다. 각인번호·과제·담당은 그대로.
+    도금 뒤 기록(후공정·자식·분석런 탑승·실측)이 생겼으면 되돌리면 이력이 어긋나므로 막습니다."""
+    steps = list(spec.steps or [])
+    i = next((i for i, s in enumerate(steps) if s.get("k") == "PLATE"), None)
+    run = spec.process_run
+    if i is None or run is None or not spec.is_panel:
+        raise Invalid(f"{spec.short_id}은 공정런으로 도금한 원판이 아닙니다.")
+    blocks = []
+    if steps[i + 1:]:
+        blocks.append("도금 뒤 다른 공정(" + ", ".join(marking.TREATMENTS[s["k"]]["name"] for s in steps[i + 1:]
+                                              if s.get("k") in marking.TREATMENTS) + ")이 있음")
+    if any(not c.is_deleted for c in spec.children):
+        blocks.append("이미 자른 자식 시편이 있음")
+    if db.scalar(select(RunSpecimen.specimen_id).where(RunSpecimen.specimen_id == spec.id).limit(1)) is not None:
+        blocks.append("분석런에 탑승한 이력이 있음")
+    if db.scalar(select(ParamActual.id).where(ParamActual.specimen_id == spec.id).limit(1)) is not None:
+        blocks.append("이 시편의 실측값이 있음")
+    if blocks:
+        raise Invalid(f"{spec.short_id}은 도금을 취소할 수 없습니다.", blocks)
+    plate = steps.pop(i)
+    code = spec.condition_code
+    spec.steps = steps
+    spec.stage = plate.get("from") or ("B" if spec.parent_id else "A")
+    spec.process_run, spec.is_panel, spec.target_overrides, spec.condition_code = None, False, None, None
+    db.execute(delete(EffectiveParam).where(EffectiveParam.specimen_id == spec.id))
+    db.add(SpecimenEvent(specimen_id=spec.id, event_type="UNPLATE", event_date=date.today(), user_id=user_id,
+                         params={"run": run.run_no, "code": code, "reason": reason or None}))
     db.flush()
     db.expire(run, ["panels"])
     actuals.recompute_run(db, run)

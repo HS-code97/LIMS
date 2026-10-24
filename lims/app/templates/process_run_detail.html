@@ -30,12 +30,14 @@
   <section class="card">
     <header><h2>{{ icon('spec') }}도금한 시편과 자손</h2><span class="meta">조건부(전체번호 꼬리)는 원판 단위·목표 기준으로 생성 (◆ = 원판별 목표 변경) · 각인번호는 도금 전 그대로</span></header>
     <div class="tablewrap"><table class="t">
-      <tr><th>각인번호</th><th>전체번호</th><th>목표 변경</th><th>상태</th><th>자식</th></tr>
+      <tr><th>각인번호</th><th>전체번호</th><th>목표 변경</th><th>상태</th><th>자식</th>{% if can_edit_run %}<th></th>{% endif %}</tr>
       {% for p in panels %}
       <tr><td><a class="mono" href="/specimens/{{ p.short_id }}"><b>{{ p.short_id }}</b></a></td><td class="mono">{{ p.display_id }}</td>
         <td class="mono small">{% if p.target_overrides %}<span class="mk-intent">◆</span> {% for k, v in p.target_overrides.items() %}{{ pdict.label(k) }} {{ v|num }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}</td>
         <td><span class="chip st-{{ p.status }}">{{ p.status }}</span></td>
-        <td class="mono small">{% for c in p.children if not c.is_deleted %}<a href="/specimens/{{ c.short_id }}">{{ c.short_id[p.short_id|length + 1:] }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</td></tr>
+        <td class="mono small">{% for c in p.children if not c.is_deleted %}<a href="/specimens/{{ c.short_id }}">{{ c.short_id[p.short_id|length + 1:] }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</td>
+        {% if can_edit_run %}<td class="nowrap"><button class="btn sm danger" onclick="LIMS.unplate('{{ p.short_id }}', '{{ run.run_no }}')" title="이 공정런에서 빼고 도금 전 단계로 되돌립니다">도금 취소</button></td>{% endif %}</tr>
+      {% else %}<tr class="empty-row"><td colspan="6">남은 원판이 없습니다 (모두 도금 취소됨).</td></tr>
       {% endfor %}
     </table></div>
   </section>

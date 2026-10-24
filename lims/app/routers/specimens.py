@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
@@ -23,7 +23,7 @@ router = APIRouter()
 # 직접 넣는 이벤트. HEAT·PRETREAT·PAINT는 단계·꼬리를 바꾸는 공정(workflow.treat), PLATE·USE는 시스템이 남김.
 EVENT_TYPES = {"HEAT": "열처리", "PRETREAT": "전처리(화성 등)", "PAINT": "도장", "MOVE": "보관 이동",
                "SCRAP": "폐기", "NOTE": "메모"}
-EVENT_NAMES = EVENT_TYPES | {"PLATE": "도금", "CUT": "전단·자르기", "USE": "사용(과제·담당 변경)",
+EVENT_NAMES = EVENT_TYPES | {"PLATE": "도금", "UNPLATE": "도금 취소", "CUT": "전단·자르기", "USE": "사용(과제·담당 변경)",
                              "POST_TREAT": "후처리(이전 기록)"}
 STATUSES = ("AVAILABLE", "IN_TEST", "CONSUMED", "SCRAP")
 
@@ -298,6 +298,22 @@ def treat_api(short_id: str, data: TreatIn, user: User = Depends(require_user), 
     spec = workflow.treat(db, get_spec(db, short_id), data, user.id)
     db.commit()
     return spec_json(spec)
+
+
+class UnplateIn(BaseModel):
+    reason: str | None = Field(default=None, max_length=200)
+
+
+@router.post("/api/specimens/{short_id}/unplate")
+def unplate_api(short_id: str, data: UnplateIn | None = None, user: User = Depends(require_user),
+                db: Session = Depends(get_db)):
+    """도금 취소: 공정런에서 빼고 도금 전 단계(블랭크)로 되돌림. 시편 소유자·공정런 작업자·관리자만."""
+    spec = get_spec(db, short_id)
+    run = spec.process_run
+    ensure_can_edit(user, spec.owner_id, run.operator_id if run else None)
+    run = workflow.unplate(db, spec, user.id, data.reason if data else None)
+    db.commit()
+    return spec_json(spec) | {"run_no": run.run_no, "panels_left": len(run.panels)}
 
 
 @router.post("/api/specimens/{short_id}/events")

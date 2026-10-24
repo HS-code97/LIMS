@@ -191,6 +191,50 @@ def test_shear_menu(client):
     assert client.get("/process-runs/new?specimens=" + ",".join(k["short_id"] for k in kids)).status_code == 200
 
 
+def test_split_plating_and_unplate(client):
+    """블랭크 10장 중 5장씩 다른 조건으로 도금 → 1장 도금 취소(블랭크로 복원) → 다시 도금 가능. 자식이 있으면 취소 막힘."""
+    with SessionLocal() as db:
+        m2 = db.scalar(select(ProcessPreset).where(ProcessPreset.name == "M2"))
+        m2_id, recipe = m2.id, pdict.preset_recipe(m2.overrides)
+    blanks = api_blanks(client, 10)
+    assert client.get("/process-runs/new").status_code == 200
+
+    def plate(specs, cw):
+        body = {"dict_version": pdict.version(), "preset_id": m2_id, "project_code": "A6", "run_date": "2026-10-24",
+                "coating_weight_target": cw, "specimens": specs, "recipe": recipe, "changed_from_preset": [],
+                "warnings": []}
+        r = client.post("/api/process-runs", json=body)
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    r1, r2 = plate(blanks[:5], 60), plate(blanks[5:], 90)
+    assert len(r1["panels"]) == 5 and len(r2["panels"]) == 5
+    cands = {c["short_id"] for c in client.get(f"/api/plating/candidates?coil={blanks[0].split('-')[0]}").json()}
+    assert not cands & set(blanks)                                              # 모두 도금돼 후보에서 빠짐
+
+    sid = blanks[0]
+    before = client.get(f"/api/specimens/{sid}").json()
+    assert before["stage"] == "C" and before["condition_code"]
+    r = client.post(f"/api/specimens/{sid}/unplate", json={"reason": "조건 잘못 선택"})
+    assert r.status_code == 200, r.text
+    after = r.json()
+    assert after["stage"] == "B" and after["condition_code"] is None and after["process_run"] is None
+    assert after["display_id"].split("-")[2] == "B" and before["condition_code"] not in after["display_id"]
+    assert after["run_no"] == r1["run_no"] and after["panels_left"] == 4
+    assert sid in {c["short_id"] for c in client.get(f"/api/plating/candidates?coil={sid.split('-')[0]}").json()}
+    assert client.post(f"/api/specimens/{sid}/unplate").status_code == 422             # 이미 취소됨
+    assert len(plate([sid], 70)["panels"]) == 1                                          # 다시 도금 가능
+
+    kid_parent = blanks[1]
+    assert client.post(f"/api/specimens/{kid_parent}/split", json={"count": 1, "start": 1}).status_code == 200
+    r = client.post(f"/api/specimens/{kid_parent}/unplate")
+    assert r.status_code == 422 and "자식" in r.text
+    with SessionLocal() as db:
+        spec_id = db.scalar(select(Specimen.id).where(Specimen.short_id == sid))
+        types = [e.event_type for e in db.scalars(select(SpecimenEvent).where(SpecimenEvent.specimen_id == spec_id))]
+    assert types.count("PLATE") == 2 and types.count("UNPLATE") == 1
+
+
 def test_admin_project_code(client):
     r = client.post("/admin/projects", data={"company_project_no": "2026P999", "project_name": "테스트 과제"},
                     follow_redirects=False)

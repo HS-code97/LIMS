@@ -29,6 +29,7 @@
   <div class="acts">
     {% if split %}<button class="btn primary lg" @click="openSplit()">{{ icon('split', 18) }} [자르기] {{ '블랭크' if split.level == 'branch' else ('실험편' if split.level == 'cut' else '분석조각') }} 만들기</button>{% endif %}
     {% if spec.stage in ('A', 'B') and not spec.has_step('PLATE') %}<a class="btn lg" href="/process-runs/new?specimens={{ spec.short_id }}">{{ icon('run', 18) }} 도금 (공정런)</a>{% endif %}
+    {% if spec.is_panel and spec.process_run and can_edit %}<button class="btn lg danger" onclick="LIMS.unplate('{{ spec.short_id }}', '{{ spec.process_run.run_no }}')" title="공정런에서 빼고 도금 전 단계로 되돌립니다">{{ icon('x', 18) }} 도금 취소</button>{% endif %}
     <button class="btn lg" @click="ev.open=true">{{ icon('event', 18) }} 공정·이벤트 추가</button>
     <a class="btn lg" href="/api/labels/engrave.csv?ids={{ spec.short_id }}">{{ icon('csv', 18) }} 각인 CSV</a>
     <a class="btn lg" href="/api/labels/print.pdf?ids={{ spec.short_id }}" target="_blank">{{ icon('label', 18) }} 라벨 출력</a>

@@ -193,5 +193,17 @@
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
   LIMS.esc = esc;
 
+  /** 도금 취소: 공정런에서 빼고 도금 전 단계(블랭크)로 되돌림. 성공하면 새로고침 */
+  LIMS.unplate = async function (sid, runNo) {
+    if (!confirm(`${sid}을 ${runNo}에서 빼고 도금 전(블랭크)으로 되돌릴까요?\n각인번호는 그대로이고 전체번호의 조건 꼬리가 지워집니다.`)) return;
+    const reason = prompt("취소 이유 (선택)", "공정조건 잘못 선택");
+    if (reason === null) return;
+    try {
+      const r = await LIMS.api("POST", `/api/specimens/${sid}/unplate`, { reason: reason || null });
+      LIMS.toast(`${sid} 도금 취소 → ${r.display_id} (${runNo} 남은 원판 ${r.panels_left}매)`, "ok");
+      setTimeout(() => location.reload(), 700);
+    } catch (e) { LIMS.fail(e); }
+  };
+
   LIMS.download = function (url) { const a = document.createElement("a"); a.href = url; a.download = ""; document.body.appendChild(a); a.click(); a.remove(); };
 })();

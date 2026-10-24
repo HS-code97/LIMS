@@ -4,7 +4,7 @@
     {
       "name": "lims",
       "runtimeExecutable": "C:\\Vibe Coding\\12. LIMS\\.venv\\Scripts\\python.exe",
-      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--app-dir", "lims", "--port", "8610"],
+      "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--app-dir", "lims", "--port", "8610", "--reload", "--reload-dir", "lims/app"],
       "port": 8610
     }
   ]

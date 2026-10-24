@@ -8,10 +8,10 @@
 <form class="card" method="get" id="sform" style="margin-bottom:16px">
   <div class="body form">
     <div class="row">
-      <label class="f">각인번호·코일·공정런·조건부<input class="in mono" name="q" value="{{ qy.q }}" placeholder="QV3-102 / CQV3141 / M206"></label>
+      <label class="f">각인번호·코일·공정런·조건부<input class="in mono" name="q" value="{{ qy.q }}" placeholder="QV3-A02 / CQV3141 / M206"></label>
       <label class="f">과제<select class="in" name="project"><option value="">전체</option>{% for p in projects %}<option value="{{ p.project_code }}" {% if p.project_code == qy.project %}selected{% endif %}>{{ p.label }}</option>{% endfor %}</select></label>
       <label class="f">단계<select class="in" name="stage"><option value="">전체</option>{% for s in 'ABCDE' %}<option {% if s == qy.stage %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></label>
-      <label class="f">시험 종류<select class="in" name="test_type"><option value="">전체</option>{% for t in types %}<option {% if t == qy.test_type %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>
+      <label class="f">분석 종류<select class="in" name="test_type"><option value="">전체</option>{% for t in types %}<option {% if t == qy.test_type %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>
       <label class="f">조건부 (접두·? 한 글자)<input class="in mono" name="code" value="{{ qy.code }}" placeholder="M2?? / M206"></label>
     </div>
     <div>

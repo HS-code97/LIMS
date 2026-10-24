@@ -11,6 +11,7 @@ from fastapi.templating import Jinja2Templates
 from .config import APP_DIR
 from .services import param_dict as pdict
 from .services.actuals import SOURCE_LABEL, badge_text
+from .services.marking import MARK_LETTERS
 
 templates = Jinja2Templates(directory=str(APP_DIR / "templates"))
 
@@ -71,8 +72,12 @@ templates.env.filters.update(num=fmt_num, signed=fmt_signed, d=fmt_date,
                              tojson_compact=lambda v: json.dumps(v, ensure_ascii=False))
 from .db import engine  # noqa: E402
 
+# 강종 입력 자동완성 예시 (base.html의 datalist#steel-grades). 목록에 없는 강종도 그대로 입력할 수 있습니다.
+STEEL_GRADES = ("SPCC", "340Y", "420Y", "590DP", "780DP", "1180 TRIP")
+
 templates.env.globals.update(vendor=vendor, pdict=pdict, db_kind=engine.dialect.name, badge_text=badge_text, badge_class=badge_class,
-                             SOURCE_LABEL=SOURCE_LABEL, Path=Path, today=date.today)
+                             SOURCE_LABEL=SOURCE_LABEL, Path=Path, today=date.today, STEEL_GRADES=STEEL_GRADES,
+                             mark_letters=MARK_LETTERS)
 
 
 def render(request: Request, name: str, status_code: int = 200, **ctx):

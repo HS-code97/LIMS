@@ -39,7 +39,7 @@ class ProcessRunIn(BaseModel):
     material_id: int | None = None
     run_date: date
     coating_weight_target: float = Field(gt=0, le=300)
-    specimens: list[str] = Field(min_length=1, max_length=200)   # 각인번호 'QV3-101' …
+    specimens: list[str] = Field(min_length=1, max_length=200)   # 각인번호 'QV3-A01' …
     recipe: dict[str, dict[str, Any]]
     series: SeriesSpec | list[SeriesSpec] | None = None
     changed_from_preset: list[str] = []
@@ -117,7 +117,8 @@ class ApplyIn(BaseModel):
 
 
 class SplitIn(BaseModel):
-    """자르기: 전폭 → 블랭크(조각 번호 01~99), 그 뒤는 후절단(01~99) → 분석조각(1~9, A~Z)."""
+    """자르기: 전폭 → 블랭크(조각 번호 01~99), 그 뒤는 후절단(1~21번째 = A~Y) → 분석조각(1~9).
+    start는 n번째 번호이며 영문 자리는 marking.letter_of로 바꿉니다. 자리별 상한은 numbering.LEVELS가 검사."""
     count: int = Field(ge=1, le=99)
     start: int = Field(ge=1, le=99)            # 새 자리의 시작 번호
     project_code: str | None = None            # 자식이 쓸 과제 (없으면 부모 과제)
@@ -135,12 +136,12 @@ class SplitIn(BaseModel):
 
 
 class IntakeIn(BaseModel):
-    """전폭시편 입고 (A 단계). 현장 코일번호 CQV3141T → 코일코드 QV3, 전폭 1~9번."""
+    """전폭시편 입고 (A 단계). 현장 코일번호 CQV3141T → 코일코드 QV3, 전폭 1~21번째(A~Y)."""
     coil_no: str
     coil_code: str | None = None               # 비우면 제안값
     project_code: str
-    count: int = Field(ge=1, le=9)
-    sheet_start: int | None = Field(default=None, ge=1, le=9)
+    count: int = Field(ge=1, le=21)
+    sheet_start: int | None = Field(default=None, ge=1, le=21)
     coil_position: str | None = None           # 비우면 코일번호 끝자리(채취위치)
     steel_grade: str | None = None
     thickness_mm: float | None = Field(default=None, gt=0, le=20)

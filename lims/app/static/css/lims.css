@@ -228,7 +228,7 @@ textarea.in{height:auto;min-height:80px;padding:8px 10px;font-family:var(--f-num
 .upl-list .s.duplicate{background:var(--surface-3);color:var(--ink-2)}
 .upl-list .s.error{background:var(--err-bg);color:var(--err)}
 
-/* 시험런 그리드 (5.4절) */
+/* 분석런 그리드 (5.4절) */
 .rgrid{border-collapse:separate;border-spacing:0;font-size:13px;min-width:100%}
 .rgrid th{background:var(--surface-2);font-weight:600;font-size:12px;padding:6px 8px;border-bottom:1px solid var(--line);
   border-right:1px solid var(--line-2);position:sticky;top:0;z-index:2;text-align:center;white-space:nowrap}
@@ -297,7 +297,7 @@ textarea.in{height:auto;min-height:80px;padding:8px 10px;font-family:var(--f-num
   .side{position:static}
   .hero .acts .btn.lg{height:40px;font-size:14px}
 }
-/* 시험런 그리드 — Stitch 시안 반영: 선택 행·열 강조, 양수 녹 값 */
+/* 분석런 그리드 — Stitch 시안 반영: 선택 행·열 강조, 양수 녹 값 */
 .rgrid tr.selrow td.spec{box-shadow:inset 3px 0 0 var(--primary-2);background:#ebf3fb}
 .rgrid tr.selrow td.spec b{color:var(--primary-2)}
 .rgrid th.selcol{background:var(--primary-fixed);color:var(--primary)}

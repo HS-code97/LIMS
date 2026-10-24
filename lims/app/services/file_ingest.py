@@ -1,9 +1,9 @@
 """파일 수집·자동 매칭 (7장 P5).
 
 파일명 규칙(권장): {각인번호}_{태그}_{자유}.{확장자}
-  QV3-102-01_W03_front.jpg       → QV3-102-01 실험편, 회차 3
-  QV3-102-01-3_SEM_x5000_bse.tif → QV3-102-01-3 분석조각, SEM
-전체번호(QV3-A6-C-102-01-M206K_W03.jpg)로 지어도 각인번호로 바꿔 연결합니다.
+  QV3-A02-A_W03_front.jpg       → QV3-A02-A 실험편, 회차 3
+  QV3-A02-A-3_SEM_x5000_bse.tif → QV3-A02-A-3 분석조각, SEM
+전체번호(QV3-A6-C-A02-A-M206K_W03.jpg)로 지어도 각인번호로 바꿔 연결합니다.
 """
 from __future__ import annotations
 
@@ -128,7 +128,7 @@ def _ingest(db: Session, tmp: Path, original_name: str, stored: list[Path], *, u
     elif default_spec is not None:
         spec = default_spec
     if spec is not None and test_run is None and auto_test_run and parsed.cycle is not None:
-        # 폴더 감시 등 시험런 화면 밖 경로: 진행 중 시험런 하나에만 탑승해 있으면 그 회차 셀에 연결
+        # 폴더 감시 등 분석런 화면 밖 경로: 진행 중 분석런 하나에만 탑승해 있으면 그 회차 셀에 연결
         from ..models import RunSpecimen
         running = db.scalars(select(TestRun).join(RunSpecimen).where(
             RunSpecimen.specimen_id == spec.id, RunSpecimen.unloaded_at.is_(None), TestRun.status == "RUNNING")).all()

@@ -1,5 +1,5 @@
 """번호 발급 (시편번호 체계 3.2·3.6절): 전폭·조각·후절단·분석조각의 다음 빈 번호 제안, 일괄 발번 충돌 검사,
-공정런·시험런 번호 (D-21).
+공정런·분석런 번호 (D-21).
 
 번호는 시스템이 다음 빈 번호를 제안하고 사람이 고칠 수 있습니다(D-04). 유일성은 각인번호(Specimen.short_id)의
 UNIQUE 제약이 최종 보장합니다 — 동시 저장 경합은 409 (main.py)."""
@@ -14,9 +14,9 @@ from ..errors import Invalid
 from ..models import ProcessRun, Specimen, TestRun
 from . import marking
 
-# 단계별 번호 범위: (이름, 최솟값, 최댓값)
-LEVELS = {"sheet": ("전폭번호", 1, 9), "branch": ("조각 번호", 1, 99), "cut": ("후절단 번호", 1, 99),
-          "piece": ("분석조각 번호", 1, len(marking.PIECE_CHARS))}
+# 단계별 번호 범위: (이름, 최솟값, 최댓값). 전폭·후절단은 n번째 → 영문(marking.letter_of)
+LEVELS = {"sheet": ("전폭번호", 1, len(marking.MARK_LETTERS)), "branch": ("조각 번호", 1, 99),
+          "cut": ("후절단 번호", 1, len(marking.MARK_LETTERS)), "piece": ("분석조각 번호", 1, 9)}
 
 
 class NumberingError(Invalid):
@@ -39,9 +39,9 @@ def child_parts(parent: Specimen, n: int) -> dict:
     if level == "branch":
         return {"branch": f"{parent.branch}{n:02d}", "cut_no": None, "piece_no": None}
     if level == "cut":
-        return {"branch": parent.branch, "cut_no": f"{n:02d}", "piece_no": None}
+        return {"branch": parent.branch, "cut_no": marking.letter_of(n), "piece_no": None}
     if level == "piece":
-        return {"branch": parent.branch, "cut_no": parent.cut_no, "piece_no": marking.piece_char(n)}
+        return {"branch": parent.branch, "cut_no": parent.cut_no, "piece_no": str(n)}
     raise NumberingError(f"{parent.short_id}은 분석조각이라 더 자를 수 없습니다.")
 
 
@@ -52,7 +52,7 @@ def _rows(db: Session, coil: str):
 
 def used_sheets(db: Session, coil: str) -> set[int]:
     """이 코일에서 쓴 전폭번호 (논리 삭제된 번호도 다시 쓰지 않음)."""
-    return {int(branch[0]) for branch, _, _ in _rows(db, coil) if branch}
+    return {marking.letter_index(branch[0]) for branch, _, _ in _rows(db, coil) if branch}
 
 
 def used_child_nos(db: Session, parent: Specimen) -> set[int]:
@@ -62,9 +62,9 @@ def used_child_nos(db: Session, parent: Specimen) -> set[int]:
         if level == "branch" and len(branch) == 3 and branch[0] == parent.branch:
             out.add(int(branch[1:]))
         elif level == "cut" and branch == parent.branch and cut is not None:
-            out.add(int(cut))
+            out.add(marking.letter_index(cut))
         elif level == "piece" and branch == parent.branch and cut == parent.cut_no and piece is not None:
-            out.add(marking.piece_index(piece))
+            out.add(int(piece))
     return out
 
 
@@ -97,7 +97,7 @@ def _next(used: set[int], level: str, count: int, prefer: int | None) -> int:
 def sheet_conflicts(db: Session, coil: str, start: int, count: int) -> list[str]:
     _check_range("sheet", start, count)
     used = used_sheets(db, coil)
-    return [marking.mark_id(coil, str(n)) for n in range(start, start + count) if n in used]
+    return [marking.mark_id(coil, marking.letter_of(n)) for n in range(start, start + count) if n in used]
 
 
 def next_sheet(db: Session, coil: str, count: int = 1) -> int:
@@ -131,7 +131,7 @@ def label_of(parent: Specimen, n: int) -> str:
 
 
 def _next_seq(db: Session, col, prefix: str) -> int:
-    """prefix 뒤 순번의 숫자 최댓값 + 1. 문자열 max는 'TR-SEM-26999' > 'TR-SEM-261000'이라 999·9999 뒤에
+    """prefix 뒤 순번의 숫자 최댓값 + 1. 문자열 max는 'AR-SEM-26999' > 'AR-SEM-261000'이라 999·9999 뒤에
     같은 번호를 다시 내므로 숫자로 비교합니다. 동시 저장 경합은 UNIQUE 위반 → 409로 처리됩니다(main.py)."""
     seq = cast(func.substr(col, len(prefix) + 1), Integer)
     last = db.scalar(select(func.max(seq)).where(col.startswith(prefix, autoescape=True)))
@@ -145,6 +145,6 @@ def next_run_no(db: Session, run_date: date) -> str:
 
 
 def next_test_run_no(db: Session, test_type: str, start: date) -> str:
-    """시험런 번호 TR-{시험종류}-{YY}{순번3} (D-21, 999 뒤는 4자리)."""
-    prefix = f"TR-{test_type}-{start:%y}"
+    """분석런 번호 AR-{분석종류}-{YY}{순번3} (D-21, 999 뒤는 4자리). 옛 번호는 TR-…(0005 이관)."""
+    prefix = f"AR-{test_type}-{start:%y}"
     return f"{prefix}{_next_seq(db, TestRun.test_run_no, prefix):03d}"

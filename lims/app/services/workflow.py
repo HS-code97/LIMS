@@ -1,4 +1,4 @@
-"""업무 흐름: 입고(전폭시편), 공정런 도금(P1), 열처리·전처리·도장, 자르기(P2), 시험런·탑승(P3), 결과 저장(P4), 실측 붙여넣기."""
+"""업무 흐름: 입고(전폭시편), 공정런 도금(P1), 열처리·전처리·도장, 자르기(P2), 분석런·탑승(P3), 결과 저장(P4), 실측 붙여넣기."""
 from __future__ import annotations
 
 import copy
@@ -73,7 +73,7 @@ def _raise_stage(spec: Specimen, stage: str | None) -> None:
 
 def _unusable(spec: Specimen) -> str | None:
     if spec.status in NO_BOARDING or spec.status == "IN_TEST":
-        return STATUS_NAME.get(spec.status, "시험 중")
+        return STATUS_NAME.get(spec.status, "분석 중")
     return None
 
 
@@ -109,7 +109,7 @@ def intake(db: Session, data: IntakeIn, user_id: int | None) -> list[Specimen]:
         raise Conflict("이미 쓰인 전폭번호가 있습니다.", clash)
     out = []
     for n in range(start, start + data.count):
-        sp = Specimen(project_code=data.project_code, stage="A", coil_code=code, branch=str(n), material_id=mat.id,
+        sp = Specimen(project_code=data.project_code, stage="A", coil_code=code, branch=marking.letter_of(n), material_id=mat.id,
                       owner_id=user_id, coil_position=(data.coil_position or pos or None), steps=[],
                       size_text=data.size_text or None, storage_location=data.storage_location or None,
                       note=data.note or None)
@@ -331,9 +331,9 @@ def split(db: Session, parent: Specimen, data: SplitIn, user_id: int | None) -> 
     return kids
 
 
-# ── P3. 시험런 생성·탑승 ───────────────────────────────────────────
+# ── P3. 분석런 생성·탑승 ───────────────────────────────────────────
 def find_specimen(db: Session, short_id: str) -> Specimen | None:
-    """각인번호(QV3-102-01)로 찾습니다. 전체번호(QV3-A6-C-102-01-M206K)를 넣어도 됩니다."""
+    """각인번호(QV3-A02-A)로 찾습니다. 전체번호(QV3-A6-C-A02-A-M206K)를 넣어도 됩니다."""
     raw = (short_id or "").strip().upper()
     mk = marking.find_mark(raw) or raw
     spec = db.scalar(select(Specimen).where(Specimen.short_id == mk, Specimen.is_deleted.is_(False)))
@@ -476,7 +476,7 @@ def split_table(text: str) -> list[list[str]]:
 
 
 def parse_results_paste(db: Session, tr: TestRun, text: str) -> tuple[list[dict], list[str]]:
-    """시험런 붙여넣기. 첫 행 머리글: 시편 | W00 | W01 … (grid 필드 값) 또는 시편 | 회차 | 필드키…"""
+    """분석런 붙여넣기. 첫 행 머리글: 시편 | W00 | W01 … (grid 필드 값) 또는 시편 | 회차 | 필드키…"""
     rows = split_table(text)
     if not rows:
         return [], ["붙여넣은 내용이 없습니다."]

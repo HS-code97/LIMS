@@ -15,7 +15,7 @@
   {% if user.is_admin %}
   <section class="card"><header><h2>과제 추가</h2></header>
     <form class="body form" method="post" action="/admin/projects">
-      <label class="f">사내 과제번호<input class="in mono" name="company_project_no" placeholder="2026P1234"></label>
+      <label class="f">사내 과제번호<input class="in mono" name="company_project_no" placeholder="2026P123" maxlength="8"></label>
       <label class="f">또는 공통 과제코드<input class="in mono" name="common_code" placeholder="X6 공통 · Y6 선행 · Z6 기타"></label>
       <label class="f">과제명<input class="in" name="project_name" required></label>
       <label class="f">책임자<select class="in" name="manager_id"><option value="">-</option>{% for u in users %}<option value="{{ u.id }}">{{ u.name }}</option>{% endfor %}</select></label>
@@ -32,7 +32,7 @@
   <section class="card"><header><h2>코일 등록</h2><span class="meta">코일코드는 자동 제안 (CQV3141T → QV3)</span></header>
     <form class="body form" method="post" action="/admin/materials">
       <label class="f">코일번호<input class="in mono" name="coil_no" required placeholder="CQV3141T"></label>
-      <div class="row"><label class="f">강종<input class="in" name="steel_grade" placeholder="SPCC"></label><label class="f">두께 (mm)<input class="in num" name="thickness_mm" type="number" step="0.01"></label></div>
+      <div class="row"><label class="f">강종<input class="in" name="steel_grade" list="steel-grades" placeholder="예: 590DP, 1180 TRIP"></label><label class="f">두께 (mm)<input class="in num" name="thickness_mm" type="number" step="0.01"></label></div>
       <label class="f">입고일<input class="in" type="date" name="received_date"></label>
       <label class="f">비고<input class="in" name="note"></label>
       <button class="btn primary">등록</button></form></section>
@@ -94,7 +94,7 @@
       <td>{% if user.is_admin %}<form method="post" action="/admin/presets/{{ p.id }}/toggle"><button class="btn sm">{{ '끄기' if p.is_active else '켜기' }}</button></form>{% endif %}</td></tr>{% endfor %}</table></div></section>
 
 {% elif tab == 'templates' %}
-<section class="card"><header><h2>시험 템플릿</h2><span class="meta">초기값은 JSON 시드(data/seed/test_templates). 고치면 새 버전이 생기고 기존 결과는 저장 당시 버전으로 해석합니다.</span>
+<section class="card"><header><h2>분석 템플릿</h2><span class="meta">초기값은 JSON 시드(data/seed/test_templates). 고치면 새 버전이 생기고 기존 결과는 저장 당시 버전으로 해석합니다.</span>
   <div class="r"><a class="btn primary sm" href="/admin/templates/edit">{{ icon('plus', 14) }} 새 템플릿</a></div></header>
   <div class="tablewrap"><table class="t"><tr><th>코드</th><th>버전</th><th>이름</th><th>종류</th><th>팀</th><th class="n">기본 회차</th><th>필드 (grid ★ / maps_to →)</th><th></th></tr>
     {% for t in tpls %}<tr {% if not t.is_active %}style="opacity:.5"{% endif %}><td class="mono"><b>{{ t.code }}</b></td><td class="mono">v{{ t.version }}</td><td>{{ t.name }}</td><td class="mono">{{ t.test_type }}</td><td>{{ t.team.name if t.team else '' }}</td>
@@ -122,7 +122,7 @@
 
 {% elif tab == 'import' %}
 <div class="grid2" x-data="imp()">
-  <section class="card"><header><h2>{{ icon('upload') }}과거 엑셀 데이터 가져오기</h2><span class="meta">시트: 공정런 → 분기 → 실측 → 시험결과 · 오류가 하나라도 있으면 아무것도 저장하지 않습니다</span></header>
+  <section class="card"><header><h2>{{ icon('upload') }}과거 엑셀 데이터 가져오기</h2><span class="meta">시트: 공정런 → 분기 → 실측 → 분석결과 · 오류가 하나라도 있으면 아무것도 저장하지 않습니다</span></header>
     <div class="body form">
       <a class="btn" href="/api/import/template.xlsx">{{ icon('download', 16) }} 양식 내려받기 (예시 포함)</a>
       <input class="in" type="file" accept=".xlsx" x-ref="f" style="height:auto;padding:6px">
@@ -134,7 +134,7 @@
       <div class="flash" :class="rep && rep.errors.length ? 'err' : 'ok'" x-text="rep && (rep.errors.length ? '오류 ' + rep.errors.length + '건' : (rep.saved ? '저장 완료' : '검증 통과 — 저장할 수 있습니다'))"></div>
       <ul class="upl-list"><template x-for="e in (rep ? rep.errors : [])"><li><span class="s error">오류</span><span x-text="e"></span></li></template>
         <template x-for="w in (rep ? rep.warnings : [])"><li><span class="s unmatched">주의</span><span x-text="w"></span></li></template></ul>
-      <div class="small mono" x-show="rep" x-text="rep && ('공정런 ' + rep.created.process_runs.length + ' · 시편 ' + rep.created.specimens.length + ' · 실측 ' + rep.created.actuals + ' · 시험런 ' + rep.created.test_runs.length + ' · 결과 ' + rep.created.results)"></div>
+      <div class="small mono" x-show="rep" x-text="rep && ('공정런 ' + rep.created.process_runs.length + ' · 시편 ' + rep.created.specimens.length + ' · 실측 ' + rep.created.actuals + ' · 분석런 ' + rep.created.test_runs.length + ' · 결과 ' + rep.created.results)"></div>
     </div></section>
 </div>
 

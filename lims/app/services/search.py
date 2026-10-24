@@ -1,4 +1,4 @@
-"""조건·과제·시험·수치 필터 검색 (5.1 #5, 6.7절 기준 토글, D-34)."""
+"""조건·과제·분석·수치 필터 검색 (5.1 #5, 6.7절 기준 토글, D-34)."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -102,7 +102,7 @@ def effective_map(db: Session, spec_ids: list[int], keys: list[str]) -> dict[tup
 
 
 def autocomplete(db: Session, q: str, limit: int = 10) -> list[dict]:
-    """상단 검색창 자동완성: 각인번호·코일번호·공정런·시험런."""
+    """상단 검색창 자동완성: 각인번호·코일번호·공정런·분석런."""
     q = q.strip().upper()
     if not q:
         return []
@@ -112,8 +112,10 @@ def autocomplete(db: Session, q: str, limit: int = 10) -> list[dict]:
                         .order_by(Specimen.short_id).limit(limit)):
         out.append({"label": s.short_id, "sub": f"{s.display_id} · {s.stage_name}", "href": f"/specimens/{s.short_id}"})
     like = f"%{q}%"
-    for t in db.scalars(select(TestRun).where(TestRun.test_run_no.like(like)).limit(5)):
-        out.append({"label": t.test_run_no, "sub": f"시험런 · {t.equipment or ''}", "href": f"/test-runs/{t.test_run_no}"})
+    # 옛 분석런 번호(TR-…, 0005에서 AR-…로 바뀜)로 찾아도 됩니다.
+    tr_like = f"%AR-{q[3:]}%" if q.startswith("TR-") else like
+    for t in db.scalars(select(TestRun).where(TestRun.test_run_no.like(tr_like)).limit(5)):
+        out.append({"label": t.test_run_no, "sub": f"분석런 · {t.equipment or ''}", "href": f"/test-runs/{t.test_run_no}"})
     for r in db.scalars(select(ProcessRun).where(ProcessRun.run_no.like(like)).limit(5)):
         out.append({"label": r.run_no, "sub": f"공정런 · {r.run_date}", "href": f"/process-runs/{r.run_no}"})
     for m in db.scalars(select(Material).where(or_(Material.coil_no.like(like), Material.coil_code == q)).limit(5)):

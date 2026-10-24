@@ -95,14 +95,14 @@
     <div class="kv" style="grid-column:1/-1">
       <b>욕 조성 <span class="muted small mono">POT</span></b>
       <span class="tgt">목표 {% for b in bath %}{{ b.el }} {{ b.target|num }}{% if not loop.last %} / {% endif %}{% endfor %} wt%</span>
-      <span class="mono small">{% if measured %}실측 <span class="bdg b-lab">분석</span> {{ measured[0].method or '' }} {{ measured[0].at|d }} →
+      <span class="mono small">{% if measured %}실측 <span class="bdg b-lab">욕분석</span> {{ measured[0].method or '' }} {{ measured[0].at|d }} →
         {% for b in bath %}{% if b.value is not none %}<span class="{{ 'mk-dev' if b.oot }}">{{ b.el }} {{ b.value|num }}{% if b.oot %} ●{% endif %}</span>{% if not loop.last %} / {% endif %}{% endif %}{% endfor %}
         {% else %}<span class="muted">실측 없음 — [욕 분석 적용]으로 넣습니다</span>{% endif %}</span>
     </div>
   </div>
 
   <div class="body" x-show="ba.open" style="border-top:1px solid var(--line-2);display:none">
-    <div class="small" style="margin-bottom:8px"><b>욕 분석 적용</b> — 욕 시료 1회 분석을 여러 공정런에 세션 실측(출처 <span class="bdg b-lab">분석</span>)으로 적용합니다. 기본 제안: 채취 시각 ±1일.
+    <div class="small" style="margin-bottom:8px"><b>욕 분석 적용</b> — 욕 시료 1회 분석을 여러 공정런에 세션 실측(출처 <span class="bdg b-lab">욕분석</span>)으로 적용합니다. 기본 제안: 채취 시각 ±1일.
       <a href="/admin?tab=bath">욕 분석 등록 →</a></div>
     <div class="tablewrap"><table class="t">
       <tr><th></th><th>채취</th><th>포트</th><th>방법</th><th>조성</th><th></th></tr>
@@ -125,7 +125,7 @@
 
 <section class="card">
   <header><h2>{{ icon('spec') }}원판별 실측</h2>
-    <span class="meta">· = 실측 없음(목표로 간주) · <span class="mk-dev">●</span> 허용편차 밖(색 표시만) · <span class="mk-intent">◆</span> 원판별 목표 변경 · <span class="bdg b-test">시험</span> 결과에서 자동</span>
+    <span class="meta">· = 실측 없음(목표로 간주) · <span class="mk-dev">●</span> 허용편차 밖(색 표시만) · <span class="mk-intent">◆</span> 원판별 목표 변경 · <span class="bdg b-test">분석</span> 분석런 결과에서 자동</span>
     <div class="r">
       <select class="in" style="height:28px;font-size:12px" @change="addCol($event.target.value)"><option value="">열 추가 ▼</option>
         {% for k in all_keys %}{% set p = pdict.param(k) %}<option value="{{ k }}">{{ p.section_nm }} {{ p.l }}</option>{% endfor %}</select>
@@ -147,7 +147,7 @@
     </tr>
     {% endfor %}
   </table></div>
-  <div class="body small muted">모든 칸은 선택 입력입니다. 비워 두면 목표값으로 간주하고 출처를 "목표"로 표시합니다. 시험 템플릿의 <span class="mono">maps_to</span> 항목(예: CW_MEASURE → 부착량)은 결과 저장 시 자동으로 채워집니다.</div>
+  <div class="body small muted">모든 칸은 선택 입력입니다. 비워 두면 목표값으로 간주하고 출처를 "목표"로 표시합니다. 분석 템플릿의 <span class="mono">maps_to</span> 항목(예: CW_MEASURE → 부착량)은 결과 저장 시 자동으로 채워집니다.</div>
 </section>
 </div>
 {% endif %}

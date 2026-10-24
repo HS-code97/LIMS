@@ -54,7 +54,7 @@ def test_full_flow(client):
     assert r.status_code == 200, r.text
     sheet = r.json()["specimens"][0]["short_id"]
     nxt = client.get(f"/api/specimens/{sheet}/next?count=3").json()
-    assert nxt["first"] == f"{sheet}{nxt['suggest']:02d}"                 # 전폭 QV3-3 → 블랭크 QV3-301
+    assert nxt["first"] == f"{sheet}{nxt['suggest']:02d}"                 # 전폭 QV3-C → 블랭크 QV3-C01
     r = client.post(f"/api/specimens/{sheet}/split", json={"count": 3, "start": nxt["suggest"]})
     assert r.status_code == 200, r.text
     marks = [c["short_id"] for c in r.json()["children"]]
@@ -101,7 +101,7 @@ def test_full_flow(client):
     r = client.post(f"/api/specimens/{p1}/split", json={"count": 2, "start": 1})
     assert r.status_code == 200, r.text
     kids = [k["short_id"] for k in r.json()["children"]]
-    assert kids == [f"{p1}-01", f"{p1}-02"]
+    assert kids == [f"{p1}-A", f"{p1}-B"]
     assert client.post(f"/api/specimens/{p1}/split", json={"count": 1, "start": 1}).status_code == 409
     r = client.post(f"/api/specimens/{kids[0]}/events", json={"event_type": "PRETREAT", "event_date": "2026-10-22",
                                                               "code": "01", "params": {"type": "Cr-free"}})
@@ -109,13 +109,13 @@ def test_full_flow(client):
     assert client.post(f"/api/specimens/{kids[0]}/events", json={"event_type": "NOTE", "event_date": "2026-10-22",
                                                                  "params": {"memo": "x"}}).status_code == 200
 
-    # 시험런 + 결과 + 붙여넣기 + 사진
+    # 분석런 + 결과 + 붙여넣기 + 사진
     r = client.post("/api/test-runs", json={"template_id": cct_id, "equipment": "CCT-01", "conditions": {"salt_conc": 5},
                                             "start_date": "2026-10-23",
                                             "specimens": [{"short_id": kids[0], "slot": "A-01"}, {"short_id": kids[1]}]})
     assert r.status_code == 200, r.text
     tr = r.json()["test_run_no"]
-    assert tr.startswith("TR-CCT-26")
+    assert tr.startswith("AR-CCT-26")
     r = client.put(f"/api/test-runs/{tr}/results/{kids[0]}/1", json={"metrics": {"red_rust_pct": 2, "junk": 1}})
     assert r.status_code == 200 and r.json()["warnings"]
     assert client.put(f"/api/test-runs/{tr}/results/{kids[0]}/2", json={"metrics": {"red_rust_pct": 200}}).status_code == 422
@@ -163,6 +163,6 @@ def test_full_flow(client):
 
 
 def test_admin_project_code(client):
-    r = client.post("/admin/projects", data={"company_project_no": "2026P9994", "project_name": "테스트 과제"},
+    r = client.post("/admin/projects", data={"company_project_no": "2026P999", "project_name": "테스트 과제"},
                     follow_redirects=False)
     assert r.status_code == 303 and "C6" in r.headers["location"]       # A6·B6가 있어 다음 등록 순서 C6

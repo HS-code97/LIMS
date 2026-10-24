@@ -68,7 +68,7 @@ def logout(request: Request):
 def home(request: Request, user: User = Depends(require_user), db: Session = Depends(get_db)):
     my_runs = db.scalars(select(TestRun).where(TestRun.owner_id == user.id, TestRun.status == "RUNNING")
                          .order_by(TestRun.start_date.desc())).all()
-    # 내 진행 중 시험런의 빈칸 수 (본인 화면에서만 보이는 유일한 누락 표시, D-16)
+    # 내 진행 중 분석런의 빈칸 수 (본인 화면에서만 보이는 유일한 누락 표시, D-16)
     run_stats = []
     for tr in my_runs:
         n_spec = len([b for b in tr.boardings if b.unloaded_at is None])

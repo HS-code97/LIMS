@@ -17,7 +17,7 @@ def new_coil() -> str:
 
 
 def blanks(db, user_id, n: int = 2, project: str = "A6") -> list:
-    """서비스 계층: 전폭 1장 입고 → 블랭크 n장 (QV3-101 …)."""
+    """서비스 계층: 전폭 1장 입고 → 블랭크 n장 (QV3-A01 …)."""
     sheet = workflow.intake(db, IntakeIn(coil_no=new_coil(), project_code=project, count=1), user_id)[0]
     return workflow.split(db, sheet, SplitIn(count=n, start=1, size_text="200x300"), user_id)
 

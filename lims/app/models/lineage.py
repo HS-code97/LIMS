@@ -68,7 +68,7 @@ class ProcessRun(Base):
 
 class Specimen(Base):
     """물리적 시편 1개 = 레코드 1개 (시편번호 체계 3.1절).
-    short_id = 각인번호(QV3-102-01-3): 평생 불변인 유일키. 도금·열처리·전처리·도장은 같은 레코드의
+    short_id = 각인번호(QV3-A02-A-3): 평생 불변인 유일키. 도금·열처리·전처리·도장은 같은 레코드의
     단계(stage)·거친 공정(steps)을 바꾸고 이력(SpecimenEvent)을 남깁니다. 자르면 자식 레코드가 생깁니다."""
     __tablename__ = "specimens"
     __table_args__ = (

@@ -129,14 +129,14 @@
     return { recipe, coating_weight_target: cw, preset_id: st.presetId, coating_system: st.coatingSystem };
   }
 
-  /* 'QV3-101~105, QV3-201' → ['QV3-101', …] (범위는 마지막 숫자 자리) */
+  /* 'QV3-A01~A05, QV3-B01' → ['QV3-A01', …] (범위는 끝의 숫자 자리, 'QV3-A01~05'도 됨) */
   function marks() {
     const out = [];
     $("marks").value.toUpperCase().split(/[,\s;]+/).filter(Boolean).forEach((part) => {
-      const m = part.match(/^(.*-)(\d+)~(\d+)$/);
-      if (!m) return out.push(part);
+      const m = part.match(/^(.*?)(\d+)~(\D*)(\d+)$/);
+      if (!m || !m[1].endsWith(m[3])) return out.push(part);
       const w = m[2].length;
-      for (let i = parseInt(m[2], 10); i <= parseInt(m[3], 10) && out.length < 200; i++) out.push(m[1] + String(i).padStart(w, "0"));
+      for (let i = parseInt(m[2], 10); i <= parseInt(m[4], 10) && out.length < 200; i++) out.push(m[1] + String(i).padStart(w, "0"));
     });
     return out;
   }
@@ -231,7 +231,7 @@
   async function save(confirmRange) {
     const btn = $("btn-save");
     if (!st.sp) return LIMS.toast("프리셋을 고르거나 지난 공정런을 복제하세요", "err");
-    if (!marks().length) return LIMS.toast("도금할 시편의 각인번호를 넣으세요 (예: QV3-101~105)", "err");
+    if (!marks().length) return LIMS.toast("도금할 시편의 각인번호를 넣으세요 (예: QV3-A01~A05)", "err");
     btn.disabled = true;
     const body = Object.assign(payloadBase(), {
       source: "manual", dict_version: C.dict.dict_version, project_code: $("project").value,

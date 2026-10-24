@@ -3,8 +3,8 @@
 {% block content %}
 <div x-data="tplEd()">
 <div class="page-head">
-  <div><div class="crumb"><a href="/admin?tab=templates">관리 › 시험 템플릿</a> › 편집</div>
-    <h1 style="font-family:var(--f-body)">{% if data.version %}{{ data.code }} v{{ data.version }} → v{{ data.version + 1 }}{% else %}새 시험 템플릿{% endif %}</h1></div>
+  <div><div class="crumb"><a href="/admin?tab=templates">관리 › 분석 템플릿</a> › 편집</div>
+    <h1 style="font-family:var(--f-body)">{% if data.version %}{{ data.code }} v{{ data.version }} → v{{ data.version + 1 }}{% else %}새 분석 템플릿{% endif %}</h1></div>
   <div class="acts small muted">저장하면 새 버전이 생깁니다. 기존 결과는 저장 당시 버전으로 해석합니다(9.1절). 모든 필드는 선택 입력입니다.</div>
 </div>
 <div class="stack">
@@ -13,7 +13,7 @@
       <div class="body form">
         <div class="row">
           <label class="f">코드<input class="in mono" x-model="d.code" {% if data.version %}readonly{% endif %} placeholder="CCT_STD"></label>
-          <label class="f">시험 종류<input class="in mono" x-model="d.test_type" placeholder="CCT"></label>
+          <label class="f">분석 종류<input class="in mono" x-model="d.test_type" placeholder="CCT"></label>
           <label class="f">팀<select class="in" x-model.number="d.team_id"><option value="">공통</option>{% for t in teams %}<option value="{{ t.id }}">{{ t.name }}</option>{% endfor %}</select></label>
         </div>
         <label class="f">이름<input class="in" x-model="d.name" placeholder="복합부식시험 표준"></label>
@@ -25,7 +25,7 @@
 
     <template x-for="grp in ['field_schema','condition_schema']" :key="grp">
       <section class="card"><header><h2 x-text="grp==='field_schema' ? '결과 필드' : '운전조건 필드'"></h2>
-        <span class="meta" x-text="grp==='field_schema' ? '★ 그리드 표시 · → maps_to 공정 실측 자동 반영(D-33)' : '시험런 생성 시 기본값으로 채움'"></span>
+        <span class="meta" x-text="grp==='field_schema' ? '★ 그리드 표시 · → maps_to 공정 실측 자동 반영(D-33)' : '분석런 생성 시 기본값으로 채움'"></span>
         <div class="r"><button class="btn sm" @click="add(grp)">{{ icon('plus', 14) }} 필드</button></div></header>
         <div class="tablewrap"><table class="t">
           <tr><th>키</th><th>라벨</th><th>형식</th><th>단위</th><th>최소</th><th>최대</th><th>선택지 / 기본값</th><th x-show="grp==='field_schema'">★</th><th x-show="grp==='field_schema'">maps_to</th><th></th></tr>

@@ -1,4 +1,4 @@
-"""관리: 과제·원소재·코드표·프리셋·시험 템플릿·사용자·욕 분석 (5.1 #6)."""
+"""관리: 과제·원소재·코드표·프리셋·분석 템플릿·사용자·욕 분석 (5.1 #6)."""
 from __future__ import annotations
 
 import json
@@ -21,19 +21,19 @@ from ..web import render
 router = APIRouter()
 
 TABS = [("projects", "과제"), ("materials", "코일"), ("bath", "욕 분석"), ("codes", "코드표"),
-        ("presets", "프리셋"), ("templates", "시험 템플릿"), ("dictionary", "실측 항목·허용편차"),
+        ("presets", "프리셋"), ("templates", "분석 템플릿"), ("dictionary", "실측 항목·허용편차"),
         ("import", "엑셀 가져오기"), ("users", "사용자"), ("apikeys", "API 키"),
         ("settings", "시스템 설정")]
 API_SCOPE_NAMES = {"pv": "HMI PV 실행기록", "xcut": "X-cut 앱 결과", "files": "파일 업로드"}
-PROJECT_NO = re.compile(r"^(?P<y>\d{4})(?P<k>[A-Z])(?P<n>\d+)$")
+PROJECT_NO = re.compile(r"^(?P<y>\d{4})(?P<k>[A-Z])(?P<n>\d{3})$")
 
 
 def project_code_for(db: Session, company_no: str) -> str:
-    """사내 과제번호 2026P1234 → 그해 등록 순서 영문 + 연도 끝자리 (A6, B6, …). 사내 번호는 DB에 연결
+    """사내 과제번호 2026P123(8자) → 그해 등록 순서 영문 + 연도 끝자리 (A6, B6, …). 사내 번호는 DB에 연결
     (시편번호 체계 3.3절, D-13). X·Y·Z는 공용 코드로 예약."""
     m = PROJECT_NO.match(company_no.strip().upper())
     if not m:
-        raise HTTPException(422, "사내 과제번호 형식: 2026P1234 (연도4 + 성격1 + 일련번호)")
+        raise HTTPException(422, "사내 과제번호 형식: 2026P123 (연도4 + 성격1 + 일련번호3, 8자)")
     try:
         return marking.next_project_code(db, int(m["y"]))
     except marking.MarkingError as e:

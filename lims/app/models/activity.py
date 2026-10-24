@@ -1,4 +1,4 @@
-"""활동: 시험런, 탑승(N:M), 시험 결과."""
+"""활동: 분석런, 탑승(N:M), 분석 결과."""
 from __future__ import annotations
 
 from datetime import date, datetime
@@ -14,7 +14,7 @@ from .master import TestTemplate, User
 class TestRun(Base):
     __tablename__ = "test_runs"
     id: Mapped[int] = mapped_column(BigId, primary_key=True)
-    test_run_no: Mapped[str] = mapped_column(String(20), unique=True)   # 'TR-CCT-26001'
+    test_run_no: Mapped[str] = mapped_column(String(20), unique=True)   # 'AR-CCT-26001' (v3.1 전 이관분은 TR-에서 바뀜)
     test_type: Mapped[str] = mapped_column(String(20))
     template_id: Mapped[int] = mapped_column(ForeignKey("test_templates.id"))
     equipment: Mapped[str | None] = mapped_column(String(50))
@@ -39,7 +39,7 @@ class RunSpecimen(Base):
     slot: Mapped[str | None] = mapped_column(String(20))
     loaded_at: Mapped[date | None] = mapped_column(Date)
     unloaded_at: Mapped[date | None] = mapped_column(Date)
-    # 탑승 당시 전체번호(과제·단계·꼬리 포함). 시편은 나중에 도장 등으로 바뀌어도 시험 기록은 그때 상태를 남김.
+    # 탑승 당시 전체번호(과제·단계·꼬리 포함). 시편은 나중에 도장 등으로 바뀌어도 분석 기록은 그때 상태를 남김.
     display_at: Mapped[str | None] = mapped_column(String(60))
 
     test_run: Mapped[TestRun] = relationship(back_populates="boardings")

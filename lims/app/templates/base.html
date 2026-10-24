@@ -17,7 +17,7 @@
   <a class="brand" href="/">{{ icon('logo', 26) }}<div><b>PLATED-STEEL LIMS</b><small>표면연구그룹 · v2.3</small></div></a>
   <form class="gsearch" action="/go" method="get" x-data="suggestBox()" @submit="onSubmit($event)" autocomplete="off">
     <span class="ico">{{ icon('scan', 18) }}</span>
-    <input id="gq" name="q" placeholder="각인번호·코일번호·시험런·공정런 (스캐너 입력 가능)" aria-label="검색"
+    <input id="gq" name="q" placeholder="각인번호·코일번호·공정런·분석런 (스캐너 입력 가능)" aria-label="검색"
       hx-get="/search/suggest" hx-trigger="input changed delay:180ms, focus" hx-target="#suggest" hx-swap="innerHTML"
       @keydown.down.prevent="move(1)" @keydown.up.prevent="move(-1)" @keydown.escape="close()">
     <kbd>F2</kbd>
@@ -26,7 +26,7 @@
   <div class="grow"></div>
   <a class="btn" href="/specimens/intake">{{ icon('plus', 16) }}<span class="btn-label">입고</span></a>
   <a class="btn" href="/process-runs/new">{{ icon('plus', 16) }}<span class="btn-label">공정런</span></a>
-  <a class="btn primary" href="/test-runs/new">{{ icon('plus', 16) }}<span class="btn-label">시험런</span></a>
+  <a class="btn primary" href="/test-runs/new">{{ icon('plus', 16) }}<span class="btn-label">분석런</span></a>
   {% if user %}
   <div class="who"><span class="avatar">{{ user.name[:1] }}</span><div><b>{{ user.name }}</b><small>{{ user.team.name if user.team else '' }}{% if user.is_admin %} · 관리자{% endif %}</small></div>
     <form method="post" action="/logout"><button class="btn ghost sm" title="로그아웃">{{ icon('logout', 16) }}</button></form></div>
@@ -36,9 +36,9 @@
   <nav class="nav" aria-label="주 메뉴">
     <div class="org"><b>표면연구그룹</b><small>연구실 LIMS · 사전 {{ pdict.version() }}</small></div>
     <a href="/" class="{{ 'on' if nav=='home' }}">{{ icon('home') }}<span>내 작업</span></a>
-    <a href="/process-runs" class="{{ 'on' if nav=='pr' }}">{{ icon('run') }}<span>공정런</span></a>
     <a href="/specimens" class="{{ 'on' if nav=='spec' }}">{{ icon('spec') }}<span>시편</span></a>
-    <a href="/test-runs" class="{{ 'on' if nav=='tr' }}">{{ icon('test') }}<span>시험런</span></a>
+    <a href="/process-runs" class="{{ 'on' if nav=='pr' }}">{{ icon('run') }}<span>공정런</span></a>
+    <a href="/test-runs" class="{{ 'on' if nav=='tr' }}">{{ icon('test') }}<span>분석런</span></a>
     <a href="/search" class="{{ 'on' if nav=='search' }}">{{ icon('search') }}<span>검색·비교</span></a>
     <a href="/admin" class="{{ 'on' if nav=='admin' }}">{{ icon('admin') }}<span>관리</span></a>
     <div class="spacer"></div>
@@ -50,6 +50,7 @@
   </main>
 </div>
 <div class="toast-wrap" id="toasts"></div>
+<datalist id="steel-grades">{% for g in STEEL_GRADES %}<option value="{{ g }}">{% endfor %}</datalist>
 {% block scripts %}{% endblock %}
 </body>
 </html>

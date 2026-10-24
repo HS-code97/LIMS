@@ -96,7 +96,7 @@ def detail_context(db: Session, spec: Specimen) -> dict:
             if k in eff and k != "out.cw":
                 params.append(eff[k])
         actual_code = actuals.actual_condition_code(db, spec)
-    # 시험 이력: 자신 + 조상 (조각 상세에서도 원판·쿠폰 시험이 한 화면에, 11.2 #7)
+    # 분석 이력: 자신 + 조상 (조각 상세에서도 원판·쿠폰 분석이 한 화면에, 11.2 #7)
     boardings = db.scalars(select(RunSpecimen).where(RunSpecimen.specimen_id.in_(ids))
                            .join(TestRun).order_by(TestRun.start_date.desc())).all()
     tests = []
@@ -197,7 +197,7 @@ def coil_suggest(coil_no: str, count: int = 1, user: User = Depends(require_user
     """현장 코일번호 → 코일코드 제안 + 다음 전폭번호. 이미 등록된 코일이면 그 코드."""
     base, pos = marking.split_field_coil(coil_no)
     mat = db.scalar(select(Material).where(Material.coil_no == base))
-    count = max(1, min(count, 9))
+    count = max(1, min(count, len(marking.MARK_LETTERS)))
     try:
         code, derived = marking.suggest_coil_code(db, base)
         sheet = numbering.next_sheet(db, code, count)
@@ -205,7 +205,7 @@ def coil_suggest(coil_no: str, count: int = 1, user: User = Depends(require_user
         raise HTTPException(422, str(e))
     return {"coil_no": base, "position": pos, "coil_code": code, "existing": bool(mat and mat.coil_code),
             "derived": derived, "sheet_start": sheet,
-            "marks": [marking.mark_id(code, str(n)) for n in range(sheet, sheet + count)]}
+            "marks": [marking.mark_id(code, marking.letter_of(n)) for n in range(sheet, sheet + count)]}
 
 
 @router.get("/api/plating/candidates")

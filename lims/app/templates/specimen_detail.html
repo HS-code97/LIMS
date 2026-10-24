@@ -32,7 +32,7 @@
     <button class="btn lg" @click="ev.open=true">{{ icon('event', 18) }} 공정·이벤트 추가</button>
     <a class="btn lg" href="/api/labels/engrave.csv?ids={{ spec.short_id }}">{{ icon('csv', 18) }} 각인 CSV</a>
     <a class="btn lg" href="/api/labels/print.pdf?ids={{ spec.short_id }}" target="_blank">{{ icon('label', 18) }} 라벨 출력</a>
-    <a class="btn lg" href="/test-runs/new?specimens={{ spec.short_id }}">{{ icon('test', 18) }} 시험런 탑승</a>
+    <a class="btn lg" href="/test-runs/new?specimens={{ spec.short_id }}">{{ icon('test', 18) }} 분석런 탑승</a>
     <a class="btn lg" href="/api/specimens/{{ spec.short_id }}/report.pptx">{{ icon('download', 18) }} PPT</a>
     {% if can_edit %}
     <select class="in" style="height:42px" @change="setStatus($event.target.value)" aria-label="상태 변경">
@@ -88,8 +88,8 @@
     </section>
 
     <section class="card">
-      <header><h2>{{ icon('test') }}시험 이력</h2><span class="meta">{{ tests|length }}건 · 상위 시편의 시험 포함</span>
-        <div class="r"><a class="btn sm" href="/test-runs/new?specimens={{ spec.short_id }}">{{ icon('plus', 14) }}시험런 연결</a></div></header>
+      <header><h2>{{ icon('test') }}분석 이력</h2><span class="meta">{{ tests|length }}건 · 상위 시편의 분석 포함</span>
+        <div class="r"><a class="btn sm" href="/test-runs/new?specimens={{ spec.short_id }}">{{ icon('plus', 14) }}분석런 연결</a></div></header>
       {% if tests %}
       <ul class="list">{% for t in tests %}
         <li style="align-items:flex-start">
@@ -102,7 +102,7 @@
           </div>
           <span class="chip st-{{ t.run.status }}">{{ '진행 중' if t.run.status == 'RUNNING' else '완료' }}</span>
         </li>{% endfor %}</ul>
-      {% else %}<div class="empty-note">아직 시험 이력이 없습니다.</div>{% endif %}
+      {% else %}<div class="empty-note">아직 분석 이력이 없습니다.</div>{% endif %}
     </section>
 
     <section class="card">

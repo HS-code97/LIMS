@@ -28,7 +28,7 @@ def test_ddl_postgres():
 def test_queries_postgres():
     q = sql(lineage.descendants_stmt(1))
     assert "WITH RECURSIVE" in q
-    qy = search.Query(q="QV3-A6-C-102-M206K", project="A6", stage="C", test_type="CCT", code="M2", basis="actual",
+    qy = search.Query(q="QV3-A6-C-A02-M206K", project="A6", stage="C", test_type="CCT", code="M2", basis="actual",
                       params=[search.ParamFilter("out.cw_top", 50, 55), search.ParamFilter("rth.DP", None, -30)])
     s = sql(search.build(qy))
     assert s.count("JOIN effective_params AS") == 2 and "LIMIT" in s and "LIKE" in s

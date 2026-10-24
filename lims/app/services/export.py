@@ -43,7 +43,7 @@ def specimens_xlsx(db: Session, specs: list[Specimen], keys: list[str], basis: s
     for k in keys:
         p = pdict.param(k)
         head += [f"{p['section_nm']} {p['l']} ({p['u']})", "출처"]
-    head += ["시험런", "사진 수", "링크"]
+    head += ["분석런", "사진 수", "링크"]
     ws.append(head)
     emap = effective_map(db, [s.id for s in specs], keys)
     for s in specs:
@@ -76,8 +76,8 @@ def test_run_xlsx(db: Session, tr: TestRun, base_url: str = "") -> bytes:
     wb = Workbook()
     tpl = tr.template
     info = wb.active
-    info.title = "시험런"
-    info.append(["시험런", tr.test_run_no])
+    info.title = "분석런"
+    info.append(["분석런", tr.test_run_no])
     info.append(["템플릿", f"{tpl.code} v{tpl.version} {tpl.name}"])
     info.append(["설비", tr.equipment or ""])
     info.append(["시작", tr.start_date])
@@ -137,7 +137,7 @@ def engrave_csv(specs: list[Specimen]) -> bytes:
 
 def labels_pdf(specs: list[Specimen], test_run: TestRun | None = None, slots: dict[int, str] | None = None) -> bytes:
     """라벨프린터용 PDF (봉투·보관함용): 라벨 1장 = DataMatrix/QR(각인번호) + 각인번호 + 전체번호(꼬리 포함)
-    (+ 시험런·슬롯). 시스템 없이 조건을 봐야 할 때 이 라벨을 봅니다(시편번호 체계 Q12).
+    (+ 분석런·슬롯). 시스템 없이 조건을 봐야 할 때 이 라벨을 봅니다(시편번호 체계 Q12).
     크기·코드 종류는 라벨프린터 모델(11.3)에 맞춰 LIMS_LABEL_SIZE_MM, LIMS_LABEL_CODE로 설정."""
     from ..config import LABEL_CODE, LABEL_SIZE_MM
     from reportlab.graphics import renderPDF

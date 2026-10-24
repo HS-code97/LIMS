@@ -1,4 +1,4 @@
-"""기준 정보 시드: 팀·사용자·공통 과제·코드표·공용 프리셋·시험 템플릿.
+"""기준 정보 시드: 팀·사용자·공통 과제·코드표·공용 프리셋·분석 템플릿.
 
 사용:  python -m scripts.seed            (lims 폴더에서, 운영)
        python -m scripts.seed --demo     (개발용 SQLite만: 개발 계정 + 기준 시나리오용 원소재·과제)
@@ -122,10 +122,10 @@ def seed(db, demo: bool = False, admin: tuple[str, str] | None = None) -> None:
 
     if demo:
         if db.get(Project, "A6") is None:
-            db.add(Project(project_code="A6", company_project_no="2026P1234",
+            db.add(Project(project_code="A6", company_project_no="2026P123",
                            project_name="M계 Al-Zn-Si-Mg 도금강판 내식성 향상", manager_id=users["hhs"].id))
         if db.get(Project, "B6") is None:
-            db.add(Project(project_code="B6", company_project_no="2026P5678",
+            db.add(Project(project_code="B6", company_project_no="2026P567",
                            project_name="도장 후 내식성 평가", manager_id=users["kim"].id))
         if db.scalar(select(Material).where(Material.coil_no == "CQV3141")) is None:
             db.add(Material(coil_no="CQV3141", coil_code="QV3", steel_grade="SPCC", thickness_mm=0.8,

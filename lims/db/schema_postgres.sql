@@ -1,4 +1,4 @@
--- 도금강판 R&D LIMS v2.3 (시편번호 v3.0) — PostgreSQL 15+ DDL (app/models에서 자동 생성, 직접 고치지 마세요)
+-- 도금강판 R&D LIMS v2.3 (시편번호 v3.1) — PostgreSQL 15+ DDL (app/models에서 자동 생성, 직접 고치지 마세요)
 -- 운영 적용은 Alembic(alembic upgrade head)을 쓰고, 이 파일은 검토·대조용입니다.
 
 CREATE TABLE master_codes (
@@ -351,4 +351,4 @@ CREATE INDEX idx_act_run_key ON param_actuals (process_run_id, param_key) WHERE 
 CREATE INDEX idx_act_spec_key ON param_actuals (specimen_id, param_key) WHERE NOT is_deleted;
 
 -- 각인번호 형식 (PostgreSQL 전용 정규식 검사, 시편번호 체계 3.2절)
-ALTER TABLE specimens ADD CONSTRAINT ck_short_id_format CHECK (short_id ~ '^[A-Z]{2}[0-9]-[0-9]([0-9]{2})?(-[0-9]{2}(-[1-9A-Z])?)?$');
+ALTER TABLE specimens ADD CONSTRAINT ck_short_id_format CHECK (short_id ~ '^[A-Z]{2}[0-9]-[ABCDEFGHJKLMNPRTUVWXY]([0-9]{2})?(-[ABCDEFGHJKLMNPRTUVWXY](-[1-9])?)?$');

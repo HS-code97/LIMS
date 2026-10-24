@@ -106,7 +106,7 @@ def actuals_context(db: Session, run: ProcessRun, extra_keys: list[str] | None =
             cells[(p.id, k)] = {"eff": e, "manual": man[-1].value if man else None,
                                 "auto": any(r.source in ("test", "pv", "lab") for r in rows),
                                 "direct": bool(rows)}
-    # 시험 결과에서 자동 채워질 칸 표시용: 템플릿 maps_to
+    # 분석 결과에서 자동 채워질 칸 표시용: 템플릿 maps_to
     from ..models import TestTemplate
     maps = {}
     for t in db.scalars(select(TestTemplate).where(TestTemplate.is_active.is_(True))):
@@ -205,7 +205,7 @@ def _check_actual_edit(user: User, run: ProcessRun, specs: list[Specimen]) -> No
 def post_actuals(run_no: str, data: ActualsIn, user: User = Depends(require_user), db: Session = Depends(get_db)):
     run = get_run(db, run_no)
     if data.source not in ("manual", "pv"):
-        raise HTTPException(422, "이 경로의 출처는 manual 또는 pv입니다 (분석은 욕 분석 적용, 시험은 결과 저장).")
+        raise HTTPException(422, "이 경로의 출처는 manual 또는 pv입니다 (분석은 욕 분석 적용, 분석런은 결과 저장).")
     specs = {s.short_id: s for s in run_specimens(db, run)}
     _check_actual_edit(user, run, [])
     n = 0

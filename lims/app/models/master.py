@@ -1,4 +1,4 @@
-"""기준 정보: 팀, 사용자, 과제, 마스터 코드, 공정 프리셋, 시험 템플릿."""
+"""기준 정보: 팀, 사용자, 과제, 마스터 코드, 공정 프리셋, 분석 템플릿."""
 from __future__ import annotations
 
 from datetime import datetime
@@ -53,7 +53,7 @@ class ApiKey(Base):
 class Project(Base):
     __tablename__ = "projects"
     project_code: Mapped[str] = mapped_column(String(4), primary_key=True)   # '26P4', '26X0'
-    company_project_no: Mapped[str | None] = mapped_column(String(20))      # '2026P1234'
+    company_project_no: Mapped[str | None] = mapped_column(String(20))      # '2026P123' (8자)
     project_name: Mapped[str] = mapped_column(String(150))
     manager_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     is_common: Mapped[bool] = mapped_column(Boolean, default=False)

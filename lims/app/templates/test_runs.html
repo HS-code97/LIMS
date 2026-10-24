@@ -1,21 +1,21 @@
 {% extends "base.html" %}
-{% block title %}시험런{% endblock %}
+{% block title %}분석런{% endblock %}
 {% block content %}
-<div class="page-head"><div><div class="crumb">시험런</div><h1 style="font-family:var(--f-body)">시험런</h1></div>
-  <div class="acts"><a class="btn primary" href="/test-runs/new">{{ icon('plus', 16) }} 시험런 생성</a></div></div>
+<div class="page-head"><div><div class="crumb">분석런</div><h1 style="font-family:var(--f-body)">분석런</h1></div>
+  <div class="acts"><a class="btn primary" href="/test-runs/new">{{ icon('plus', 16) }} 분석런 생성</a></div></div>
 <form class="card body" style="display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin-bottom:16px" method="get">
   <label class="f">상태<select class="in" name="status"><option value="">전체</option><option {% if f.status=='RUNNING' %}selected{% endif %}>RUNNING</option><option {% if f.status=='DONE' %}selected{% endif %}>DONE</option></select></label>
-  <label class="f">시험 종류<select class="in" name="test_type"><option value="">전체</option>{% for t in types %}<option {% if t == f.test_type %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>
-  <label class="small" style="display:flex;gap:6px;align-items:center;height:34px"><input type="checkbox" name="mine" value="1" {% if f.mine %}checked{% endif %}> 내 시험런만</label>
+  <label class="f">분석 종류<select class="in" name="test_type"><option value="">전체</option>{% for t in types %}<option {% if t == f.test_type %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>
+  <label class="small" style="display:flex;gap:6px;align-items:center;height:34px"><input type="checkbox" name="mine" value="1" {% if f.mine %}checked{% endif %}> 내 분석런만</label>
   <button class="btn primary">조회</button>
 </form>
 <section class="card"><div class="tablewrap"><table class="t">
-  <tr><th>시험런</th><th>템플릿</th><th>설비</th><th>시작</th><th>종료</th><th class="n">시편</th><th class="n">회차</th><th>상태</th><th>담당</th></tr>
+  <tr><th>분석런</th><th>템플릿</th><th>설비</th><th>시작</th><th>종료</th><th class="n">시편</th><th class="n">회차</th><th>상태</th><th>담당</th></tr>
   {% for t in runs %}
   <tr><td><a class="mono" href="/test-runs/{{ t.test_run_no }}"><b>{{ t.test_run_no }}</b></a></td><td>{{ t.template.name }} <span class="mono small muted">{{ t.template.code }} v{{ t.template.version }}</span></td>
     <td class="mono small">{{ t.equipment or '' }}</td><td class="mono">{{ t.start_date|d }}</td><td class="mono">{{ t.end_date|d }}</td>
     <td class="n">{{ t.boardings|length }}</td><td class="n">{{ t.cycles or '' }}</td><td><span class="chip st-{{ t.status }}">{{ t.status }}</span></td>
     <td class="small">{{ t.owner.name if t.owner else '' }}</td></tr>
-  {% else %}<tr class="empty-row"><td colspan="9">시험런이 없습니다.</td></tr>{% endfor %}
+  {% else %}<tr class="empty-row"><td colspan="9">분석런이 없습니다.</td></tr>{% endfor %}
 </table></div></section>
 {% endblock %}

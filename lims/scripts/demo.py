@@ -1,7 +1,7 @@
 """11.2 기준 시나리오를 데모 데이터로 재현 (시연·교육용, 시편번호 체계 v3.0).
 
 사용:  python -m scripts.demo        (lims 폴더에서, 빈 DB 권장)
-코일 CQV3141T → 입고 전폭 QV3-1·2 → 전단 블랭크 QV3-101~105 → PR(M2, 60 g/m²) 도금 → 실측 → CW_MEASURE
+코일 CQV3141T → 입고 전폭 QV3-A·B → 전단 블랭크 QV3-A01~A05 → PR(M2, 60 g/m²) 도금 → 실측 → CW_MEASURE
 → 실험편·분석조각 → CCT 8주 사진 → SEM. 김연구는 전폭 2를 잘라 자기 과제(B6)로 바로 도장.
 """
 from __future__ import annotations
@@ -79,10 +79,10 @@ def main() -> None:
         m2 = db.scalar(select(ProcessPreset).where(ProcessPreset.name == "M2"))
         tpl = {t.code: t for t in db.scalars(select(TestTemplate))}
 
-        # 0. 입고: 현장 코일 CQV3141T에서 전폭 2장 → QV3-1, QV3-2 (과제 A6, 보관함 A-3)
+        # 0. 입고: 현장 코일 CQV3141T에서 전폭 2장 → QV3-A, QV3-B (과제 A6, 보관함 A-3)
         a1, a2 = workflow.intake(db, IntakeIn(coil_no="CQV3141T", project_code="A6", count=2, steel_grade="SPCC",
                                               thickness_mm=0.8, storage_location="보관함 A-3"), uid)
-        # 0b. 전단: 전폭 1 → 블랭크 QV3-101~105
+        # 0b. 전단: 전폭 1 → 블랭크 QV3-A01~A05
         blanks = workflow.split(db, a1, SplitIn(count=5, start=1, size_text="200x300"), uid)
 
         # 1. 공정런: 프리셋 M2 → 이슬점만 수정 → 블랭크 5장 도금 (같은 레코드가 C 단계로, 꼬리 M206K)
@@ -97,35 +97,35 @@ def main() -> None:
         # 1b. 세션 욕온·이슬점, 원판별 최고판온·나이프 압력
         actuals.set_manual_cell(db, run, "pot.T", 588.5, specimen=None, user_id=uid, method="열전대")
         actuals.set_manual_cell(db, run, "rth.DP", -36, specimen=None, user_id=uid, method="노점계")
-        for sid, t in (("101", 796), ("102", 802), ("103", 805)):
+        for sid, t in (("A01", 796), ("A02", 802), ("A03", 805)):
             actuals.set_manual_cell(db, run, "rth.T", t, specimen=p[sid], user_id=uid, method="열전대")
-        actuals.set_manual_cell(db, run, "ak.P", 30, specimen=p["101"], user_id=uid)
+        actuals.set_manual_cell(db, run, "ak.P", 30, specimen=p["A01"], user_id=uid)
         ba = BathAnalysis(pot="POT-1", sampled_at=datetime(2026, 10, 21, 9, 30), method="ICP", user_id=uid,
                           composition={"Zn": 25.1, "Si": 2.9, "Mg": 0.46, "Fe": 0.4, "Al": "bal."})
         db.add(ba)
         db.flush()
         actuals.apply_bath_analysis(db, ba, [run], uid)
 
-        # 1c. QV3-102 부착량 CW_MEASURE → 실측 자동 반영 (실측 기준 M205K)
+        # 1c. QV3-A02 부착량 CW_MEASURE → 실측 자동 반영 (실측 기준 M205K)
         tr_cw = workflow.create_test_run(db, TestRunIn(template_id=tpl["CW_MEASURE"].id, start_date=date(2026, 10, 21),
-                                                       equipment="XRF-01", specimens=[{"short_id": "QV3-102"},
-                                                                                      {"short_id": "QV3-103"}]), uid)
-        workflow.save_result(db, tr_cw, p["102"], 0, {"cw_top": 54, "cw_bottom": 58, "method": "중량법", "n_points": 3}, uid)
-        workflow.save_result(db, tr_cw, p["103"], 0, {"cw_top": 61, "cw_bottom": 59, "method": "중량법", "n_points": 3}, uid)
+                                                       equipment="XRF-01", specimens=[{"short_id": "QV3-A02"},
+                                                                                      {"short_id": "QV3-A03"}]), uid)
+        workflow.save_result(db, tr_cw, p["A02"], 0, {"cw_top": 54, "cw_bottom": 58, "method": "중량법", "n_points": 3}, uid)
+        workflow.save_result(db, tr_cw, p["A03"], 0, {"cw_top": 61, "cw_bottom": 59, "method": "중량법", "n_points": 3}, uid)
         workflow.finish_test_run(db, tr_cw, date(2026, 10, 21))
 
-        # 2~3. QV3-101 → 단면 시편 QV3-101-01 → TR-SEM → SEM 파일
-        s0101 = workflow.split(db, p["101"], SplitIn(count=1, start=1, size_text="20x20"), uid)[0]
+        # 2~3. QV3-A01 → 단면 시편 QV3-A01-A → AR-SEM → SEM 파일
+        s0101 = workflow.split(db, p["A01"], SplitIn(count=1, start=1, size_text="20x20"), uid)[0]
         tr_sem = workflow.create_test_run(db, TestRunIn(template_id=tpl["SEM_SECTION"].id, start_date=date(2026, 10, 22),
                                                         equipment="SEM-01", conditions={"kv": 15},
                                                         specimens=[{"short_id": s0101.short_id}]), uid)
         workflow.save_result(db, tr_sem, s0101, 0, {"magnification": 5000, "detector": "BSE", "layer_thickness_um": 21.4}, uid)
-        file_ingest.ingest(db, sem_image(1, "QV3-101-01 BSE x5000"), "QV3-101-01_SEM_init.tif", user_id=uid)
+        file_ingest.ingest(db, sem_image(1, "QV3-A01-A BSE x5000"), "QV3-A01-A_SEM_init.tif", user_id=uid)
 
-        # 4. QV3-102, 103 → 실험편 QV3-102-01, QV3-103-01
-        c0102 = workflow.split(db, p["102"], SplitIn(count=1, start=1, sample_position="C",
+        # 4. QV3-A02, A03 → 실험편 QV3-A02-A, QV3-A03-A
+        c0102 = workflow.split(db, p["A02"], SplitIn(count=1, start=1, sample_position="C",
                                                      rolling_direction="RD", surface_side="TOP"), uid)[0]
-        c0103 = workflow.split(db, p["103"], SplitIn(count=1, start=1, sample_position="C"), uid)[0]
+        c0103 = workflow.split(db, p["A03"], SplitIn(count=1, start=1, sample_position="C"), uid)[0]
         # 5. CCT 8주 (W00~W08), 매주 사진 + 적청률
         start = date(2026, 10, 23)
         tr_cct = workflow.create_test_run(db, TestRunIn(
@@ -142,7 +142,7 @@ def main() -> None:
                                      start + timedelta(days=7 * w))
         workflow.finish_test_run(db, tr_cct, start + timedelta(days=56))
 
-        # 6. QV3-102-01 부식 단면 → 분석조각 QV3-102-01-1 → TR-SEM-26002
+        # 6. QV3-A02-A 부식 단면 → 분석조각 QV3-A02-A-1 → AR-SEM-26002
         s0102 = workflow.split(db, c0102, SplitIn(count=1, start=1, size_text="15x20"), uid)[0]
         tr_sem2 = workflow.create_test_run(db, TestRunIn(template_id=tpl["SEM_SECTION"].id,
                                                          start_date=start + timedelta(days=57), equipment="SEM-01",
@@ -151,22 +151,22 @@ def main() -> None:
         file_ingest.ingest(db, sem_image(2, f"{s0102.short_id} corroded section"),
                            f"{s0102.short_id}_SEM_corrosion_x2000.tif", user_id=uid)
 
-        # 진행 중 시험런 하나 (홈 화면 빈칸 표시용): QV3-104 → 실험편 01~04
-        more = workflow.split(db, p["104"], SplitIn(count=4, start=1), uid)
+        # 진행 중 분석런 하나 (홈 화면 빈칸 표시용): QV3-A04 → 실험편 A~D
+        more = workflow.split(db, p["A04"], SplitIn(count=4, start=1), uid)
         tr_sst = workflow.create_test_run(db, TestRunIn(template_id=tpl["SST_STD"].id, start_date=date(2026, 10, 19),
                                                         equipment="SST-02", specimens=[{"short_id": k.short_id, "slot": f"B-{i+1:02d}"}
                                                                                        for i, k in enumerate(more)]), uid)
         for i, k in enumerate(more):
             for d in range(2 + i % 2):
                 workflow.save_result(db, tr_sst, k, d, {"red_rust_pct": 0, "white_rust_pct": d * 3}, uid)
-        # 다른 연구원(김연구)이 전폭 2를 잘라 자기 과제 B6로 도금 없이 바로 도장 → QV3-B6-E-201-P01
+        # 다른 연구원(김연구)이 전폭 2를 잘라 자기 과제 B6로 도금 없이 바로 도장 → QV3-B6-E-B01-P01
         kb = workflow.split(db, a2, SplitIn(count=2, start=1, project_code="B6", size_text="150x70"), kim.id)
         workflow.treat(db, kb[0], TreatIn(kind="PAINT", code="01", event_date=date(2026, 10, 24)), kim.id)
         # 미분류 파일 1개 (홈 화면 미분류함)
         file_ingest.ingest(db, panel_photo(999, 0.5, "IMG_2031"), "IMG_2031.jpg", user_id=uid)
         db.commit()
         print(f"데모 완료: {run.run_no}, {tr_cct.test_run_no}, {tr_sem.test_run_no}, {tr_sem2.test_run_no}, {tr_sst.test_run_no}")
-        print(f"QV3-102 실측 기준 조건부: {actuals.actual_condition_code(db, p['102'])} · 도장 시편 {kb[0].display_id}")
+        print(f"QV3-A02 실측 기준 조건부: {actuals.actual_condition_code(db, p['A02'])} · 도장 시편 {kb[0].display_id}")
 
 
 if __name__ == "__main__":

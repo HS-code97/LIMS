@@ -162,6 +162,19 @@ def test_full_flow(client):
     assert client.get(f"/api/specimens/{kids[0]}").json()["status"] == "AVAILABLE"
 
 
+def test_numbering_guide(client):
+    """시편체계 안내: 메뉴 맨 위 링크, 코드와 같은 각인 영문·코일코드 제안, 로그인 필요."""
+    page = client.get("/guide/numbering")
+    assert page.status_code == 200
+    html = page.text
+    assert html.index('href="/guide/numbering"') < html.index('<span>내 작업</span>')     # 왼쪽 메뉴 맨 위
+    assert "QV3-A02-K-3" in html and "QV3-A6-E-A03-M206K-H03-T02-P12" in html
+    assert ">QV3</span>" in html and "<code>QV1</code>" in html                         # coil_code_candidates('CQV3141T')
+    assert 'title="I ↔ 숫자 1 혼동"' in html and "<b>K</b><small>10</small>" in html   # MARK_LETTERS: I 제외, 10번째 = K
+    with TestClient(app) as anon:
+        assert anon.get("/guide/numbering", follow_redirects=False).status_code == 303
+
+
 def test_shear_menu(client):
     """시편 › 전단: 전폭 고르기(전체번호로도) → 10장 → 블랭크 01~10, 모시편에 CUT 이력, 공정런 미리채움."""
     r = client.post("/api/specimens/intake", json={"coil_no": new_coil(), "project_code": "A6", "count": 1})

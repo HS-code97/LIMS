@@ -1,0 +1,471 @@
+{% extends "base.html" %}
+{% block title %}시편체계{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/css/guide.css?v=3.1.0">{% endblock %}
+{#- 내용의 원천: `시편번호 체계.md` v3.1. 번호 글자열에 data-num을 달면 guide.js가 구간별 색을 입힙니다. -#}
+{% macro n(v, kind='full') %}<code class="num-t" data-num="{{ kind }}">{{ v }}</code>{% endmacro %}
+{% block content %}
+<div class="gd" id="gd">
+
+<!-- ─────────── 0. 첫 화면 ─────────── -->
+<section class="g-hero" id="s-core" aria-labelledby="h-core">
+  <div class="g-hero-txt">
+    <div class="g-kicker">시편번호 체계 v3.1 · 2026-10-24</div>
+    <h1 id="h-core">시편 하나에 번호는 <em>두 개</em>입니다</h1>
+    <p class="g-lead"><b>각인번호</b>는 시편의 <b>이름</b>입니다. 시편에 새기고 평생 바뀌지 않습니다.<br>
+      <b>전체번호</b>는 시편의 <b>이력서</b>입니다. 도금·도장처럼 상태가 바뀌면 함께 바뀌고, DB와 화면·라벨에만 있습니다.</p>
+    <ol class="g-three">
+      <li><span class="g-ico cut" aria-hidden="true">✂</span><div><b>자르면 새 시편</b><small>각인번호 뒤에 한 구간이 붙습니다</small></div></li>
+      <li><span class="g-ico treat" aria-hidden="true">⚗</span><div><b>처리하면 같은 시편</b><small>각인 그대로, 전체번호의 단계·꼬리만 바뀝니다</small></div></li>
+      <li><span class="g-ico db" aria-hidden="true">⛁</span><div><b>조건은 새기지 않음</b><small>바뀔 수 있는 정보는 DB가 기억합니다</small></div></li>
+    </ol>
+    <div class="g-hero-acts"><a class="btn primary" href="#s-flow">흐름 그림부터 보기</a><button class="btn" type="button" onclick="window.print()">인쇄·PDF</button></div>
+  </div>
+  <div class="g-hero-art" aria-label="각인번호와 전체번호 비교 그림">
+    <figure class="g-plate">
+      <div class="g-metal"><span class="g-engr">QV3-A02-K-3</span><span class="g-dm" data-dm aria-hidden="true"></span></div>
+      <figcaption><b>시편에 새김</b> · 각인번호 · <span class="muted">평생 그대로</span></figcaption>
+    </figure>
+    <div class="g-link" aria-hidden="true"><span>DB 조회</span><svg viewBox="0 0 120 20" preserveAspectRatio="none"><path d="M2 10H112" stroke="currentColor" stroke-width="2" stroke-dasharray="4 4"/><path d="m106 4 8 6-8 6" fill="none" stroke="currentColor" stroke-width="2"/></svg></div>
+    <figure class="g-screen">
+      <div class="g-scr-bar"><i></i><i></i><i></i><span>LIMS · 시편 상세</span></div>
+      <div class="g-scr-body">
+        <small>전체번호</small>
+        <div class="g-big">{{ n('QV3-A6-C-A02-K-3-M206K') }}</div>
+        <div class="g-legend" data-legend></div>
+      </div>
+      <figcaption><b>화면·라벨에 표시</b> · 전체번호 · <span class="muted">상태 따라 바뀜</span></figcaption>
+    </figure>
+  </div>
+</section>
+
+<nav class="g-toc" aria-label="이 페이지 목차">
+  <a href="#s-core">요약</a><a href="#s-flow">시편의 흐름</a><a href="#s-two">두 번호</a><a href="#s-mark">각인번호</a>
+  <a href="#s-full">전체번호·체험</a><a href="#s-stage">단계 A~E</a><a href="#s-tree">계보</a><a href="#s-coil">코일코드</a>
+  <a href="#s-ex">예시</a><a href="#s-history">우리의 고민</a><a href="#s-faq">자주 묻는 질문</a><a href="#s-ref">참고</a>
+</nav>
+
+<!-- ─────────── 1. 흐름 ─────────── -->
+<section class="g-sec" id="s-flow" aria-labelledby="h-flow">
+  <header class="g-h"><span class="g-no">01</span><div><h2 id="h-flow">시편의 흐름 — 언제 무엇이 바뀌나</h2>
+    <p>현장 코일에서 분석조각까지 한 시편을 따라갑니다. 단계를 하나씩 넘기면 <b>실물의 모양</b>과 <b>두 번호</b>가 함께 바뀝니다. 바뀐 글자는 반짝입니다.</p></div></header>
+
+  <div class="g-flow" data-flow>
+    <ol class="g-steps" role="tablist" aria-label="공정 단계" data-steps></ol>
+    <div class="g-flow-main">
+      <div class="g-art" data-art aria-live="polite"></div>
+      <div class="g-flow-info">
+        <div class="g-act" data-act></div>
+        <h3 data-title></h3>
+        <p data-desc></p>
+        <dl class="g-nums">
+          <div><dt>각인번호 <small>시편에 새김</small></dt><dd data-mark></dd></div>
+          <div><dt>전체번호 <small>DB·화면·라벨</small></dt><dd data-full></dd></div>
+        </dl>
+        <div class="g-procs" data-procs aria-label="거친 공정"></div>
+        <div class="g-flow-nav">
+          <button class="btn" type="button" data-prev aria-label="이전 단계">◀ 이전</button>
+          <button class="btn ghost" type="button" data-play>▶ 자동 재생</button>
+          <button class="btn primary" type="button" data-next aria-label="다음 단계">다음 ▶</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3 class="g-h3">번호가 바뀌는 시점 한눈에</h3>
+  <div class="g-table-wrap"><table class="g-table g-when">
+    <thead><tr><th>하는 일</th><th>DB 레코드</th><th>각인번호</th><th>전체번호</th></tr></thead>
+    <tbody>
+      <tr><td><b>입고</b> 현장에서 전폭시편을 가져옴</td><td><span class="pill new">새로 생김</span></td><td>생김 {{ n('QV3-A','mark') }}</td><td>생김 · 단계 <b>A</b></td></tr>
+      <tr class="cut"><td><b>✂ 처음 자르기</b> (전단 → 블랭크)</td><td><span class="pill new">자식 생김</span></td><td>조각 숫자 2자리 붙음 {{ n('QV3-A02','mark') }}</td><td>단계 A → <b>B</b></td></tr>
+      <tr><td><b>⚗ 도금</b></td><td><span class="pill same">같은 시편</span></td><td class="keep">그대로</td><td>단계 → <b>C</b>, 꼬리 <code>M206K</code></td></tr>
+      <tr><td><b>⚗ 열처리</b></td><td><span class="pill same">같은 시편</span></td><td class="keep">그대로</td><td>단계 → <b>D</b>(오를 때만), 꼬리 <code>H03</code></td></tr>
+      <tr><td><b>⚗ 전처리</b> (화성 등)</td><td><span class="pill same">같은 시편</span></td><td class="keep">그대로</td><td>단계 <b>그대로</b>, 꼬리 <code>T02</code></td></tr>
+      <tr><td><b>⚗ 도장</b></td><td><span class="pill same">같은 시편</span></td><td class="keep">그대로</td><td>단계 → <b>E</b>, 꼬리 <code>P12</code></td></tr>
+      <tr class="cut"><td><b>✂ 다시 자르기</b> (후절단 → 실험편)</td><td><span class="pill new">자식 생김</span></td><td>영문 1자 붙음 {{ n('QV3-A02-K','mark') }}</td><td>단계·꼬리 물려받음</td></tr>
+      <tr class="cut"><td><b>✂ 분석조각</b></td><td><span class="pill new">자식 생김</span></td><td>숫자 1자 붙음 {{ n('QV3-A02-K-3','mark') }}</td><td>단계·꼬리 물려받음</td></tr>
+      <tr><td><b>⇄ 다른 과제가 사용</b></td><td>자르면 자식, 아니면 같은 시편</td><td class="keep">그대로</td><td>과제코드가 쓰는 쪽으로 (예: <code>A6</code> → <code>B6</code>)</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ─────────── 2. 두 번호 ─────────── -->
+<section class="g-sec" id="s-two" aria-labelledby="h-two">
+  <header class="g-h"><span class="g-no">02</span><div><h2 id="h-two">각인번호와 전체번호는 어떻게 다른가</h2>
+    <p>사람에 비유하면 <b>각인번호는 이름</b>, <b>전체번호는 명함</b>입니다. 이름은 평생 같지만, 명함의 소속(과제)·직급(단계)·경력(꼬리)은 바뀝니다.</p></div></header>
+  <div class="g-two">
+    <article class="g-card mark">
+      <div class="g-card-top"><span class="g-tag">각인번호</span><span class="g-tag-sub">= 이름 · 유일키</span></div>
+      <div class="g-sample">{{ n('QV3-A02-K-3','mark') }}</div>
+      <ul class="g-ul">
+        <li><b>담는 것</b> 코일 + 가지(전폭·조각·후절단·분석조각) — 물리적 시편을 구별하는 <b>최소 정보</b></li>
+        <li><b>바뀌나</b> <span class="pill same">평생 안 바뀜</span></li>
+        <li><b>어디에</b> 시편 각인, DataMatrix, 스캐너·검색</li>
+        <li><b>길이</b> 최대 11자 (작은 조각에도 들어감)</li>
+        <li><b>중복</b> 시스템 전체에서 불가능 (DB 유일 제약)</li>
+      </ul>
+    </article>
+    <div class="g-plus" aria-hidden="true"><span>+ 과제<br>+ 단계<br>+ 조건 꼬리</span></div>
+    <article class="g-card full">
+      <div class="g-card-top"><span class="g-tag">전체번호</span><span class="g-tag-sub">= 명함 · 표시용</span></div>
+      <div class="g-sample">{{ n('QV3-A6-C-A02-K-3-M206K') }}</div>
+      <ul class="g-ul">
+        <li><b>담는 것</b> 각인번호 + <b>지금 쓰는 과제</b> + <b>현재 단계</b> + <b>거친 공정의 조건</b></li>
+        <li><b>바뀌나</b> <span class="pill chg">상태 따라 바뀜</span> 바뀐 내역은 이력에 남음</li>
+        <li><b>어디에</b> DB·화면, 봉투·보관함 인쇄 라벨, 분석런 엑셀</li>
+        <li><b>저장</b> 각인번호와 이력에서 계산 (따로 저장하지 않음)</li>
+        <li><b>분석 기록</b> 분석런에 탑승한 순간의 전체번호를 스냅샷으로 남김</li>
+      </ul>
+    </article>
+  </div>
+  <div class="g-why">
+    <b>왜 둘로 나눴나?</b>
+    <span>연구실에는 언제나 컴퓨터가 있어 DB를 바로 조회할 수 있습니다. 새길 정보가 적을수록 <b>각인이 쉽고</b>, <b>지워질 위험이 줄고</b>, <b>작은 조각에도</b> 들어갑니다. 과제·단계·조건은 시편이 그대로여도 바뀌는 정보라서, 고칠 수 없는 각인에 넣으면 언젠가 실물과 어긋납니다. <small class="muted">(결정 D-16 · Q12 · Q13)</small></span>
+  </div>
+</section>
+
+<!-- ─────────── 3. 각인번호 ─────────── -->
+<section class="g-sec" id="s-mark" aria-labelledby="h-mark">
+  <header class="g-h"><span class="g-no">03</span><div><h2 id="h-mark">각인번호 해부</h2>
+    <p>각인번호는 <b>시편이 어디서 왔는지</b>를 그대로 적은 경로입니다. 번호만 보고도 모시편을 압니다. <code>QV3-A02-K</code>의 부모는 <code>QV3-A02</code>, 그 위는 <code>QV3-A</code>입니다.</p></div></header>
+
+  <div class="g-anat" aria-label="각인번호 구간">
+    <div class="g-anat-seg k-coil"><b>QV3</b><span>코일</span><small>영문 2 + 숫자 1</small><em>현장 코일 1개</em></div>
+    <div class="g-anat-seg k-branch"><b>A02</b><span>가지</span><small>영문 1 [+ 숫자 2]</small><em>전폭 A + 그 전폭을 자른 조각 02</em></div>
+    <div class="g-anat-seg k-cut"><b>K</b><span>후절단</span><small>영문 1</small><em>도금판 등을 다시 자른 실험편</em></div>
+    <div class="g-anat-seg k-piece"><b>3</b><span>분석조각</span><small>숫자 1</small><em>실험편을 자른 조각</em></div>
+  </div>
+
+  <div class="g-grow">
+    <div class="g-grow-row"><span class="g-grow-l">전폭시편</span>{{ n('QV3-A','mark') }}</div>
+    <div class="g-grow-row"><span class="g-grow-l">블랭크 <small>(도금·도장 후에도 그대로)</small></span>{{ n('QV3-A02','mark') }}</div>
+    <div class="g-grow-row"><span class="g-grow-l">실험편</span>{{ n('QV3-A02-K','mark') }}</div>
+    <div class="g-grow-row"><span class="g-grow-l">분석조각</span>{{ n('QV3-A02-K-3','mark') }}</div>
+  </div>
+
+  <div class="g-split">
+    <div class="g-panel">
+      <h3 class="g-h3">하이픈이 지워져도 읽힙니다</h3>
+      <p class="small">각인의 하이픈은 쉽게 흐려집니다. v3.1은 <b>구간 경계마다 영문과 숫자가 바뀌게</b> 해서, 하이픈 없이도 끊어 읽을 수 있습니다. 코일코드가 숫자로 끝나므로 그 뒤는 영문 → 숫자 → 영문 → 숫자 순서가 저절로 정해집니다.</p>
+      <div class="g-hyph" data-hyph>
+        <div class="g-hyph-row good"><span class="g-ver">v3.1</span><span class="g-hy-str" data-alt>QV3-A02-K-3</span><span class="g-verdict ok">QV3 / A02 / K / 3</span></div>
+        <div class="g-hyph-row bad"><span class="g-ver">v3.0</span><span class="g-hy-str" data-alt>QV3-102-01-3</span><span class="g-verdict no">숫자 한 덩어리</span></div>
+        <button class="btn" type="button" data-hyph-btn aria-pressed="false">하이픈 지우기</button>
+        <div class="g-alt-legend"><span class="ch-l">영문</span><span class="ch-d">숫자</span></div>
+      </div>
+      <p class="small muted">각인 장비가 할 수 있으면 하이픈 대신 한 칸 띄우거나, 작은 조각은 2줄로 새기면 더 잘 보입니다.</p>
+      <div class="g-chip2"><div class="g-metal sm"><span class="g-engr">QV3<br>A02K3</span></div><small>20×20 분석조각 2줄 각인 예</small></div>
+    </div>
+    <div class="g-panel">
+      <h3 class="g-h3">각인 영문은 21자만 씁니다</h3>
+      <p class="small">숫자와 헷갈리는 다섯 글자를 뺐습니다. 화면에서 시작 번호를 <b>n번째</b>로 넣으면(1 = A, 10 = K) 미리보기에 영문이 보입니다.</p>
+      <div class="g-abc">
+        {%- set confuse = {'I': '1', 'O': '0', 'Q': '0', 'S': '5', 'Z': '2'} -%}
+        {%- for ch in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' -%}
+          {%- if ch in mark_letters -%}<span class="on"><b>{{ ch }}</b><small>{{ mark_letters.index(ch) + 1 }}</small></span>
+          {%- else -%}<span class="off" title="{{ ch }} ↔ 숫자 {{ confuse.get(ch, '?') }} 혼동"><b>{{ ch }}</b><small>≈{{ confuse.get(ch, '?') }}</small></span>{%- endif -%}
+        {%- endfor -%}
+      </div>
+      <h3 class="g-h3">자리별 한도</h3>
+      <div class="g-cap">
+        <div class="k-branch"><b>21</b><span>전폭시편<br><small>코일당 (A~Y)</small></span></div>
+        <div class="k-branch"><b>99</b><span>조각<br><small>전폭당 (01~99)</small></span></div>
+        <div class="k-cut"><b>21</b><span>실험편<br><small>판당 (A~Y)</small></span></div>
+        <div class="k-piece"><b>9</b><span>분석조각<br><small>실험편당 (1~9)</small></span></div>
+      </div>
+      <p class="small muted">실제 쓰임(코일당 전폭 2~3장, 도금판 하나에서 실험편 4~6장)에는 충분합니다. 넘으면 저장이 거부됩니다.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────── 4. 전체번호 ─────────── -->
+<section class="g-sec" id="s-full" aria-labelledby="h-full">
+  <header class="g-h"><span class="g-no">04</span><div><h2 id="h-full">전체번호 해부와 체험</h2>
+    <p>전체번호는 각인번호 사이에 <b>과제</b>와 <b>단계</b>를 끼우고, 맨 뒤에 <b>거친 공정의 조건 꼬리</b>를 붙인 것입니다. 꼬리를 떼면 앞부분이 곧 계보 경로라서, 정렬하면 같은 모시편에서 나온 시편끼리 모입니다.</p></div></header>
+
+  <div class="g-fullbar">{{ n('QV3-A6-C-A02-K-M206K-H03-T02-P12') }}</div>
+  <div class="g-segcards">
+    <div class="k-coil"><b>QV3</b><span>코일</span><p>현장 코일 앞 7자리와 1:1. 여러 과제가 공유하므로 맨 앞.</p></div>
+    <div class="k-proj"><b>A6</b><span>과제</span><p>그해 등록 순서 영문 + 연도 끝자리. 사내 과제번호 <code>2026P123</code>과 연결. 공용 <code>X6</code> 공통 · <code>Y6</code> 선행 · <code>Z6</code> 기타.</p></div>
+    <div class="k-stage"><b>C</b><span>단계</span><p>현재 상태 등급 A~E. 아래 05절.</p></div>
+    <div class="k-branch"><b>A02</b><span>가지</span><p>각인번호와 같음.</p></div>
+    <div class="k-cut"><b>K</b><span>후절단</span><p>각인번호와 같음. 있을 때만.</p></div>
+    <div class="k-tail"><b>M206K-H03-T02-P12</b><span>조건 꼬리</span><p>실제로 거친 공정의 블록만, 거친 순서대로. 각인하지 않습니다.</p></div>
+  </div>
+
+  <div class="g-table-wrap"><table class="g-table g-blocks">
+    <thead><tr><th>꼬리 블록</th><th>형식</th><th>예</th><th>뜻</th></tr></thead>
+    <tbody>
+      <tr><td>도금</td><td>영문·숫자 3·영문 (5자)</td><td><code class="b-plate">M206K</code></td><td><b>M</b> 도금 계열 · <b>2</b> 욕 조성 · <b>06</b> 편면 부착량÷10 · <b>K</b> 소둔</td></tr>
+      <tr><td>열처리</td><td><code>H</code> + 숫자 2</td><td><code class="b-heat">H03</code></td><td rowspan="3">관리 › 코드표의 번호. 도금 블록은 5자, 나머지는 3자라 길이만 봐도 구분됩니다.</td></tr>
+      <tr><td>전처리(화성 등)</td><td><code>T</code> + 숫자 2</td><td><code class="b-pre">T02</code></td></tr>
+      <tr><td>도장</td><td><code>P</code> + 숫자 2</td><td><code class="b-paint">P12</code></td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="g-sim" data-sim>
+    <div class="g-sim-head"><h3 class="g-h3">직접 해 보기 — 공정을 누르는 순서대로 번호가 만들어집니다</h3>
+      <div class="g-sim-presets"><span class="small muted">예시:</span>
+        <button class="btn sm" type="button" data-preset="std">도금→열처리→화성→도장</button>
+        <button class="btn sm" type="button" data-preset="paint">블랭크를 바로 도장</button>
+        <button class="btn sm" type="button" data-preset="noplate">도금 없이 화성→도장</button>
+        <button class="btn sm" type="button" data-preset="other">다른 과제가 가져가 GA 도금</button>
+      </div></div>
+    <div class="g-sim-body">
+      <div class="g-sim-btns" data-sim-btns></div>
+      <div class="g-sim-out">
+        <div class="g-sim-num"><small>각인번호</small><div data-sim-mark></div></div>
+        <div class="g-sim-num"><small>전체번호</small><div data-sim-full></div></div>
+        <div class="g-procs" data-sim-procs></div>
+        <ol class="g-sim-log" data-sim-log aria-live="polite"></ol>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────── 5. 단계 ─────────── -->
+<section class="g-sec" id="s-stage" aria-labelledby="h-stage">
+  <header class="g-h"><span class="g-no">05</span><div><h2 id="h-stage">단계 문자 A~E — "현재 상태 등급"</h2>
+    <p>알파벳이 뒤로 갈수록 변화가 더 진행된 시편입니다. 단계는 시편에 <b>중대한 변화</b>가 생길 때만 오릅니다. 도금은 모양이 그대로여도 새 층이 생겨 성질이 완전히 달라지므로 중대한 변화입니다.</p></div></header>
+  <div class="g-ladder" aria-label="단계 계단">
+    {%- set stage_desc = {'A': '현장에서 가져옴', 'B': '처음 자름 (형상 변화)', 'C': '도금층이 생김', 'D': '성질 변화', 'E': '도막이 생김'} -%}
+    {%- for s, name in STAGES.items() %}
+    <div class="g-rung r{{ loop.index }}"><b>{{ s }}</b><span>{{ name }}</span><small>{{ stage_desc.get(s, '') }}</small></div>
+    {%- endfor %}
+  </div>
+  <div class="g-rules">
+    <div class="g-rule"><span class="g-rule-n">1</span><b>등급이지, 거친 목록이 아닙니다</b><p>E라고 도금·열처리를 다 거친 것은 아닙니다. 무엇을 거쳤는지는 꼬리와 공정 표시(✓/–)로 봅니다.</p><div class="g-mini">{{ n('QV3-A6-E-A06-P12') }}<small>도금 없이 바로 도장한 E</small></div></div>
+    <div class="g-rule"><span class="g-rule-n">2</span><b>건너뛸 수 있습니다</b><p>B → E, C → E처럼 중간 단계를 건너뜁니다.</p><div class="g-mini g-jump"><span class="st">B</span><span class="ar">도장 →</span><span class="st">E</span><small>C·D를 건너뜀</small></div></div>
+    <div class="g-rule"><span class="g-rule-n">3</span><b>내려가지 않습니다</b><p>이미 E인 시편을 나중에 열처리해도 E를 유지하고, 꼬리와 이력에만 <code>H</code>가 남습니다.</p><div class="g-mini g-jump"><span class="st">E</span><span class="ar">열처리 →</span><span class="st">E</span><small>D로 내려가지 않음</small></div></div>
+    <div class="g-rule"><span class="g-rule-n">4</span><b>처음 자를 때만 바뀝니다</b><p>A → B 한 번뿐입니다. 도금판을 자른 실험편도 C 그대로라, <b>C는 언제나 "도금된 시편"</b>입니다.</p><div class="g-mini">{{ n('QV3-A6-C-A02-K-M206K') }}<small>잘라도 C</small></div></div>
+    <div class="g-rule"><span class="g-rule-n">5</span><b>전처리는 단계를 바꾸지 않습니다</b><p>화성 등 전처리는 꼬리에 <code>T</code> 블록과 이력만 남깁니다. D → E 순서는 표준 공정(도금 → 열처리 → 도장)을 따릅니다.</p></div>
+  </div>
+  <details class="g-why2"><summary><b>왜 문자를 "한 일"이 아니라 "상태"로 정했나?</b> <small class="muted">문자를 행위로 고정했다면 생기는 세 가지 문제 (Q7)</small></summary>
+    <div class="g-counter">
+      <div><b>① 자르기는 도금 전후에 다 일어납니다</b><p>도금한 실험편이 다시 B(전단)가 되어, 무도금 블랭크로 오해받습니다.</p><div class="g-mini g-wrong">QV3-A6-<s>B</s>-A02-K-M206K</div></div>
+      <div><b>② 마지막 한 일만 보입니다</b><p>도금 → 열처리 → 도장이면 열처리 여부가 사라지고, 나중에 열처리하면 문자가 거꾸로(E → D) 갑니다.</p><div class="g-mini g-jump"><span class="st">E</span><span class="ar">열처리 →</span><span class="st bad">D</span><small>문자가 거꾸로 감 ✗</small></div></div>
+      <div><b>③ 같은 일을 두 번 하면 겹칩니다</b><p>프라이머 → 상도처럼 도장을 두 번 하면 번호가 겹칩니다. 꼬리는 <code>P..-P..</code>로 둘 다 남깁니다.</p></div>
+    </div>
+  </details>
+</section>
+
+<!-- ─────────── 6. 계보 ─────────── -->
+<section class="g-sec" id="s-tree" aria-labelledby="h-tree">
+  <header class="g-h"><span class="g-no">06</span><div><h2 id="h-tree">계보 — 번호가 곧 족보입니다</h2>
+    <p>코일 하나에서 나온 시편들입니다. 시편을 누르면 두 번호와 상태가 보입니다. 시스템은 부모 연결을 따라 코일까지 거슬러 조회하고, 각인번호만 봐도 경로를 압니다.</p></div></header>
+  <div class="g-tree-wrap">
+    <div class="g-tree" data-tree role="tree" aria-label="QV3 코일 계보"></div>
+    <aside class="g-tree-detail" data-tree-detail aria-live="polite"></aside>
+  </div>
+</section>
+
+<!-- ─────────── 7. 코일코드 ─────────── -->
+<section class="g-sec" id="s-coil" aria-labelledby="h-coil">
+  <header class="g-h"><span class="g-no">07</span><div><h2 id="h-coil">코일코드는 현장 코일번호에서 나옵니다</h2>
+    <p>3자리 코일코드는 현장 번호를 떠올릴 수 있게 그 번호에서 뽑고, 시스템이 제안합니다. 사람이 고칠 수 있습니다.</p></div></header>
+  {%- set cn = demo_coil -%}
+  <div class="g-coil">
+    <div class="g-coil-src" aria-label="현장 코일번호">
+      <span class="c-l dim">{{ cn[0] }}</span><span class="c-l hit">{{ cn[1] }}</span><span class="c-l hit">{{ cn[2] }}</span><span class="c-d hit">{{ cn[3] }}</span><span class="c-d">{{ cn[4] }}</span><span class="c-d">{{ cn[5] }}</span><span class="c-d">{{ cn[6] }}</span><span class="c-p">{{ cn[7] }}</span>
+      <div class="g-coil-cap"><span>영문 3</span><span>일련번호 4</span><span>채취위치</span></div>
+    </div>
+    <div class="g-coil-arrow" aria-hidden="true">→</div>
+    <div class="g-coil-out"><span class="sg k-coil big">{{ coil_candidates[0] }}</span><small>영문 뒤 2자리 + 일련 첫 숫자</small></div>
+  </div>
+  <div class="g-split">
+    <div class="g-panel">
+      <h3 class="g-h3">겹치면 다음 후보로</h3>
+      <ol class="g-cands">
+        <li><b>영문 뒤 2자리 + 일련 첫 숫자</b><span>{% for c in coil_candidates[:1] %}<code>{{ c }}</code>{% endfor %}</span></li>
+        <li><b>영문 뒤 2자리 + 나머지 숫자 순서대로</b><span>{% for c in coil_candidates[1:3] %}<code>{{ c }}</code> {% endfor %}</span></li>
+        <li><b>영문의 다른 2자리 + 첫 숫자</b><span>{% for c in coil_candidates[3:5] %}<code>{{ c }}</code> {% endfor %}</span></li>
+        <li><b>영문 뒤 2자리 + 남은 숫자 0~9</b><span>{% for c in coil_candidates[5:9] %}<code>{{ c }}</code> {% endfor %}…</span></li>
+        <li><b>모두 겹치면</b><span>비어 있는 아무 코드 + 경고</span></li>
+      </ol>
+    </div>
+    <div class="g-panel">
+      <h3 class="g-h3">같은 코일은 언제나 같은 코드</h3>
+      <p class="small">코일코드는 <b>앞 7자리 <code>{{ cn[:7] }}</code>와 1:1</b>입니다. 채취위치가 달라도(T/H), 같은 코일을 다시 입고해도 같은 코드를 쓰고 <b>전폭번호가 이어집니다</b>. 채취위치는 전폭시편마다 기록합니다.</p>
+      <div class="g-recv">
+        <div><span class="pos">T</span><b>1차 입고</b>{{ n('QV3-A','mark') }} {{ n('QV3-B','mark') }}</div>
+        <div><span class="pos h">H</span><b>재입고</b>{{ n('QV3-C','mark') }} <small>→ 전폭번호 이어짐</small></div>
+      </div>
+      <p class="small muted">영문 2 + 숫자 1이면 수천 개 수준이라 영구 유일로 씁니다. 현장 번호에서 유도하므로 코일코드에는 I·O도 허용합니다.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────── 8. 예시 ─────────── -->
+<section class="g-sec" id="s-ex" aria-labelledby="h-ex">
+  <header class="g-h"><span class="g-no">08</span><div><h2 id="h-ex">예시 모음</h2><p>각인번호는 자를 때만 길어지고, 나머지 변화는 모두 전체번호에서 일어납니다.</p></div></header>
+  {%- set examples = [
+    ('전폭시편 1번', 'QV3-A', 'QV3-A6-A-A'),
+    ('전폭시편 2번', 'QV3-B', 'QV3-A6-A-B'),
+    ('같은 코일, 채취위치 H로 재입고', 'QV3-C', 'QV3-A6-A-C'),
+    ('전폭 1번을 자른 2번 블랭크', 'QV3-A02', 'QV3-A6-B-A02'),
+    ('그 블랭크를 도금', 'QV3-A02', 'QV3-A6-C-A02-M206K'),
+    ('도금판을 자르지 않고 바로 도장', 'QV3-A02', 'QV3-A6-E-A02-M206K-P12'),
+    ('도금 → 열처리 → 화성 → 도장', 'QV3-A03', 'QV3-A6-E-A03-M206K-H03-T02-P12'),
+    ('도금판을 자른 실험편 (1번째)', 'QV3-A02-A', 'QV3-A6-C-A02-A-M206K'),
+    ('실험편의 분석조각', 'QV3-A02-A-3', 'QV3-A6-C-A02-A-3-M206K'),
+    ('블랭크를 도금 없이 화성 후 도장', 'QV3-A05', 'QV3-A6-E-A05-T02-P12'),
+    ('블랭크를 바로 도장', 'QV3-A06', 'QV3-A6-E-A06-P12'),
+    ('다른 과제(B6)가 블랭크를 가져가 GA 도금', 'QV3-A04', 'QV3-B6-C-A04-A106K'),
+  ] -%}
+  <div class="g-examples">
+    {%- for sit, mark, full in examples %}
+    <div class="g-ex"><span class="g-ex-sit">{{ sit }}</span><span class="g-ex-m"><small>각인</small>{{ n(mark, 'mark') }}</span><span class="g-ex-f"><small>전체</small>{{ n(full) }}</span></div>
+    {%- endfor %}
+  </div>
+</section>
+
+<!-- ─────────── 9. 고민 ─────────── -->
+<section class="g-sec" id="s-history" aria-labelledby="h-history">
+  <header class="g-h"><span class="g-no">09</span><div><h2 id="h-history">우리가 거친 고민 — 체계는 어떻게 여기까지 왔나</h2>
+    <p>이 체계는 한 번에 정해지지 않았습니다. 현장 업무에 맞지 않는 점을 하나씩 짚고, 여러 안을 만들어 보고 버리며 정했습니다.</p></div></header>
+
+  <ol class="g-timeline">
+    <li class="old"><div class="g-tl-v">v2.2 · v2.3</div><div class="g-tl-n"><code>M206K-26P4-P0101</code></div><p>조건부 – 과제 – 단계+일련 4자리. 단계는 P 도금원판 · C 시험편 · S 분석조각 셋뿐. <b>번호는 도금할 때 처음 생김.</b></p></li>
+    <li><div class="g-tl-v">v3.0 · 2026-10-23</div><div class="g-tl-n"><code>QV3-A6-C-102-…</code></div><p>각인번호/전체번호 분리, 입고·전단 단계(A·B) 추가, 계보형 번호, 조건은 맨 뒤 꼬리로. 결정 D-1 ~ D-17.</p></li>
+    <li class="now"><div class="g-tl-v">v3.1 · 2026-10-24 <span class="pill same">현재</span></div><div class="g-tl-n">{{ n('QV3-A6-C-A02-K-M206K') }}</div><p>각인번호 구간마다 영문·숫자 교대, 각인 영문 21자, 시험런 → 분석런. 결정 D-18 ~ D-22.</p></li>
+  </ol>
+
+  <h3 class="g-h3">현장에서 부딪힌 문제 → 우리가 내린 결정</h3>
+  <div class="g-pd">
+    <div class="g-pd-row"><div class="p"><b>보관함의 전폭시편과 전단 블랭크에 번호가 없음</b><small>조회·인계·추적 불가</small></div><div class="ar" aria-hidden="true">→</div><div class="d"><b>입고(A)·전단(B) 단계 추가</b><small>D-1 · 코일에서부터 번호</small></div></div>
+    <div class="g-pd-row"><div class="p"><b>자식이 독립 일련번호를 받음</b><small><code>B0101</code>에서 자른 8장이 <code>C0101~0108</code> → 모시편을 모름</small></div><div class="ar" aria-hidden="true">→</div><div class="d"><b>계보형 번호</b><small>D-6 · <code>QV3-A02-K</code>의 부모는 번호에 보임</small></div></div>
+    <div class="g-pd-row"><div class="p"><b>자식 과제코드는 항상 부모를 따름</b><small>다른 연구원이 다른 과제로 쓰는 경우를 표현 못 함</small></div><div class="ar" aria-hidden="true">→</div><div class="d"><b>쓰는 쪽 과제코드, 코일을 맨 앞에</b><small>D-4 · D-13 · 사용(USE) 이력</small></div></div>
+    <div class="g-pd-row"><div class="p"><b>조건부가 맨 앞에 오고 각인에도 들어감</b><small>결과 중심, 조건이 바뀌면 각인과 어긋남</small></div><div class="ar" aria-hidden="true">→</div><div class="d"><b>조건은 맨 뒤 꼬리, 각인하지 않음</b><small>D-10 · D-16</small></div></div>
+    <div class="g-pd-row"><div class="p"><b>단계가 도금 이후만 있음</b><small>도장·열처리만 한 시편, 도금 없이 도장한 시편을 표현 못 함</small></div><div class="ar" aria-hidden="true">→</div><div class="d"><b>D 열처리 · E 도장, 공정별 꼬리 블록</b><small>D-7 · D-8 · D-15</small></div></div>
+    <div class="g-pd-row v31"><div class="p"><b>(v3.0) 각인번호가 숫자의 연속으로 보임</b><small><code>QV3102013</code> — 전폭 1과 블랭크 102도 헷갈림</small></div><div class="ar" aria-hidden="true">→</div><div class="d"><b>구간 경계마다 영문·숫자 교대</b><small>D-18 ~ D-20 · I·O·Q·S·Z 제외</small></div></div>
+  </div>
+
+  <h3 class="g-h3">서로 당기는 요구 사이에서 고른 균형</h3>
+  <div class="g-tension">
+    <div><span>짧게 새기고 싶다</span><i aria-hidden="true">⇄</i><span>많은 정보를 보고 싶다</span><p><b>→ 각인은 최소, 정보는 전체번호(DB)로.</b> 둘을 분리한 것이 가장 큰 결정입니다.</p></div>
+    <div><span>번호는 영원히 고정</span><i aria-hidden="true">⇄</i><span>상태는 계속 바뀜</span><p><b>→ 바뀌는 것(과제·단계·조건)은 모두 각인 밖으로.</b> 물리적 시편 1개 = 레코드 1개, 변화는 이력으로.</p></div>
+    <div><span>사람이 읽고 연상</span><i aria-hidden="true">⇄</i><span>기계적으로 유일</span><p><b>→ 계보형 + 현장 코일에서 유도한 코드.</b> 중복은 DB 유일 제약과 저장 전 검사가 막습니다.</p></div>
+    <div><span>충분한 용량</span><i aria-hidden="true">⇄</i><span>헷갈리지 않는 모양</span><p><b>→ 영문·숫자 교대로 용량을 일부 내주고(후절단 99 → 21) 읽기 쉬움을 택함.</b></p></div>
+  </div>
+
+  <details class="g-dec"><summary><b>결정 흐름 D-1 ~ D-22 전체 보기</b></summary>
+    {%- set decisions = [
+      ('D-1', '입고와 전단 단계를 추가', '보관함 시편과 전단 블랭크를 조회·인계해야 함'),
+      ('D-2', '단계 문자를 A, B, C, D… 순서로 (P/C/S 폐기)', '알파벳이 커질수록 변화가 더 진행됐다고 직관적으로 알기 위해'),
+      ('D-3', '물리 가공뿐 아니라 중대한 변화(도금 등)에도 단계가 바뀜', '도금은 형상 변화가 없지만 새로운 성질을 가짐'),
+      ('D-4', '다른 과제가 쓰면 자식은 사용하는 쪽 과제코드', '코일·시편은 여러 과제가 공유함'),
+      ('D-5', '시험편 → 실험편', '용어 정리'),
+      ('D-6', '모시편을 번호로 알 수 있게 계보형 번호', '번호만으로 모시편을 연상할 수 없었음'),
+      ('D-7', '도장·열처리도 단계를 바꿈. D 열처리, E 도장', '성질이 바뀌는 공정'),
+      ('D-8', '문자는 현재 상태 등급. 건너뛸 수 있음', 'Q7, Q8'),
+      ('D-9', '처음 자를 때만 단계를 바꾸고, 이후 절단은 번호만', 'C가 항상 도금 시편을 뜻하도록'),
+      ('D-10', '조건부는 맨 뒤 꼬리', '조건은 신원이 아니라 설명이고 바뀔 수 있음 (Q9)'),
+      ('D-11', '가지 구분에 점·영문 교대 대신 숫자', '점은 각인에서 지워짐 (v3.1에서 D-18로 재정리)'),
+      ('D-12', '가지는 전폭 + 조각 2자리', '코일당 전폭 2~3장, 전폭 하나를 여러 조각으로 나눠 씀'),
+      ('D-13', '코일이 맨 앞, 과제는 그 뒤. 과제 = 영문 1 + 숫자 1', '코일은 여러 과제에 공유됨. 한 해 과제 15개 미만'),
+      ('D-14', '코일코드 = 영문 2 + 숫자 1, 현장 코일번호에서 유도', '구간마다 모양을 달리하고, 현장 번호를 떠올리기 쉽게'),
+      ('D-15', '꼬리는 공정별 블록(도금, H, T, P)을 거친 순서대로', '도금 없이 도장만 하는 경우도 표현'),
+      ('D-16', '각인번호와 전체번호를 분리', '각인 정보는 적을수록 좋고 DB는 언제든 조회 가능'),
+      ('D-17', '물리적 시편 1개 = DB 레코드 1개', '각인번호가 단계와 무관해졌으므로'),
+      ('D-18', '각인번호 구간 경계마다 영문·숫자 교대', '숫자의 연속으로 보여 구별하기 어려움 (Q18)'),
+      ('D-19', '각인 영문에서 I·O·Q·S·Z 제외 (21자)', '각인에서 1·0·0·5·2와 헷갈림'),
+      ('D-20', '분석조각은 1자리 (1~9)', '2자리면 가지와 모양이 같아짐'),
+      ('D-21', '시험런 → 분석런 (TR- → AR-)', '공정런 = 실험, 분석런 = 평가'),
+      ('D-22', '사내 과제번호는 8자 2026P123', '실제 사내 형식'),
+    ] -%}
+    <ol class="g-dlist">{% for no, what, why in decisions %}<li class="{{ 'v31' if loop.index > 17 }}"><code>{{ no }}</code><b>{{ what }}</b><span>{{ why }}</span></li>{% endfor %}</ol>
+  </details>
+
+  <h3 class="g-h3">검토했다가 버린 안</h3>
+  <p class="small muted">버린 이유를 남겨 두면, 같은 질문이 다시 나올 때 바로 답할 수 있습니다.</p>
+  {%- set rejected = [
+    ('R-01', '조건부를 맨 앞에 (v2.3)', 'M206K-26P4-P0101', '결과 중심이라 조건이 없는 초기 시편을 표현 못 함', ''),
+    ('R-02', '단계 R(입고)·B(블랭크) + 기존 P/C/S', '26P4-B0101', '문자가 가공 순서를 보여 주지 않음', ''),
+    ('R-03', '과제 3자리 (연도 + 사내번호 끝 2자리)', '634', '끝 2자리 충돌 시 대체 규칙이 필요', ''),
+    ('R-05', '4자리 가계번호', '634-C0012-02', '9,999개 한계, 의미상 결국 코일', ''),
+    ('R-06', '가지에 숫자와 영문을 번갈아', '02B03', '같은 조건인데 영문으로 늘면 조건이 바뀐 것처럼 보임', 'v3.1에서 부활'),
+    ('R-07', '가지를 점으로 구분', '02.03', '실제 각인에서 점은 구분이 안 되고 지워짐', ''),
+    ('R-08', '단계 문자 = 변화 횟수(세대)', '변화마다 +1', 'C가 항상 도금을 뜻하지 않아 직관적이지 않음', ''),
+    ('R-09', '조건부 뒤에 형제 순번', '…-02-M206K-01', '조건이 바뀌면 신원 중간이 바뀜', ''),
+    ('R-11', '과제가 코일보다 앞', 'A6-QV3-…', '코일은 여러 과제에 공유되므로 코일이 앞', ''),
+    ('R-12', '코일코드 영문 1 + 숫자 1', 'K7', '240개뿐이라 영구 유일로 쓰면 고갈', ''),
+    ('R-13', '시스템이 순번으로 코일코드 부여', 'K7Q', '현장 코일번호를 떠올릴 수 없음', ''),
+    ('R-14', '꼬리에 도금 조건만', 'M206K', '도금 없이 도장한 시편을 표현 못 함', ''),
+    ('R-15', '꼬리까지 각인', 'QV3-A6-C-102-M206K', '바뀌는 정보를 각인하면 어긋남', ''),
+    ('R-16', '상태가 바뀔 때마다 새 레코드', 'C-102 / E-102 별도', '각인번호가 같은 레코드가 여러 개가 됨', ''),
+    ('R-17', '시스템 고유번호 + 사람 별칭', '634-D00381 + "GA-460도-2차"', '각인번호 자체를 사람이 읽을 수 있게 하는 쪽을 택함', ''),
+    ('R-18', '채취위치마다 다른 코일코드', 'T와 H 별도', '같은 코일이므로 같은 코드, 전폭번호로 구분', ''),
+    ('R-19', '분석조각 2자리', 'QV3-A02-K-03', 'K03이 가지 A02와 같은 모양', ''),
+    ('R-20', '하이픈 대신 다른 구분 기호', 'QV3/102/01', '지워지는 문제는 같음. 모양 자체로 구분해야 함', ''),
+  ] -%}
+  <div class="g-rej">
+    {%- for no, what, ex, why, badge in rejected %}
+    <div class="g-rej-c{{ ' revived' if badge }}"><div class="g-rej-h"><code>{{ no }}</code>{% if badge %}<span class="pill same">{{ badge }}</span>{% endif %}</div><b>{{ what }}</b><s class="g-rej-ex">{{ ex }}</s><p>{{ why }}{% if badge %} → D-16 이후 각인에 조건이 없어져 이유가 사라짐 (Q19){% endif %}</p></div>
+    {%- endfor %}
+  </div>
+
+  <details class="g-dec"><summary><b>아직 정할 것</b> <small class="muted">미결 사항</small></summary>
+    <ul class="g-ul">
+      <li>전처리(화성 등)가 단계를 바꾸는지 — 지금은 바꾸지 않음(꼬리 T와 이력만). 확정 필요.</li>
+      <li>현장에서 이미 도금된 코일(상용 GA/GI)의 도금 정보 위치 — 코일 정보에 두고 꼬리에는 넣지 않는 안.</li>
+      <li>H·T·P 조건 코드표의 항목 구성 — 관리 › 코드표에서 등록.</li>
+      <li>한도(전폭 21, 조각 99, 후절단 21, 분석조각 9)를 넘는 경우 — 분석조각이 모자라면 2자리 확장(R-19) 재검토.</li>
+      <li>과제코드는 10년마다 숫자가 돌아옴 — 오래된 과제 정리 방안.</li>
+      <li>옛 v2.3 번호가 새겨진 실물에 새 각인번호를 다시 새길지 — 옛 번호로도 조회됨.</li>
+    </ul>
+  </details>
+</section>
+
+<!-- ─────────── 10. FAQ ─────────── -->
+<section class="g-sec" id="s-faq" aria-labelledby="h-faq">
+  <header class="g-h"><span class="g-no">10</span><div><h2 id="h-faq">자주 묻는 질문</h2></div></header>
+  {%- set faq = [
+    ('번호는 시스템이 주나요, 사람이 넣나요?', '코일코드와 과제코드는 시스템이 제안합니다. 전폭·조각·후절단·분석조각 번호는 시스템이 다음 빈 번호를 제안하고 사람이 고칠 수 있습니다. 미리 각인한 번호에 맞추거나, 의미 있게 번호를 묶는 현장 관행을 지원하기 위해서입니다.'),
+    ('여러 사람이 한 과제에서 번호를 만들면 겹치지 않나요?', '시스템 전체에서 겹치지 않습니다. 계정과 관계없이 DB 유일 제약이 걸려 있어 같은 번호는 저장 자체가 거부되고, 동시에 저장해도 한쪽이 거부됩니다. 같은 모시편에서 두 사람이 각자 자식을 만들어도 번호는 반드시 다릅니다.'),
+    ('같은 조건으로 5장을 만들면 번호는?', '1장마다 고유번호 1개가 붙습니다. 예를 들어 QV3-A02-A ~ QV3-A02-E가 되고, 모두 같은 꼬리 M206K를 가집니다. 조건이 같은지는 꼬리로 판단하므로, 번호로 조건을 표시할 필요가 없어졌습니다.'),
+    ('단계가 E이면 도금·열처리도 다 거쳤다는 뜻인가요?', '아닙니다. E는 "도장된 시편"이라는 뜻일 뿐입니다. 블랭크를 바로 도장하면 B에서 E로 건너뜁니다(QV3-A6-E-A06-P12). 무엇을 거쳤는지는 꼬리와 공정 표시로 봅니다.'),
+    ('도금판을 자르지 않고 바로 도장하면?', '각인번호는 그대로(QV3-A02)이고, 전체번호의 단계만 C에서 E로 바뀌며 꼬리에 P12가 붙습니다 → QV3-A6-E-A02-M206K-P12.'),
+    ('조건 꼬리를 각인하지 않아도 되나요?', '오히려 그래야 합니다. 신원은 각인번호로 충분하고, 꼬리는 바뀔 수 있는 정보라 고칠 수 없는 각인에 넣으면 안 됩니다. 시스템 없이 조건을 봐야 할 때는 봉투나 보관함 인쇄 라벨에 전체번호를 출력합니다.'),
+    ('다른 연구원이 내 시편을 가져가 쓰면?', '자르면 자식이 그 사람의 과제코드로 생기고, 내 시편에는 사용(USE) 이력이 남습니다. 자르지 않고 도장 등을 하면 그 시편의 과제·담당이 그 사람으로 바뀌고 이전 과제·담당이 이력에 남습니다. 각인번호는 어느 경우에도 그대로입니다.'),
+    ('도금은 어디서 하나요? 번호가 새로 생기나요?', '공정런 등록 화면에서 도금할 블랭크의 각인번호를 넣습니다(범위 QV3-A01~A05 또는 [블랭크 불러오기]). 번호는 새로 생기지 않고 같은 시편이 C 단계가 되며 전체번호 꼬리에 조건부가 붙습니다.'),
+    ('옛 번호(26P4-C0102)가 새겨진 시편은 어떻게 찾나요?', '이관하면서 옛 번호를 남겨 두었습니다. 스캐너·검색창에 옛 번호를 넣어도 새 번호의 시편으로 갑니다. 상세 화면 이력에도 옛 번호가 남습니다.'),
+    ('조건을 맨 뒤에 두는 이유는?', '① 조건은 신원이 아니라 설명이고 바뀔 수 있어, 맨 뒤에 두면 바뀌는 부분이 꼬리뿐입니다. ② 조건이 없는 시편(A, B, 무도금)이 많아, 중간에 두면 같은 계보의 번호 모양이 달라집니다. ③ 꼬리를 떼면 앞부분이 계보 경로라 정렬하면 형제끼리 모입니다.'),
+  ] -%}
+  <div class="g-faq">
+    {%- for q, a in faq %}
+    <details><summary><span class="q">Q</span>{{ q }}</summary><p>{{ a }}</p></details>
+    {%- endfor %}
+  </div>
+</section>
+
+<!-- ─────────── 11. 참고 ─────────── -->
+<section class="g-sec" id="s-ref" aria-labelledby="h-ref">
+  <header class="g-h"><span class="g-no">11</span><div><h2 id="h-ref">참고한 관행 — 우리 체계와의 대응</h2>
+    <p>외부 표준과 다른 LIMS·제조 현장의 관행을 살펴보고, 우리 상황에 맞게 취했습니다.</p></div></header>
+  <div class="g-refs">
+    <article><h3>시험 품목의 고유 식별</h3><p class="src">ISO/IEC 17025:2017 7.4 (시험·교정 품목의 취급)</p>
+      <p>시료가 실험실에 있는 동안 <b>실물과 기록 어디서든 혼동되지 않게 고유하게 식별</b>하고, 시료를 <b>나누거나 옮길 때</b>도 식별이 유지되어야 한다는 요구입니다.</p>
+      <p class="ours"><b>우리:</b> 각인번호는 시스템 전체에서 유일하고 평생 그대로입니다. 자르면(분할) 자식이 부모 번호를 이어받습니다.</p>
+      <a href="https://www.testlabiq.com/en/guides/iso-17025-test-item-handling" target="_blank" rel="noopener">TestLabIQ — ISO 17025 Test Item Handling</a></article>
+    <article><h3>시료 계보 (부모-자식)</h3><p class="src">LIMS의 Sample Lineage · Aliquot/Derivative</p>
+      <p>LIMS에서는 원 시료 → 파생 시료 → 분취(aliquot)처럼 <b>여러 층의 부모-자식 관계</b>를 기록해, 어느 시료에서든 근원까지 거슬러 올라가게 합니다.</p>
+      <p class="ours"><b>우리:</b> 코일 → 전폭 → 블랭크 → 실험편 → 분석조각. DB는 부모 연결을 재귀로 따라가고, 각인번호 자체도 경로입니다.</p>
+      <a href="https://www.labkey.org/limshelp/wiki-page.view?name=deriveSamples" target="_blank" rel="noopener">LabKey — Sample Lineage / Parentage</a> · <a href="https://thirdwaveanalytics.com/blog/lims-feature-sample-lineage/" target="_blank" rel="noopener">Third Wave Analytics</a></article>
+    <article><h3>의미 있는 번호 vs 의미 없는 번호</h3><p class="src">제조 부품번호 체계 논의 (Intelligent vs Non-intelligent)</p>
+      <p>번호에 의미를 많이 담으면 읽기는 쉽지만, <b>담긴 정보가 바뀌면 번호가 거짓말</b>을 하게 됩니다. 그래서 바뀌지 않는 최소 의미만 번호에 두는 절충이 흔합니다.</p>
+      <p class="ours"><b>우리:</b> 각인번호엔 바뀌지 않는 출처(코일·가지)만, 바뀌는 의미(과제·단계·조건)는 전체번호(DB)로.</p>
+      <a href="https://www.openbom.com/blog/part-numbers-intelligent-or-just-numbers" target="_blank" rel="noopener">OpenBOM</a> · <a href="https://www.arenasolutions.com/resources/articles/part-numbering/" target="_blank" rel="noopener">Arena</a></article>
+    <article><h3>사람이 읽기 쉬운 식별자</h3><p class="src">Crockford Base32</p>
+      <p>사람이 읽고 옮겨 적는 식별자에서는 숫자와 헷갈리는 글자(I·L·O 등)를 빼고, 하이픈으로 끊어 읽기를 돕는 방법이 널리 쓰입니다.</p>
+      <p class="ours"><b>우리:</b> 각인 영문에서 I·O·Q·S·Z를 빼고, 하이픈이 지워져도 읽히도록 영문·숫자를 교대합니다.</p>
+      <a href="https://www.crockford.com/base32.html" target="_blank" rel="noopener">Douglas Crockford — Base 32</a></article>
+    <article><h3>금속 직접 각인과 DataMatrix</h3><p class="src">Direct Part Marking · ISO/IEC 16022</p>
+      <p>금속 부품 추적에는 레이저·도트 각인으로 문자와 DataMatrix를 직접 새기는 방식이 표준처럼 쓰입니다. 작은 면적에 많은 정보를 담고 스캐너로 읽습니다.</p>
+      <p class="ours"><b>우리:</b> DataMatrix에도 각인번호만 담아, 스캐너가 읽으면 바로 그 시편 화면이 열립니다.</p>
+      <a href="https://www.venox.com/en/media-center/datamatrix-laser-marking-and-iso-standards-industrial-coding-guide" target="_blank" rel="noopener">Venox — DataMatrix Laser Marking Guide</a></article>
+  </div>
+  <p class="small muted g-src">이 페이지의 규칙·결정·예시는 저장소의 <code>시편번호 체계.md</code> v3.1을 따릅니다. 규칙이 바뀌면 그 문서와 이 화면을 함께 고칩니다.</p>
+</section>
+
+</div>
+{% endblock %}
+{% block scripts %}<script src="/static/js/guide.js?v=3.1.0" defer></script>{% endblock %}

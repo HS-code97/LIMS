@@ -6,7 +6,7 @@
 <title>{% block title %}LIMS{% endblock %} · 도금강판 R&D LIMS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="/static/css/lims.css?v=2.2.2">
+<link rel="stylesheet" href="/static/css/lims.css?v=2.3.2">
 <script src="{{ vendor('htmx') }}" defer></script>
 <script src="{{ vendor('alpine') }}" defer></script>
 <script src="/static/js/app.js?v=2.3.0"></script>
@@ -24,6 +24,7 @@
     <div id="suggest" @click.outside="close()"></div>
   </form>
   <div class="grow"></div>
+  <a class="btn m-guide" href="/guide/numbering" title="시편체계" aria-label="시편체계">{{ icon('book', 16) }}</a>
   <a class="btn primary" href="/specimens/intake">{{ icon('plus', 16) }}<span class="btn-label">입고</span></a>
   <a class="btn" href="/process-runs/new">{{ icon('plus', 16) }}<span class="btn-label">공정런</span></a>
   <a class="btn" href="/test-runs/new">{{ icon('plus', 16) }}<span class="btn-label">분석런</span></a>
@@ -35,6 +36,7 @@
 <div class="shell">
   <nav class="nav" aria-label="주 메뉴">
     <div class="org"><b>표면연구그룹</b><small>연구실 LIMS · 사전 {{ pdict.version() }}</small></div>
+    <a href="/guide/numbering" class="guide {{ 'on' if nav=='guide' }}">{{ icon('book') }}<span>시편체계</span></a>
     <a href="/" class="{{ 'on' if nav=='home' }}">{{ icon('home') }}<span>내 작업</span></a>
     <a href="/specimens" class="{{ 'on' if nav=='spec' }}">{{ icon('spec') }}<span>시편</span></a>
     <a href="/specimens/shear" class="sub {{ 'on' if nav=='shear' }}">{{ icon('split') }}<span>전단</span></a>

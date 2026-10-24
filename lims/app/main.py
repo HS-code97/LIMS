@@ -17,7 +17,7 @@ from .auth import LoginRequired
 from .config import API_DOCS, APP_DIR, COOKIE_SECURE, session_secret
 from .db import Base, engine
 from .errors import Conflict, Invalid
-from .routers import (admin, analysis, files, home, presets, process_runs, search, specimens,
+from .routers import (admin, analysis, files, guide, home, presets, process_runs, search, specimens,
                       templates_admin, test_runs)
 
 log = logging.getLogger("lims")
@@ -37,7 +37,7 @@ app.add_middleware(SessionMiddleware, secret_key=session_secret(), session_cooki
                    max_age=14 * 24 * 3600, same_site="lax", https_only=COOKIE_SECURE)
 app.mount("/static", StaticFiles(directory=str(APP_DIR / "static")), name="static")
 
-for r in (home, process_runs, presets, specimens, test_runs, files, search, admin, templates_admin, analysis):
+for r in (home, guide, process_runs, presets, specimens, test_runs, files, search, admin, templates_admin, analysis):
     app.include_router(r.router)
 
 

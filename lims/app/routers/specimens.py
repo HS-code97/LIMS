@@ -23,7 +23,8 @@ router = APIRouter()
 # 직접 넣는 이벤트. HEAT·PRETREAT·PAINT는 단계·꼬리를 바꾸는 공정(workflow.treat), PLATE·USE는 시스템이 남김.
 EVENT_TYPES = {"HEAT": "열처리", "PRETREAT": "전처리(화성 등)", "PAINT": "도장", "MOVE": "보관 이동",
                "SCRAP": "폐기", "NOTE": "메모"}
-EVENT_NAMES = EVENT_TYPES | {"PLATE": "도금", "USE": "사용(과제·담당 변경)", "POST_TREAT": "후처리(이전 기록)"}
+EVENT_NAMES = EVENT_TYPES | {"PLATE": "도금", "CUT": "전단·자르기", "USE": "사용(과제·담당 변경)",
+                             "POST_TREAT": "후처리(이전 기록)"}
 STATUSES = ("AVAILABLE", "IN_TEST", "CONSUMED", "SCRAP")
 
 
@@ -55,7 +56,8 @@ def list_page(request: Request, project: str = "", stage: str = "", status: str 
     if plated in ("0", "1"):         # 거친 공정은 JSON이라 파이썬에서 거름
         specs = [s for s in specs if s.has_step("PLATE") == (plated == "1")]
     projects = db.scalars(select(Project).order_by(Project.project_code.desc())).all()
-    return render(request, "specimens.html", nav="spec", specs=specs, projects=projects, f=dict(
+    coils = db.scalars(select(Material).where(Material.coil_code.is_not(None)).order_by(Material.coil_code)).all()
+    return render(request, "specimens.html", nav="spec", specs=specs, projects=projects, coils=coils, f=dict(
         project=project, stage=stage, status=status, mine=mine, deleted=deleted, coil=coil, plated=plated),
         statuses=STATUSES, STAGES=marking.STAGES)
 
@@ -66,6 +68,48 @@ def intake_page(request: Request, user: User = Depends(require_user), db: Sessio
     coils = db.scalars(select(Material).where(Material.coil_code.is_not(None))
                        .order_by(Material.received_date.desc().nulls_last(), Material.id.desc()).limit(50)).all()
     return render(request, "specimen_intake.html", nav="spec", projects=projects, coils=coils)
+
+
+@router.get("/specimens/shear")
+def shear_page(request: Request, sid: str = "", user: User = Depends(require_user), db: Session = Depends(get_db)):
+    """전단: 모시편을 골라 자식 시편(전폭 → 블랭크, 그 뒤 후절단·분석조각)을 일괄 생성. 로직은 split API 재사용."""
+    projects = db.scalars(select(Project).order_by(Project.is_common, Project.project_code.desc())).all()
+    coils = db.scalars(select(Material).where(Material.coil_code.is_not(None)).order_by(Material.coil_code)).all()
+    return render(request, "specimen_shear.html", nav="shear", projects=projects, coils=coils, sid=sid.strip().upper())
+
+
+def shear_json(s: Specimen) -> dict:
+    """전단 화면의 모시편 정보: 다음 번호 제안·번호 자리 이름·상한."""
+    level = numbering.child_level(s)
+    out = spec_json(s) | {"children": sum(not c.is_deleted for c in s.children), "level": level}
+    if level is not None:
+        name, _, hi = numbering.LEVELS[level]
+        out |= {"level_name": name, "max": hi, "child_stage": "B" if s.stage == "A" else s.stage}
+    return out
+
+
+@router.get("/api/shear/candidates")
+def shear_candidates(coil: str = "", project: str = "", wide: int = 0, user: User = Depends(require_user),
+                     db: Session = Depends(get_db)):
+    """자를 수 있는 모시편: 기본은 쓸 수 있는 전폭시편(A), wide=1이면 블랭크·실험편까지(분석조각·폐기·소진 제외)."""
+    q = select(Specimen).where(Specimen.is_deleted.is_(False), Specimen.status.not_in(("SCRAP", "CONSUMED")))
+    if not wide:
+        q = q.where(Specimen.stage == "A")
+    if coil:
+        q = q.where(Specimen.coil_code == coil.strip().upper())
+    if project:
+        q = q.where(Specimen.project_code == project.strip().upper())
+    specs = db.scalars(q.order_by(Specimen.short_id).limit(300)).all()
+    return [shear_json(s) for s in specs if numbering.child_level(s) is not None]
+
+
+@router.get("/api/shear/parent/{short_id}")
+def shear_parent(short_id: str, user: User = Depends(require_user), db: Session = Depends(get_db)):
+    """각인번호·전체번호(AA1-A6-A-A)로 모시편 찾기."""
+    s = get_spec(db, short_id)
+    if numbering.child_level(s) is None:
+        raise HTTPException(422, f"{s.short_id}은 분석조각이라 더 자를 수 없습니다.")
+    return shear_json(s)
 
 
 @router.post("/api/specimens/{short_id}/restore")

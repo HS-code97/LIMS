@@ -66,6 +66,8 @@ h1,h2,h3{margin:0}
 .nav a:hover{background:var(--surface-2);text-decoration:none}
 .nav a.on{background:var(--primary-2);color:#fff}
 .nav a.on svg{color:#fff}
+.nav a.sub{padding:6px 10px 6px 30px;font-size:13px}
+.nav a.sub svg{width:16px;height:16px}
 .nav svg{color:var(--ink-3);flex:none}
 .nav .spacer{flex:1}
 .nav .scan{border:1px solid var(--line);justify-content:center;color:var(--ink)}
@@ -108,6 +110,8 @@ h1,h2,h3{margin:0}
 .btn:hover{border-color:var(--ink-3);text-decoration:none;background:var(--surface-2)}
 .btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
 .btn.primary:hover{background:var(--primary-2)}
+.topbar .btn:not(.primary){background:transparent}
+.topbar .btn:not(.primary):hover{background:var(--surface-2)}
 .btn.danger{color:var(--err);border-color:var(--err)}
 .btn.ghost{border-color:transparent;background:transparent}
 .btn.sm{height:28px;padding:0 9px;font-size:12px}
@@ -140,10 +144,16 @@ h1,h2,h3{margin:0}
 table.t{width:100%;border-collapse:collapse;font-size:13px}
 .t th{background:var(--surface-2);color:var(--ink-2);font-weight:600;font-size:12px;text-align:left;padding:8px 10px;
   border-bottom:1px solid var(--line);white-space:nowrap;position:sticky;top:0}
+.t th[data-sort]{cursor:pointer;user-select:none}
+.t th[data-sort]:hover{color:var(--ink)}
+.t th[data-sort]::after{content:" \2195";color:var(--ink-3);opacity:.5}
+.t th[aria-sort=ascending]::after{content:" \25B2";opacity:1;color:var(--primary)}
+.t th[aria-sort=descending]::after{content:" \25BC";opacity:1;color:var(--primary)}
 .t td{padding:8px 10px;border-bottom:1px solid var(--line-2);vertical-align:middle}
 .t tr:hover td{background:rgba(47,107,168,.04)}
 .t td.n,.t th.n{text-align:right;font-family:var(--f-num);font-variant-numeric:tabular-nums}
 .t td.mono,.t td .mono{white-space:nowrap}
+.t tr.on td{background:var(--primary-fixed)}
 .t tr.dev td{background:var(--dev-bg)}
 .t tr.dev td.dv{color:var(--dev);font-weight:600}
 .t .empty-row td{color:var(--ink-3);text-align:center;padding:24px}

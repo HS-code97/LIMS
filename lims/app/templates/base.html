@@ -6,10 +6,10 @@
 <title>{% block title %}LIMS{% endblock %} · 도금강판 R&D LIMS</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="/static/css/lims.css?v=2.2.0">
+<link rel="stylesheet" href="/static/css/lims.css?v=2.2.2">
 <script src="{{ vendor('htmx') }}" defer></script>
 <script src="{{ vendor('alpine') }}" defer></script>
-<script src="/static/js/app.js?v=2.2.0"></script>
+<script src="/static/js/app.js?v=2.2.2"></script>
 {% block head %}{% endblock %}
 </head>
 <body>
@@ -24,9 +24,9 @@
     <div id="suggest" @click.outside="close()"></div>
   </form>
   <div class="grow"></div>
-  <a class="btn" href="/specimens/intake">{{ icon('plus', 16) }}<span class="btn-label">입고</span></a>
+  <a class="btn primary" href="/specimens/intake">{{ icon('plus', 16) }}<span class="btn-label">입고</span></a>
   <a class="btn" href="/process-runs/new">{{ icon('plus', 16) }}<span class="btn-label">공정런</span></a>
-  <a class="btn primary" href="/test-runs/new">{{ icon('plus', 16) }}<span class="btn-label">분석런</span></a>
+  <a class="btn" href="/test-runs/new">{{ icon('plus', 16) }}<span class="btn-label">분석런</span></a>
   {% if user %}
   <div class="who"><span class="avatar">{{ user.name[:1] }}</span><div><b>{{ user.name }}</b><small>{{ user.team.name if user.team else '' }}{% if user.is_admin %} · 관리자{% endif %}</small></div>
     <form method="post" action="/logout"><button class="btn ghost sm" title="로그아웃">{{ icon('logout', 16) }}</button></form></div>
@@ -37,6 +37,7 @@
     <div class="org"><b>표면연구그룹</b><small>연구실 LIMS · 사전 {{ pdict.version() }}</small></div>
     <a href="/" class="{{ 'on' if nav=='home' }}">{{ icon('home') }}<span>내 작업</span></a>
     <a href="/specimens" class="{{ 'on' if nav=='spec' }}">{{ icon('spec') }}<span>시편</span></a>
+    <a href="/specimens/shear" class="sub {{ 'on' if nav=='shear' }}">{{ icon('split') }}<span>전단</span></a>
     <a href="/process-runs" class="{{ 'on' if nav=='pr' }}">{{ icon('run') }}<span>공정런</span></a>
     <a href="/test-runs" class="{{ 'on' if nav=='tr' }}">{{ icon('test') }}<span>분석런</span></a>
     <a href="/search" class="{{ 'on' if nav=='search' }}">{{ icon('search') }}<span>검색·비교</span></a>

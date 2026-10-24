@@ -9,9 +9,9 @@ from sqlalchemy import select
 
 from app.db import SessionLocal
 from app.main import app
-from app.models import Material, ProcessPreset, TestTemplate
+from app.models import Material, ProcessPreset, Specimen, SpecimenEvent, TestTemplate
 from app.services import param_dict as pdict
-from helpers import api_blanks
+from helpers import api_blanks, new_coil
 
 
 @pytest.fixture(scope="module")
@@ -160,6 +160,35 @@ def test_full_flow(client):
 
     assert client.post(f"/api/test-runs/{tr}/finish").json()["status"] == "DONE"
     assert client.get(f"/api/specimens/{kids[0]}").json()["status"] == "AVAILABLE"
+
+
+def test_shear_menu(client):
+    """시편 › 전단: 전폭 고르기(전체번호로도) → 10장 → 블랭크 01~10, 모시편에 CUT 이력, 공정런 미리채움."""
+    r = client.post("/api/specimens/intake", json={"coil_no": new_coil(), "project_code": "A6", "count": 1})
+    sheet = r.json()["specimens"][0]
+    page = client.get(f"/specimens/shear?sid={sheet['short_id']}")
+    assert page.status_code == 200 and "전단" in page.text
+    cands = client.get(f"/api/shear/candidates?coil={sheet['coil_code']}").json()
+    assert [c["short_id"] for c in cands] == [sheet["short_id"]] and cands[0]["level"] == "branch"
+    p = client.get(f"/api/shear/parent/{sheet['display_id']}").json()      # 전체번호(AA1-A6-A-A)로 찾기
+    assert p["short_id"] == sheet["short_id"] and p["children"] == 0 and p["child_stage"] == "B"
+
+    r = client.post(f"/api/specimens/{sheet['short_id']}/split", json={"count": 10, "start": 1})
+    assert r.status_code == 200, r.text
+    kids = r.json()["children"]
+    assert [k["short_id"] for k in kids] == [f"{sheet['short_id']}{n:02d}" for n in range(1, 11)]
+    assert all(k["stage"] == "B" for k in kids)
+    with SessionLocal() as db:
+        sid = db.scalar(select(Specimen.id).where(Specimen.short_id == sheet["short_id"]))
+        ev = db.scalars(select(SpecimenEvent).where(SpecimenEvent.specimen_id == sid,
+                                                    SpecimenEvent.event_type == "CUT")).all()
+    assert len(ev) == 1 and ev[0].params["count"] == 10
+
+    assert client.get(f"/api/shear/parent/{sheet['short_id']}").json()["children"] == 10
+    assert client.get(f"/api/specimens/{sheet['short_id']}/next?count=1").json()["suggest"] == 11
+    wide = {c["short_id"] for c in client.get(f"/api/shear/candidates?coil={sheet['coil_code']}&wide=1").json()}
+    assert {k["short_id"] for k in kids} <= wide                            # 블랭크도 후절단 후보
+    assert client.get("/process-runs/new?specimens=" + ",".join(k["short_id"] for k in kids)).status_code == 200
 
 
 def test_admin_project_code(client):

@@ -153,8 +153,8 @@
     <div class="body form">
       <p class="small muted" style="margin:0">{{ split.name }} (1~{{ split.max }}). {% if split.level == 'branch' %}전폭 → 블랭크는 단계가 A → B로 바뀝니다.{% else %}단계({{ spec.stage }})·조건 꼬리는 그대로 물려받습니다.{% endif %}</p>
       <div class="row">
-        <label class="f">개수<input class="in num" type="number" min="1" max="{{ split.max }}" x-model.number="sp.count" @input.debounce.250ms="suggest()"></label>
-        <label class="f">시작 번호<input class="in num mono" type="number" min="1" max="{{ split.max }}" x-model.number="sp.start" @input.debounce.250ms="check()"></label>
+        <label class="f">개수<input class="in num" type="number" min="1" max="{{ split.max }}" x-model.number="sp.count" @input.debounce.250ms="sp.suggest()"></label>
+        <label class="f">시작 번호<input class="in num mono" type="number" min="1" max="{{ split.max }}" x-model.number="sp.start" @input.debounce.250ms="sp.check()"></label>
         <label class="f">쓸 과제<select class="in mono" x-model="sp.project">
           {% for p in projects %}<option value="{{ p.project_code }}">{{ p.project_code }} · {{ p.project_name[:16] }}</option>{% endfor %}</select></label>
       </div>
@@ -205,38 +205,15 @@ const PREFIX = {HEAT: "H", PRETREAT: "T", PAINT: "P"};
 function specPage() {
   return {
     basis: "eff",
-    sp: {open: false, count: 1, start: SPLIT ? SPLIT.start : 1, project: PROJ, range: SPLIT ? SPLIT.label : "", conflicts: [],
-         busy: false, size_text: "", sample_position: "", rolling_direction: "", surface_side: "", storage_location: "", consume: false},
+    sp: Object.assign(shearForm(SID, PROJ), {open: false, start: SPLIT ? SPLIT.start : 1, range: SPLIT ? SPLIT.label : ""}),
     ev: {open: false, type: "HEAT", code: (CODES.HEAT[0] || [""])[0], date: new Date().toISOString().slice(0, 10), text: ""},
-    openSplit() { this.sp.open = true; this.suggest(); },
-    async suggest() {
-      try {
-        const r = await LIMS.api("GET", `/api/specimens/${SID}/next?count=${this.sp.count || 1}`);
-        this.sp.start = r.suggest; this.sp.conflicts = []; this.showRange(r);
-      } catch (e) { LIMS.fail(e); }
-    },
-    async check() {
-      try {
-        const r = await LIMS.api("GET", `/api/specimens/${SID}/next?count=${this.sp.count || 1}&start=${this.sp.start}`);
-        this.sp.conflicts = r.conflicts; this.showRange(r);
-      } catch (e) { this.sp.range = ""; LIMS.fail(e); }
-    },
-    showRange(r) { this.sp.range = r.first === r.last ? r.first : `${r.first} ~ ${r.last} (${this.sp.count}개)`; },
+    openSplit() { this.sp.open = true; this.sp.suggest(); },
     async doSplit() {
-      this.sp.busy = true;
-      const s = this.sp;
-      try {
-        const r = await LIMS.api("POST", `/api/specimens/${SID}/split`, {
-          count: s.count, start: s.start, project_code: s.project, size_text: s.size_text || null,
-          sample_position: s.sample_position || null, rolling_direction: s.rolling_direction || null,
-          surface_side: s.surface_side || null, storage_location: s.storage_location || null, mark_parent_consumed: s.consume});
-        LIMS.toast(`${r.children.length}개 생성: ${r.children.map(c => c.short_id).join(", ")}`, "ok");
-        if (confirm("각인 CSV를 내려받을까요?")) LIMS.download(r.engrave_csv);
-        setTimeout(() => location.reload(), 500);
-      } catch (e) {
-        if (e.data && e.data.conflicts) this.sp.conflicts = e.data.conflicts;
-        LIMS.fail(e);
-      } finally { this.sp.busy = false; }
+      const r = await this.sp.save();
+      if (!r) return;
+      LIMS.toast(`${r.children.length}개 생성: ${r.children.map(c => c.short_id).join(", ")}`, "ok");
+      if (confirm("각인 CSV를 내려받을까요?")) LIMS.download(r.engrave_csv);
+      setTimeout(() => location.reload(), 500);
     },
     async addEvent() {
       const params = {};

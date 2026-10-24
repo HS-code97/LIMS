@@ -64,6 +64,46 @@
     };
   };
 
+  /* ── 전단(자르기) 입력: 시편 상세 대화상자와 시편 › 전단 화면이 같이 씀 (Alpine 하위 상태) ── */
+  window.shearForm = function (sid, proj) {
+    return {
+      sid, count: 1, start: 1, project: proj, range: "", conflicts: [], busy: false,
+      size_text: "", sample_position: "", rolling_direction: "", surface_side: "", storage_location: "", consume: false,
+      reset(sid, proj, count) {
+        Object.assign(this, { sid, project: proj, count: count || 1, range: "", conflicts: [], size_text: "",
+          sample_position: "", rolling_direction: "", surface_side: "", storage_location: "", consume: false });
+      },
+      async suggest() {
+        try {
+          const r = await LIMS.api("GET", `/api/specimens/${this.sid}/next?count=${this.count || 1}`);
+          this.start = r.suggest; this.conflicts = []; this.showRange(r);
+        } catch (e) { this.range = ""; LIMS.fail(e); }
+      },
+      async check() {
+        try {
+          const r = await LIMS.api("GET", `/api/specimens/${this.sid}/next?count=${this.count || 1}&start=${this.start}`);
+          this.conflicts = r.conflicts; this.showRange(r);
+        } catch (e) { this.range = ""; LIMS.fail(e); }
+      },
+      showRange(r) { this.range = r.first === r.last ? r.first : `${r.first} ~ ${r.last} (${this.count}개)`; },
+      /** 저장 → split API 응답(children, engrave_csv, label_pdf). 실패하면 알림 후 null */
+      async save() {
+        this.busy = true;
+        try {
+          return await LIMS.api("POST", `/api/specimens/${this.sid}/split`, {
+            count: this.count, start: this.start, project_code: this.project, size_text: this.size_text || null,
+            sample_position: this.sample_position || null, rolling_direction: this.rolling_direction || null,
+            surface_side: this.surface_side || null, storage_location: this.storage_location || null,
+            mark_parent_consumed: this.consume });
+        } catch (e) {
+          if (e.data && e.data.conflicts) this.conflicts = e.data.conflicts;
+          LIMS.fail(e);
+          return null;
+        } finally { this.busy = false; }
+      },
+    };
+  };
+
   /* 어느 화면에서든 스캐너(키보드 입력)가 들어오면 검색창으로 보냅니다. F2 = 검색창 포커스. */
   document.addEventListener("keydown", (e) => {
     const q = document.getElementById("gq");

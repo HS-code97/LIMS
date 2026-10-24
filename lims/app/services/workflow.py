@@ -319,10 +319,12 @@ def split(db: Session, parent: Specimen, data: SplitIn, user_id: int | None) -> 
         k.set_mark()
         db.add(k)
         kids.append(k)
+    what = f"자르기 {kids[0].short_id}" + (f" ~ {kids[-1].short_id}" if len(kids) > 1 else "")
+    db.add(SpecimenEvent(specimen_id=parent.id, event_type="CUT", event_date=date.today(), user_id=user_id,
+                         params={"what": what, "count": len(kids), "size": kids[0].size_text, "project": project}))
     if project != parent.project_code or (user_id is not None and parent.owner_id not in (None, user_id)):
         db.add(SpecimenEvent(specimen_id=parent.id, event_type="USE", event_date=date.today(), user_id=user_id,
-                             params={"what": f"자르기 {kids[0].short_id}" + (f" ~ {kids[-1].short_id}" if len(kids) > 1 else ""),
-                                     "to_project": project}))
+                             params={"what": what, "to_project": project}))
     if data.mark_parent_consumed:
         parent.status = "CONSUMED"
     db.flush()

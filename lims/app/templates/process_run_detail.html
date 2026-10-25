@@ -3,7 +3,7 @@
 {% block content %}
 <section class="hero">
   <div class="crumb small mono muted"><a href="/process-runs">공정런</a> › {{ run.project_code }} › {{ run.run_no }}</div>
-  <h1 class="mono" style="font-size:24px;margin-top:6px">{{ run.run_no }} <span style="font-size:15px;color:var(--ink-3)">{{ run.base_condition_code }}</span></h1>
+  <h1 class="mono" style="font-size:24px;margin-top:6px">{{ run.run_no }} <span style="font-size:15px;color:var(--ink-3)">{{ run.base_condition_label }}</span></h1>
   <div class="meta">
     <span class="chip">일자 <b>{{ run.run_date|d }}</b></span>
     <span class="chip">과제 <b>{{ run.project.label if run.project else run.project_code }}</b></span>
@@ -135,7 +135,7 @@
   <div class="tablewrap"><table class="t act">
     <tr><th>원판</th>{% for k in panel_keys %}{% set p = pdict.param(k) %}<th class="n">{{ p.l }} {{ p.u }}<span class="tg">목표 {{ pdict.target_value(run.recipe, k)|num }}{% if maps.get(k) %} · {{ maps[k] }}{% endif %}</span></th>{% endfor %}</tr>
     {% for pn in panels %}
-    <tr><td class="mono"><a href="/specimens/{{ pn.short_id }}"><b>{{ pn.short_id }}</b></a> <span class="small muted">{{ pn.condition_code }}</span></td>
+    <tr><td class="mono"><a href="/specimens/{{ pn.short_id }}"><b>{{ pn.short_id }}</b></a> <span class="small muted">{{ pn.condition_label }}</span></td>
       {% for k in panel_keys %}{% set c = cells[(pn.id, k)] %}{% set e = c.eff %}
       <td class="n">
         {% if c.auto and c.manual is none %}

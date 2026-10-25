@@ -16,7 +16,7 @@
     st.base = H.applyPreset(p.overrides);
     st.sp = H.clone(st.base);
     st.presetId = p.id; st.presetName = p.name; st.coatingSystem = p.coating_system; st.bathCode = p.bath_code;
-    st.srcLabel = `${p.scope === "PUBLIC" ? "공용" : p.scope === "TEAM" ? "팀" : "개인"} 프리셋 ${p.name} (계열 ${p.coating_system}${p.bath_code})`;
+    st.srcLabel = `${p.scope === "PUBLIC" ? "공용" : p.scope === "TEAM" ? "팀" : "개인"} 프리셋 ${p.name} (${presetCard(p)})`;
     drawPresets();
     renderAll();
   }
@@ -35,14 +35,18 @@
     renderAll();
   }
 
+  // 프리셋의 조건 카드: 공용 표준이면 'M2 표준', 아니면 'M2-03' (계열 + 변형번호, 시편번호 체계 3.3절)
+  const presetCard = (p) => p.variant_id ? (p.variant_seq === 0 ? `${p.coating_system}${p.bath_code} 표준` : p.variant_id)
+    : `계열 ${p.coating_system}${p.bath_code}`;
+
   function drawPresets() {
     const pub = C.presets.filter((p) => p.scope === "PUBLIC");
     $("pub-presets").innerHTML = pub.map((p) =>
-      `<button aria-pressed="${p.id === st.presetId}" data-id="${p.id}" title="계열 ${p.coating_system}${p.bath_code}">${esc(p.name)}</button>`).join("");
+      `<button aria-pressed="${p.id === st.presetId}" data-id="${p.id}" title="${presetCard(p)}">${esc(p.name)}</button>`).join("");
     $("pub-presets").querySelectorAll("button").forEach((b) => (b.onclick = () => usePreset(C.presets.find((p) => p.id === +b.dataset.id))));
     const mine = C.presets.filter((p) => p.scope !== "PUBLIC");
     $("my-presets").innerHTML = `<option value="">내·팀 프리셋 ▼ (${mine.length})</option>` +
-      mine.map((p) => `<option value="${p.id}" ${p.id === st.presetId ? "selected" : ""}>${p.scope === "TEAM" ? "[팀] " : ""}${esc(p.name)} · ${p.coating_system}${p.bath_code}</option>`).join("");
+      mine.map((p) => `<option value="${p.id}" ${p.id === st.presetId ? "selected" : ""}>${p.scope === "TEAM" ? "[팀] " : ""}${esc(p.name)} · ${presetCard(p)}</option>`).join("");
     $("recipe-src").textContent = st.srcLabel ? "레시피: " + st.srcLabel : "";
   }
 
@@ -233,13 +237,19 @@
       if (!st.sp) return;
       try {
         const r = await LIMS.api("POST", "/api/process-runs/preview-code", Object.assign(payloadBase(), { panel_overrides: st.series.length ? panelOverrides() : [] }));
-        $("code").textContent = r.code;
+        // 꼬리 = 조건부 + 변형번호(공정 계열 안의 조건 카드, 표준 00은 생략)
+        const v = r.variant, label = v.label;
+        $("code").textContent = label;
+        $("variant-note").textContent = v.seq === 0 ? `· ${v.variant_id} 공용 표준 그대로`
+          : v.is_new ? `· 새 조건 → ${v.variant_id} (${v.name})` : `· 기존 조건 ${v.variant_id} (${v.name})`;
+        const xw = $("x-warn");
+        xw.innerHTML = r.x_warning ? ` · ⚠ ${esc(r.x_warning.text)}` + r.x_warning.links.map((l) => ` <a href="${l.url}" target="_blank">[${esc(l.label)}]</a>`).join("") : "";
         const ms = marks(), proj = $("project").value;
-        const full = (m) => { const [coil, ...rest] = m.split("-"); return `${coil}-${proj}-C-${rest.join("-")}-${r.code}`; };
+        const full = (m) => { const [coil, ...rest] = m.split("-"); return `${coil}-${proj}-C-${rest.join("-")}-${label}`; };
         $("range").textContent = ms.length ? `→ ${full(ms[0])}${ms.length > 1 ? " ~ " + ms[ms.length - 1] + ` (${ms.length}장)` : ""}` : "→ ①에서 도금할 시편을 고르세요";
         if (st.series.length) {
-          const codes = [...new Set(r.panel_codes)];
-          $("series-summary").innerHTML = `<span class="mk-intent">◆</span> 시리즈 ${st.series.map((x) => `${esc(x.key)} = [${x.values.join(", ")}]`).join(" × ")} · 원판별 조건부 ${codes.join(", ")}`;
+          const labels = [...new Set(r.panel_variants.map((x) => x.label))];
+          $("series-summary").innerHTML = `<span class="mk-intent">◆</span> 시리즈 ${st.series.map((x) => `${esc(x.key)} = [${x.values.join(", ")}]`).join(" × ")} · 원판별 꼬리 ${labels.join(", ")}`;
         } else $("series-summary").textContent = "";
       } catch (e) { /* 미리보기 실패는 조용히 */ }
     }, 220);

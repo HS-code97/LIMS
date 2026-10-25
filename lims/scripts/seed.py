@@ -24,6 +24,7 @@ from app.config import SEED_DIR  # noqa: E402
 from app.db import Base, SessionLocal, engine  # noqa: E402
 from app.models import (Material, MasterCode, ProcessPreset, Project, Team, TestTemplate,  # noqa: E402
                         User)
+from app.services import condition_code as cc  # noqa: E402
 from app.services import param_dict as pdict  # noqa: E402
 
 TEAMS = ["부식", "표면·전기화학", "가공", "도금 품질", "표면연구"]
@@ -106,6 +107,8 @@ def seed(db, demo: bool = False, admin: tuple[str, str] | None = None) -> None:
             db.add(obj)
         obj.coating_system, obj.bath_code, obj.overrides = p["coating_system"], p["bath_code"], p["overrides"]
         obj.dict_version = pdict.version()
+        db.flush()
+        cc.register_preset(db, obj)       # 공용 프리셋 = 공정 계열의 표준(변형번호 00)
 
     for fp in sorted((SEED_DIR / "test_templates").glob("*.json")):
         with open(fp, encoding="utf-8") as f:

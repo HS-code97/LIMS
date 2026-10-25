@@ -48,7 +48,7 @@ PostgreSQL에서 같은 테스트를 돌리려면 빈 테스트 DB를 만들고 
    `LIMS_SECRET_KEY`는 `python -c "import secrets; print(secrets.token_urlsafe(48))"`로 만듭니다.
    PostgreSQL에서는 키가 없거나 32자 미만이거나 예시 값이면 앱이 기동을 거부합니다(세션 쿠키 위조 방지).
 3. 스키마: `cd lims && alembic upgrade head` (검토용 DDL은 `lims/db/schema_postgres.sql`, `python -m scripts.dump_ddl`로 다시 생성).
-   마이그레이션별 SQL은 `lims/db/migration_000N_postgres.sql`입니다. `0002`는 관리 화면 실측 설정 테이블(`param_actual_cfg`)과 `serial_no` 숫자 검사를, `0003`은 장비 API 키(`api_keys`)를 더하고, `0004`는 시편번호 체계 v3.0(각인번호·단계 A~E·과제 `A6`·코일코드)으로 바꾸며 기존 데이터를 이관합니다(옛 번호는 `legacy_id`로 계속 조회). `0005`는 각인번호를 v3.1(`QV3-102-01-3` → `QV3-A02-A-3`, 구간 경계마다 영문·숫자 교대)로, 분석런 번호를 `TR-` → `AR-`로 바꿉니다(옛 `TR-` 번호도 검색·주소에서 찾힘). `0004`·`0005`의 데이터 이관은 온라인 `alembic upgrade head`에서만 돕니다.
+   마이그레이션별 SQL은 `lims/db/migration_000N_postgres.sql`입니다. `0002`는 관리 화면 실측 설정 테이블(`param_actual_cfg`)과 `serial_no` 숫자 검사를, `0003`은 장비 API 키(`api_keys`)를 더하고, `0004`는 시편번호 체계 v3.0(각인번호·단계 A~E·과제 `A6`·코일코드)으로 바꾸며 기존 데이터를 이관합니다(옛 번호는 `legacy_id`로 계속 조회). `0005`는 각인번호를 v3.1(`QV3-102-01-3` → `QV3-A02-A-3`, 구간 경계마다 영문·숫자 교대)로, 분석런 번호를 `TR-` → `AR-`로 바꿉니다(옛 `TR-` 번호도 검색·주소에서 찾힘). `0006`은 꼬리의 도금 블록에 변형번호(`M206K` → `M206K03`, 공정 계열 안의 조건 카드 `process_variants`)를 더하고 기존 공정런 시편에 번호를 매깁니다. `0004`~`0006`의 데이터 이관은 온라인 `alembic upgrade head`에서만 돕니다.
    **업그레이드 순서:** 코드를 바꾼 뒤 서버를 다시 띄우기 전에 `alembic upgrade head`를 실행하세요. 테이블이 없으면 모든 요청이 실패합니다.
    DB 시간대: `ALTER DATABASE lims SET timezone = 'Asia/Seoul';` (기록 시각 기본값 `now()`가 KST가 되도록)
 4. 기준 정보: `python -m scripts.seed` — 관리자가 아직 없으면 첫 관리자 사번·비밀번호(10자 이상)를 묻습니다.

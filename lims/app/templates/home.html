@@ -42,7 +42,7 @@
         <tr><th>공정런</th><th>일자</th><th>과제</th><th>조건부</th><th class="n">원판</th><th>메모</th><th></th></tr>
         {% for r in recent_pr %}
         <tr><td><a class="mono" href="/process-runs/{{ r.run_no }}">{{ r.run_no }}</a></td><td class="mono">{{ r.run_date|d }}</td>
-          <td class="mono">{{ r.project_code }}</td><td class="mono"><b>{{ r.base_condition_code }}</b></td>
+          <td class="mono">{{ r.project_code }}</td><td class="mono"><b>{{ r.base_condition_label }}</b></td>
           <td class="n">{{ r.panels|length }}</td><td class="small muted">{{ (r.note or '')[:30] }}</td>
           <td class="nowrap"><a class="btn sm" href="/process-runs/{{ r.run_no }}?tab=actuals">실측</a>
             <a class="btn sm" href="/process-runs/new?clone={{ r.run_no }}" title="이 레시피로 새 공정런">{{ icon('copy', 14) }}복제</a></td></tr>
@@ -78,7 +78,7 @@
       <header><h2>{{ icon('spec') }}최근 내 시편</h2><div class="r"><a class="btn sm" href="/specimens?mine=1">전체</a></div></header>
       {% if my_specs %}
       <ul class="list">{% for s in my_specs %}
-        <li><span class="stage">{{ s.stage }}</span><a class="mono grow" href="/specimens/{{ s.short_id }}"><b>{{ s.short_id }}</b> <span class="muted">{{ s.condition_code or '' }}</span></a>
+        <li><span class="stage">{{ s.stage }}</span><a class="mono grow" href="/specimens/{{ s.short_id }}"><b>{{ s.short_id }}</b> <span class="muted">{{ s.condition_label or '' }}</span></a>
           <span class="chip st-{{ s.status }}">{{ s.status }}</span></li>
       {% endfor %}</ul>
       {% else %}<div class="empty-note">아직 시편이 없습니다. 공정런을 등록하면 원판이 생깁니다.</div>{% endif %}

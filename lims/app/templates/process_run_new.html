@@ -73,7 +73,8 @@
   </div>
   <div class="body" style="padding-top:0">
     <div class="pr-commit">
-      <div class="codeprev"><small>조건부 미리보기 (목표 기준 · 전체번호 꼬리)</small><span id="code">-----</span><span class="small mono" id="range"></span></div>
+      <div class="codeprev"><small>조건 꼬리 미리보기 (조건부 + 변형번호 · 목표 기준)</small><span id="code">-----</span><span class="small mono" id="range"></span>
+        <span class="small" id="variant-note"></span><span class="small mk-dev" id="x-warn"></span></div>
       <input class="in" id="note" placeholder="메모 입력… (실험 목적·특이사항)">
       <button class="btn" id="btn-mypreset">내 프리셋으로 저장</button>
       <button class="btn primary lg" id="btn-save">{{ icon('check', 18) }} 저장</button>
@@ -117,5 +118,5 @@ window.LIMS_HMI = {
 };
 </script>
 <script src="/static/hmi/hmi-core.js?v=2.2.0"></script>
-<script src="/static/hmi/hmi-lims.js?v=2.3.0"></script>
+<script src="/static/hmi/hmi-lims.js?v=2.3.1"></script>
 {% endblock %}

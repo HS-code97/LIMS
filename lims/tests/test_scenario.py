@@ -47,10 +47,14 @@ def test_reference_scenario(db, user_id):
         run_date=date(2026, 10, 21), coating_weight_target=60, specimens=[b.short_id for b in blanks],
         recipe=recipe, changed_from_preset=["rth.DP"]), user_id)
     panels = run.panels
-    # 도금해도 각인번호는 그대로, 단계 C + 꼬리 M206K
+    # 도금해도 각인번호는 그대로, 단계 C + 꼬리 M206K + 변형번호 (이슬점 −42는 K 허용오차 안이라 조건부는 같지만
+    # 공용 표준 M2와 다른 조건 → 00이 아닌 조건 카드. 번호는 다른 테스트가 먼저 쓴 수에 따라 달라짐)
+    seq = panels[0].variant_seq
+    tail = f"M206K{seq:02d}"
+    assert seq >= 1 and {p.variant_seq for p in panels} == {seq}
     assert [p.short_id for p in panels] == [f"QV3-A0{i}" for i in range(1, 6)]
-    assert [p.display_id for p in panels] == [f"QV3-A6-C-A0{i}-M206K" for i in range(1, 6)]
-    assert run.base_condition_code == "M206K" and run.material.coil_code == "QV3"
+    assert [p.display_id for p in panels] == [f"QV3-A6-C-A0{i}-{tail}" for i in range(1, 6)]
+    assert run.base_condition_code == "M206K" and run.base_condition_label == tail and run.material.coil_code == "QV3"
 
     # 이미 도금한 시편·없는 시편은 도금 못 함
     with pytest.raises(workflow.Invalid) as e:
@@ -86,12 +90,12 @@ def test_reference_scenario(db, user_id):
 
     # 2. QV3-A01 → 단면 시편 QV3-A01-A, SEM 분석런 탑승 (단계·꼬리 상속)
     s0101 = workflow.split(db, p0101, SplitIn(count=1, start=1), user_id)[0]
-    assert s0101.short_id == "QV3-A01-A" and s0101.display_id == "QV3-A6-C-A01-A-M206K"
+    assert s0101.short_id == "QV3-A01-A" and s0101.display_id == f"QV3-A6-C-A01-A-{tail}"
     tr_sem1 = workflow.create_test_run(db, TestRunIn(template_id=_tpl(db, "SEM_SECTION").id,
                                                      start_date=date(2026, 10, 22),
                                                      specimens=[{"short_id": "QV3-A01-A"}]), user_id)
     assert tr_sem1.test_run_no == "AR-SEM-26001"
-    assert tr_sem1.boardings[0].display_at == "QV3-A6-C-A01-A-M206K"     # 탑승 당시 전체번호
+    assert tr_sem1.boardings[0].display_at == f"QV3-A6-C-A01-A-{tail}"   # 탑승 당시 전체번호
 
     # 3. SEM 파일 자동 연결 (전체번호로 지은 파일명도 각인번호로)
     r = file_ingest.ingest(db, _tmpfile("a.tif", b"fake-sem-1"), "QV3-A6-C-A01-A-M206K_SEM_init.tif", user_id=user_id)
@@ -162,6 +166,10 @@ def test_series_and_bath(db, user_id):
     ps = run.panels
     assert ps[1].target_overrides == {"out.cw": 75}           # ak.P 30 = 기본값 → 바뀐 키만
     assert [p.condition_code for p in ps] == ["M209K", "M208K", "M206K", "M205K", "M203K"]
+    # 나이프 압력 시리즈: 조건부로는 못 가르던 원판을 변형번호가 가름. ak.P 30(기본값)인 원판만 공용 표준 그대로
+    seqs = [p.variant_seq for p in ps]
+    assert seqs[1] == 0 and ps[1].condition_label == "M208K"
+    assert 0 not in seqs[:1] + seqs[2:] and len(set(seqs)) == 5
     e = actuals.RunActuals(db, run).effective(ps[0], "ak.P")
     assert e.target == 20 and e.is_override
 

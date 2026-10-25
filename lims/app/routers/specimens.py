@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session
 
 from ..auth import can_edit, ensure_can_edit, require_admin, require_user
 from ..db import get_db
-from ..models import (Attachment, Material, MasterCode, ProcessRun, Project, RunSpecimen, Specimen, SpecimenEvent,
-                      TestResult, TestRun, User)
+from ..models import (Attachment, Material, MasterCode, ProcessRun, ProcessVariant, Project, RunSpecimen, Specimen,
+                      SpecimenEvent, TestResult, TestRun, User)
 from ..schemas import EventIn, IntakeIn, SplitIn, TreatIn
 from ..services import actuals, export, lineage, marking, numbering, workflow
 from ..services import param_dict as pdict
@@ -179,8 +179,12 @@ def detail_context(db: Session, spec: Specimen) -> dict:
         MasterCode.category == k, MasterCode.is_active.is_(True)).order_by(MasterCode.code))]
         for k in ("HEAT", "PRETREAT", "PAINT")}
     projects = db.scalars(select(Project).order_by(Project.is_common, Project.project_code.desc())).all()
+    variant = None
+    if spec.condition_code and spec.variant_seq is not None:
+        variant = db.scalar(select(ProcessVariant).where(ProcessVariant.family == spec.condition_code[:2],
+                                                         ProcessVariant.seq == spec.variant_seq))
     return {"spec": spec, "chain": lineage.chain(spec), "tree": lineage.descendants_tree(spec), "params": params,
-            "actual_code": actual_code, "tests": tests, "files": files, "events": events,
+            "actual_code": actual_code, "variant": variant, "tests": tests, "files": files, "events": events,
             "split": split, "EVENT_TYPES": EVENT_TYPES, "EVENT_NAMES": EVENT_NAMES, "STATUSES": STATUSES,
             "processes": lineage.processes(spec), "treat_codes": treat_codes, "projects": projects,
             "TREATMENTS": marking.TREATMENTS, "run": spec.process_run, "own_manual": own_manual,
@@ -201,7 +205,8 @@ def spec_json(s: Specimen) -> dict:
     return {"short_id": s.short_id, "display_id": s.display_id, "engraved_label": s.engraved_label,
             "stage": s.stage, "stage_name": s.stage_name, "kind": s.kind_name, "status": s.status,
             "project_code": s.project_code, "coil_code": s.coil_code, "tail": s.tail,
-            "steps": s.steps or [], "condition_code": s.condition_code,
+            "steps": s.steps or [], "condition_code": s.condition_code, "variant_seq": s.variant_seq,
+            "condition_label": s.condition_label,
             "parent": s.parent.short_id if s.parent else None,
             "process_run": s.process_run.run_no if s.process_run else None,
             "material": s.material.coil_no if s.material else None, "size_text": s.size_text,

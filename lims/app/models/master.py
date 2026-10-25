@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db import Base, JSONType
@@ -89,8 +89,40 @@ class ProcessPreset(Base):
     dict_version: Mapped[str] = mapped_column(String(20))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    variant_seq: Mapped[int | None] = mapped_column(Integer)  # 공정 계열 안의 변형번호 (공용 표준 = 0)
 
     owner: Mapped[User | None] = relationship()
+
+    @property
+    def variant_id(self) -> str | None:
+        """'M2-00'(공용 표준), 'M2-03' — 계열(계열·욕) + 변형번호 (시편번호 체계 3.3절)."""
+        if self.variant_seq is None:
+            return None
+        return f"{self.coating_system}{self.bath_code}-{self.variant_seq:02d}"
+
+
+class ProcessVariant(Base):
+    """조건 카드: 공정 계열(조건부 앞 2자 'M2') 안에서 부착량을 뺀 목표 공정값의 지문 → 변형번호.
+    꼬리 'M206K03'의 03이 무엇인지 여기서 찾습니다(H03·P12를 코드표에서 찾는 것과 같음). 번호는 다시 쓰지 않습니다."""
+    __tablename__ = "process_variants"
+    __table_args__ = (UniqueConstraint("family", "seq"), Index("idx_pv_fp", "family", "fingerprint"))
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    family: Mapped[str] = mapped_column(String(2))           # 'M2', 'MX'
+    seq: Mapped[int] = mapped_column(Integer)                # 0 = 공용 표준 프리셋, 1~ 변형
+    fingerprint: Mapped[str] = mapped_column(String(40))
+    proc_values: Mapped[dict] = mapped_column(JSONType)      # 지문을 만든 공정값 {'pot.T': 590, ...} (부착량 제외)
+    # 부착량 코드별로 이 번호를 처음 쓴 목표 부착량 {'05': 45.0}. 같은 코드에 다른 부착량이 오면 새 번호(겹침 예외)
+    cw_claims: Mapped[dict | None] = mapped_column(JSONType)
+    name: Mapped[str] = mapped_column(String(120))
+    origin: Mapped[str] = mapped_column(String(10))          # PUBLIC / TEAM / PERSONAL / RUN
+    preset_id: Mapped[int | None] = mapped_column(ForeignKey("process_presets.id"))
+    first_run_id: Mapped[int | None] = mapped_column(ForeignKey("process_runs.id"))
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    @property
+    def variant_id(self) -> str:
+        return f"{self.family}-{self.seq:02d}"
 
 
 class TestTemplate(Base):

@@ -197,3 +197,55 @@ def test_alembic_0005_migrates_v30_marks_and_run_numbers(tmp_path):
     c.close()
     r = alembic("upgrade", "head")
     assert r.returncode != 0 and "QV3-102-01-A" in r.stderr
+
+
+def test_alembic_0006_numbers_process_variants(tmp_path):
+    """0006: 공용 프리셋 = 계열 표준(00), 공정런 순서대로 시편에 변형번호. 자른 실험편은 원판 번호를 물려받고,
+    부착량만 다른 원판은 같은 번호, 이슬점만 다른 공정런은 새 번호."""
+    import json
+    import sqlite3
+    from app.services import param_dict as pdict
+    db_file = tmp_path / "v31.db"
+    env = {**os.environ, "LIMS_VAR_DIR": str(tmp_path), "LIMS_DATABASE_URL": f"sqlite:///{db_file.as_posix()}",
+           "PYTHONDONTWRITEBYTECODE": "1", "PYTHONIOENCODING": "utf-8"}
+
+    def alembic(*args):
+        r = subprocess.run([sys.executable, "-m", "alembic", *args], cwd=LIMS_DIR, env=env,
+                           capture_output=True, text=True, encoding="utf-8")
+        assert r.returncode == 0, (args, r.stdout, r.stderr)
+
+    over = {"nof": {"on": False}, "pot": {"T": 590, "Al": 70.5, "Mg": 0.5, "Si": 3.0}, "ga": {"on": False}}
+    std = pdict.preset_recipe(over)
+    std["out"]["cw"] = 60
+    dp = json.loads(json.dumps(std))
+    dp["rth"]["DP"] = -42
+    alembic("upgrade", "0005")
+    c = sqlite3.connect(db_file)
+    c.execute("INSERT INTO projects (project_code, project_name, is_common) VALUES ('A6', '과제', 0)")
+    c.execute("INSERT INTO process_presets (id, name, scope, coating_system, bath_code, overrides, dict_version, "
+              "is_active) VALUES (1, 'M2', 'PUBLIC', 'M', '2', ?, 'v', 1)", (json.dumps(over),))
+    for i, (no, d, rcp) in enumerate((("PR-26-0002", "2026-10-22", std), ("PR-26-0001", "2026-10-21", dp)), start=1):
+        c.execute("INSERT INTO process_runs (id, run_no, run_date, project_code, preset_id, source, dict_version, "
+                  "recipe, base_condition_code) VALUES (?, ?, ?, 'A6', 1, 'manual', 'v', ?, 'M206K')",
+                  (i, no, d, json.dumps(rcp)))
+    c.executescript("""
+        INSERT INTO specimens (id, project_code, stage, coil_code, branch, cut_no, short_id, is_panel, parent_id,
+                               process_run_id, target_overrides, condition_code, status, is_deleted) VALUES
+            (1, 'A6', 'C', 'QV3', 'A01', NULL, 'QV3-A01', 1, NULL, 1, NULL, 'M206K', 'AVAILABLE', 0),
+            (2, 'A6', 'C', 'QV3', 'A02', NULL, 'QV3-A02', 1, NULL, 1, '{"out.cw": 90}', 'M209K', 'AVAILABLE', 0),
+            (3, 'A6', 'C', 'QV3', 'A03', NULL, 'QV3-A03', 1, NULL, 2, NULL, 'M206K', 'AVAILABLE', 0),
+            (4, 'A6', 'C', 'QV3', 'A03', 'A', 'QV3-A03-A', 0, 3, 2, NULL, 'M206K', 'AVAILABLE', 0),
+            (5, 'A6', 'B', 'QV3', 'A04', NULL, 'QV3-A04', 0, NULL, NULL, NULL, NULL, 'AVAILABLE', 0);
+    """)
+    c.commit()
+    c.close()
+    alembic("upgrade", "head")
+    alembic("check")
+    c = sqlite3.connect(db_file)
+    seqs = dict(c.execute("SELECT short_id, variant_seq FROM specimens"))
+    # PR-0001(이슬점 −42, 먼저 등록) → 01, PR-0002(프리셋 그대로) → 00, 부착량만 다른 원판·자른 실험편은 같은 번호
+    assert seqs == {"QV3-A01": 0, "QV3-A02": 0, "QV3-A03": 1, "QV3-A03-A": 1, "QV3-A04": None}
+    assert c.execute("SELECT variant_seq FROM process_presets").fetchone() == (0,)
+    cards = {r[0]: r[1:] for r in c.execute("SELECT seq, family, origin, name FROM process_variants")}
+    assert cards[0][:2] == ("M2", "PUBLIC") and cards[1][:2] == ("M2", "RUN") and "-42" in cards[1][2]
+    c.close()

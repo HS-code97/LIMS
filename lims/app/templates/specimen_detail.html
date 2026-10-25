@@ -22,6 +22,7 @@
   <div class="facts">
     <span>각인 <b class="mono">{{ spec.short_id }}</b></span>
     <span>· 거친 공정 {% for pr in processes %}<b title="{{ pr.codes|join(', ') }}" {% if not pr.done %}class="muted" style="font-weight:400"{% endif %}>{{ pr.name }} {{ '✓' if pr.done else '–' }}</b>{% if not loop.last %} {% endif %}{% endfor %}</span>
+    {% if spec.condition_label %}<span>· 조건 <a class="mono" href="/search?code={{ variant.variant_id if variant else spec.condition_code }}" title="같은 공정 조건의 시편 찾기 (부착량 무관)"><b>{{ spec.condition_label }}</b></a>{% if variant %} <span class="muted">= {{ variant.variant_id }}{% if variant.seq == 0 %} 공용 표준{% endif %} · {{ variant.name }}</span>{% endif %}</span>{% endif %}
     {% if actual_code %}<span>· 실측 기준 조건부 <b {% if actual_code != spec.condition_code %}class="mk-dev"{% endif %}>{{ actual_code }}</b></span>{% endif %}
     {% if spec.storage_location %}<span>· 보관 <b>{{ spec.storage_location }}</b></span>{% endif %}
     <span>· 등록 {{ spec.created_at|d }}</span>

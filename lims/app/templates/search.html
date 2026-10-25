@@ -12,7 +12,7 @@
       <label class="f">과제<select class="in" name="project"><option value="">전체</option>{% for p in projects %}<option value="{{ p.project_code }}" {% if p.project_code == qy.project %}selected{% endif %}>{{ p.label }}</option>{% endfor %}</select></label>
       <label class="f">단계<select class="in" name="stage"><option value="">전체</option>{% for s in 'ABCDE' %}<option {% if s == qy.stage %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></label>
       <label class="f">분석 종류<select class="in" name="test_type"><option value="">전체</option>{% for t in types %}<option {% if t == qy.test_type %}selected{% endif %}>{{ t }}</option>{% endfor %}</select></label>
-      <label class="f">조건부 (접두·? 한 글자)<input class="in mono" name="code" value="{{ qy.code }}" placeholder="M2?? / M206"></label>
+      <label class="f">조건 (접두·? 한 글자 · 변형번호 · 조건 카드)<input class="in mono" name="code" value="{{ qy.code }}" placeholder="M206 / M206K03 / M2-03"></label>
     </div>
     <div>
       <div class="small muted" style="margin-bottom:6px">수치 조건 (공정 파라미터 · 최대 5개)</div>

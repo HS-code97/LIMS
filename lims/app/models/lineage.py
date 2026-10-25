@@ -65,6 +65,12 @@ class ProcessRun(Base):
         primaryjoin="and_(Specimen.process_run_id == ProcessRun.id, Specimen.is_panel == True, Specimen.is_deleted == False)",
         order_by="Specimen.short_id", viewonly=True)
 
+    @property
+    def base_condition_label(self) -> str:
+        """목록용 대표 꼬리: 원판별 목표 변경이 없는 원판의 'M206K03'. 모든 원판이 시리즈 값이면 조건부 5자만."""
+        p = next((p for p in self.panels if not p.target_overrides and p.condition_label), None)
+        return p.condition_label if p else self.base_condition_code
+
 
 class Specimen(Base):
     """물리적 시편 1개 = 레코드 1개 (시편번호 체계 3.1절).
@@ -98,6 +104,7 @@ class Specimen(Base):
     owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     target_overrides: Mapped[dict | None] = mapped_column(JSONType)
     condition_code: Mapped[str | None] = mapped_column(String(5))
+    variant_seq: Mapped[int | None] = mapped_column(Integer)   # 공정 계열 안의 변형번호 (0 = 공용 표준, 표기 생략)
     sample_position: Mapped[str | None] = mapped_column(String(10))
     rolling_direction: Mapped[str | None] = mapped_column(String(5))
     surface_side: Mapped[str | None] = mapped_column(String(10))
@@ -120,9 +127,15 @@ class Specimen(Base):
         self.short_id = mark_id(self.coil_code, self.branch, self.cut_no, self.piece_no)
 
     @property
+    def condition_label(self) -> str | None:
+        """꼬리의 도금 블록 = 조건부 5자 + 변형번호 2자리('M206K03', 표준이면 'M206K')."""
+        from ..services.marking import plate_label
+        return plate_label(self.condition_code, self.variant_seq) if self.condition_code else None
+
+    @property
     def tail(self) -> list[str]:
         from ..services.marking import tail_blocks
-        return tail_blocks(self.steps, self.condition_code)
+        return tail_blocks(self.steps, self.condition_code, self.variant_seq)
 
     @property
     def display_id(self) -> str:

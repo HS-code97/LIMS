@@ -36,7 +36,7 @@ def scatter_page(request: Request, key: str = "out.cw_top", project: str = "", u
     if project:
         q = q.where(Specimen.project_code == project.upper())
     pts = [{"sid": s.short_id, "x": e.target, "y": e.actual, "dev": e.deviation, "oot": e.out_of_tol,
-            "code": s.condition_code, "level": e.level, "badge": e.badge if hasattr(e, "badge") else
+            "code": s.condition_label, "level": e.level, "badge": e.badge if hasattr(e, "badge") else
             actuals.badge_text(e.source, e.level, e.inherited_from)} for e, s in db.execute(q)]
     p = pdict.param(key)
     cfg = pdict.actual_cfg(key)

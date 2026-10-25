@@ -87,11 +87,26 @@
 
 {% elif tab == 'presets' %}
 <section class="card"><header><h2>공정 프리셋</h2><span class="meta">공용(관리자) · 팀 · 개인 — 사전 기본값과 다른 값만 저장</span></header>
-  <div class="tablewrap"><table class="t"><tr><th>이름</th><th>범위</th><th>계열·욕</th><th>기본값과 다른 값</th><th>사전</th><th>만든 사람</th><th></th></tr>
-    {% for p in presets %}<tr {% if not p.is_active %}style="opacity:.5"{% endif %}><td><b>{{ p.name }}</b></td><td><span class="chip">{{ p.scope }}</span></td><td class="mono">{{ p.coating_system }}{{ p.bath_code }}</td>
+  <div class="tablewrap"><table class="t"><tr><th>이름</th><th>범위</th><th>조건 카드</th><th>기본값과 다른 값</th><th>사전</th><th>만든 사람</th><th></th></tr>
+    {% for p in presets %}<tr {% if not p.is_active %}style="opacity:.5"{% endif %}><td><b>{{ p.name }}</b></td><td><span class="chip">{{ p.scope }}</span></td><td class="mono">{% if p.variant_id %}<a href="?tab=variants#{{ p.coating_system }}{{ p.bath_code }}">{{ p.variant_id }}</a>{% if p.variant_seq == 0 %} <span class="small muted">표준</span>{% endif %}{% else %}{{ p.coating_system }}{{ p.bath_code }}{% endif %}</td>
       <td class="mono small">{% for sec, vals in p.overrides.items() %}{{ sec }}{{ vals|tojson_compact }} {% endfor %}</td><td class="mono small">{{ p.dict_version }}</td>
       <td>{{ p.owner.name if p.owner else '' }}</td>
       <td>{% if user.is_admin %}<form method="post" action="/admin/presets/{{ p.id }}/toggle"><button class="btn sm">{{ '끄기' if p.is_active else '켜기' }}</button></form>{% endif %}</td></tr>{% endfor %}</table></div></section>
+
+{% elif tab == 'variants' %}
+<section class="card"><header><h2>공정 계열 · 조건 카드</h2><span class="meta">꼬리 M206K<b>03</b>의 03 = 계열 M2 안의 조건 카드 · 00(공용 표준 프리셋 그대로)은 꼬리에 쓰지 않음 · 번호는 다시 쓰지 않음</span></header>
+  <div class="body small muted" style="padding-bottom:0">같은 카드 = 부착량을 뺀 목표 공정값이 모두 같음. 부착량·소둔 등급은 조건부 5자에 보이므로 카드가 같아도 꼬리 앞부분은 다를 수 있습니다(M209K02 · M206K02). 같은 조건부 안에서 부착량 목표가 겹치면(45·50 → 05) 나중 것은 새 카드를 받습니다.</div>
+  {% for f in families %}
+  <h3 class="mono" id="{{ f.family }}" style="margin:16px 16px 6px">{{ f.family }} <span class="small muted" style="font-family:var(--f-body)">{% if f.standard %}표준 = {{ f.standard.name }}{% else %}공용 표준 없음 — 모든 조건에 번호가 붙음{% endif %}{% if 'X' in f.family %} · 코드표에 없는 조성·조건(관리 › 코드표에 등록하면 해당 계열로 옮겨감){% endif %}</span></h3>
+  <div class="tablewrap"><table class="t"><tr><th>카드</th><th>이름</th><th>표준 대비 바뀐 값</th><th>출처</th><th class="n">시편</th><th class="n">공정런</th><th></th></tr>
+    {% for c in f.cards %}{% set v = c.v %}<tr {% if not c.specimens and c.moved %}style="opacity:.55"{% endif %}>
+      <td class="mono"><b>{{ v.variant_id }}</b>{% if v.seq == 0 %} <span class="chip">표준</span>{% endif %}</td>
+      <td>{{ v.name }}</td><td class="small">{{ c.diff if c.diff != v.name }}</td>
+      <td class="small">{{ {'PUBLIC': '공용 프리셋', 'TEAM': '팀 프리셋', 'PERSONAL': '개인 프리셋', 'RUN': '공정런'}[v.origin] }}{% if c.preset %} {{ c.preset.name }}{% endif %}</td>
+      <td class="n">{{ c.specimens }}</td><td class="n">{{ c.runs }}</td>
+      <td class="small">{% if c.specimens %}<a href="/search?code={{ v.variant_id }}">시편 검색</a>{% endif %}{% for m in c.moved %} → {{ m }}{% endfor %}</td></tr>{% endfor %}</table></div>
+  {% else %}<div class="body muted">아직 조건 카드가 없습니다.</div>{% endfor %}
+</section>
 
 {% elif tab == 'templates' %}
 <section class="card"><header><h2>분석 템플릿</h2><span class="meta">초기값은 JSON 시드(data/seed/test_templates). 고치면 새 버전이 생기고 기존 결과는 저장 당시 버전으로 해석합니다.</span>
@@ -216,6 +231,7 @@ function imp() {
   };
 }
 function fillCode(c) { const f = document.getElementById("codeform"); for (const k in c) if (f[k]) f[k].value = c[k]; f.scrollIntoView({behavior: "smooth"}); }
+{% if prefill and user.is_admin %}document.addEventListener("DOMContentLoaded", () => fillCode({{ prefill|tojson }}));{% endif %}
 function bathApply() {
   return {
     id: null, cands: [], pick: [], extra: "",

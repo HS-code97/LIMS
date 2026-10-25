@@ -7,8 +7,9 @@
     후절단 = 영문1(A~) · 분석조각 = 숫자1(1~9)
     구간 경계마다 영문·숫자가 바뀌어 하이픈이 지워져도 끊어 읽힙니다(QV3A02K3).
 전체번호 (DB·화면·라벨)
-    QV3 - A6 - C - A02 - K - M206K-H03-T02-P12
+    QV3 - A6 - C - A02 - K - M206K03-H03-T02-P12
     코일   과제  단계 가지  후절단 조건부 꼬리(거친 공정 블록을 거친 순서대로)
+    도금 블록 M206K03 = 조건부 M206K + 변형번호 03 (공정 계열 M2 안의 조건 카드, 표준 00은 생략)
 """
 from __future__ import annotations
 
@@ -85,15 +86,35 @@ def parse_mark(text: str) -> dict:
     return {k: m[k] for k in ("coil", "branch", "cut", "piece")}
 
 
-def tail_blocks(steps: list[dict] | None, condition_code: str | None) -> list[str]:
-    """거친 공정 → 꼬리 블록. 도금은 현재 조건부(목표 정정 시 다시 계산), 나머지는 머리글자 + 코드 2자리."""
+# 도금 블록 = 조건부 5자(계열·욕·부착량2·소둔) + 변형번호(공정 계열 안, 0이면 생략). 'M206K', 'M206K03', 'MX06K01'
+PLATE_RE = re.compile(r"^(?P<code>[A-Z][0-9X](?:\d{2}|XX)[A-Z])(?P<seq>\d{2,3})?$")
+# 조건 카드 ID = 계열 2자 + 변형번호 ('M2-03', 'MX-01')
+VARIANT_ID_RE = re.compile(r"^(?P<family>[A-Z][0-9X])-(?P<seq>\d{2,3})$")
+
+
+def plate_label(condition_code: str | None, variant_seq: int | None) -> str:
+    """도금 블록. 변형번호는 조건부 끝 영문(소둔) 뒤에 붙여 영문·숫자가 교대합니다(각인과 같은 원칙)."""
+    code = condition_code or "XXXXX"
+    return f"{code}{variant_seq:02d}" if variant_seq else code
+
+
+def parse_plate(text: str) -> tuple[str, int | None] | None:
+    """'M206K03' → ('M206K', 3), 'M206K' → ('M206K', None), 'M206K00' → ('M206K', 0)."""
+    m = PLATE_RE.match((text or "").strip().upper())
+    if not m:
+        return None
+    return m["code"], int(m["seq"]) if m["seq"] is not None else None
+
+
+def tail_blocks(steps: list[dict] | None, condition_code: str | None, variant_seq: int | None = None) -> list[str]:
+    """거친 공정 → 꼬리 블록. 도금은 현재 조건부+변형번호(목표 정정 시 다시 계산), 나머지는 머리글자 + 코드 2자리."""
     out = []
     for st in steps or []:
         t = TREATMENTS.get(st.get("k"))
         if t is None:
             continue
         if st["k"] == "PLATE":
-            out.append(condition_code or "XXXXX")
+            out.append(plate_label(condition_code, variant_seq))
         else:
             out.append(f"{t['prefix']}{st.get('code') or '00'}")
     return out

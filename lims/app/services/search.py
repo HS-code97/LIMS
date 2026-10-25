@@ -54,16 +54,32 @@ def parse_query(args) -> Query:
     return qy
 
 
+def code_filter(code: str) -> list:
+    """조건 검색어 → 조건식.
+    'M2-03'   조건 카드: 계열 M2의 변형 03 (부착량·소둔 등급 무관, 같은 공정)
+    'M206K03' 꼬리 그대로: 조건부 M206K + 변형 03 ('M206K00' = 공용 표준만)
+    'M206'    조건부 접두 (? = 한 글자, 변형번호 무관)"""
+    m = marking.VARIANT_ID_RE.match(code)
+    if m:
+        return [Specimen.condition_code.like(m["family"] + "%"), Specimen.variant_seq == int(m["seq"])]
+    plate = marking.parse_plate(code)
+    if plate and plate[1] is not None and "?" not in code:
+        return [Specimen.condition_code == plate[0], Specimen.variant_seq == plate[1]]
+    return [Specimen.condition_code.like(code.replace("?", "_") + "%")]
+
+
 def build(qy: Query):
     """검색 SELECT 문 (DB 방언과 무관하게 구성 — PostgreSQL 컴파일 검사에도 씀)."""
     stmt = select(Specimen).where(Specimen.is_deleted.is_(False))
     if qy.q:
         q = marking.find_mark(qy.q) or qy.q.upper()       # 전체번호를 넣으면 각인번호로
         like = f"%{q}%"
+        plate = marking.parse_plate(q)                   # 'M206K03'처럼 변형번호까지 친 꼬리
+        by_label = and_(*code_filter(q)) if plate and plate[1] is not None else Specimen.condition_code.like(like)
         stmt = stmt.outerjoin(Material, Material.id == Specimen.material_id) \
                    .outerjoin(ProcessRun, ProcessRun.id == Specimen.process_run_id) \
                    .where(or_(Specimen.short_id.like(like), Material.coil_no.like(like),
-                              ProcessRun.run_no.like(like), Specimen.condition_code.like(like),
+                              ProcessRun.run_no.like(like), by_label,
                               Specimen.legacy_id.like(like)))
     if qy.project:
         stmt = stmt.where(Specimen.project_code == qy.project)
@@ -72,7 +88,7 @@ def build(qy: Query):
     if qy.status:
         stmt = stmt.where(Specimen.status == qy.status)
     if qy.code:
-        stmt = stmt.where(Specimen.condition_code.like(qy.code.replace("?", "_") + "%"))
+        stmt = stmt.where(*code_filter(qy.code))
     if qy.test_type:
         stmt = stmt.where(Specimen.id.in_(
             select(RunSpecimen.specimen_id).join(TestRun, TestRun.id == RunSpecimen.test_run_id)

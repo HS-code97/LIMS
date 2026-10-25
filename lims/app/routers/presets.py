@@ -9,6 +9,7 @@ from ..auth import require_user
 from ..db import get_db
 from ..models import ProcessPreset, User
 from ..schemas import PresetIn
+from ..services import condition_code as cc
 from ..services import param_dict as pdict
 
 router = APIRouter()
@@ -26,7 +27,7 @@ def visible_presets(db: Session, user: User) -> list[ProcessPreset]:
 def preset_json(p: ProcessPreset) -> dict:
     return {"id": p.id, "name": p.name, "scope": p.scope, "coating_system": p.coating_system,
             "bath_code": p.bath_code, "overrides": p.overrides, "dict_version": p.dict_version,
-            "owner": p.owner.name if p.owner else None}
+            "owner": p.owner.name if p.owner else None, "variant_seq": p.variant_seq, "variant_id": p.variant_id}
 
 
 @router.get("/api/presets")
@@ -54,11 +55,17 @@ def save_preset(data: PresetIn, user: User = Depends(require_user), db: Session 
         raise HTTPException(403, "공용 프리셋은 관리자만 만들 수 있습니다.")
     if scope not in ("PUBLIC", "TEAM", "PERSONAL"):
         raise HTTPException(422, "scope는 PUBLIC/TEAM/PERSONAL")
+    sys_code = data.coating_system.upper()[:1]
+    overrides = _diff_only(data.recipe)
+    # 욕 코드는 화면이 보낸 값(출발한 프리셋 것)이 아니라 저장할 욕 조성으로 다시 정합니다(코드표에 없으면 X)
+    pot = (pdict.preset_recipe(overrides).get("pot") or {})
+    bath = cc.CodeBook.load(db).match_bath(sys_code, pot, data.bath_code[:1] or None) if sys_code != "X" else "X"
     p = ProcessPreset(name=data.name.strip()[:60], scope=scope, owner_id=user.id,
                       team_id=user.team_id if scope == "TEAM" else None,
-                      coating_system=data.coating_system.upper()[:1], bath_code=data.bath_code[:1],
-                      overrides=_diff_only(data.recipe), dict_version=pdict.version())
+                      coating_system=sys_code, bath_code=bath, overrides=overrides, dict_version=pdict.version())
     db.add(p)
+    db.flush()
+    cc.register_preset(db, p, user.id)       # 저장하면서 공정 계열 안의 변형번호(조건 카드)를 받음
     db.commit()
     return preset_json(p)
 

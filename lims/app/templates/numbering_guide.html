@@ -77,7 +77,7 @@
     <tbody>
       <tr><td><b>입고</b> 현장에서 전폭시편을 가져옴</td><td><span class="pill new">새로 생김</span></td><td>생김 {{ n('QV3-A','mark') }}</td><td>생김 · 단계 <b>A</b></td></tr>
       <tr class="cut"><td><b>✂ 처음 자르기</b> (전단 → 블랭크)</td><td><span class="pill new">자식 생김</span></td><td>조각 숫자 2자리 붙음 {{ n('QV3-A02','mark') }}</td><td>단계 A → <b>B</b></td></tr>
-      <tr><td><b>⚗ 도금</b></td><td><span class="pill same">같은 시편</span></td><td class="keep">그대로</td><td>단계 → <b>C</b>, 꼬리 <code>M206K</code></td></tr>
+      <tr><td><b>⚗ 도금</b></td><td><span class="pill same">같은 시편</span></td><td class="keep">그대로</td><td>단계 → <b>C</b>, 꼬리 <code>M206K</code> (프리셋에서 바꾼 조건이면 <code>M206K03</code>)</td></tr>
       <tr><td><b>⚗ 열처리</b></td><td><span class="pill same">같은 시편</span></td><td class="keep">그대로</td><td>단계 → <b>D</b>(오를 때만), 꼬리 <code>H03</code></td></tr>
       <tr><td><b>⚗ 전처리</b> (화성 등)</td><td><span class="pill same">같은 시편</span></td><td class="keep">그대로</td><td>단계 <b>그대로</b>, 꼬리 <code>T02</code></td></tr>
       <tr><td><b>⚗ 도장</b></td><td><span class="pill same">같은 시편</span></td><td class="keep">그대로</td><td>단계 → <b>E</b>, 꼬리 <code>P12</code></td></tr>
@@ -196,12 +196,13 @@
   <div class="g-table-wrap"><table class="g-table g-blocks">
     <thead><tr><th>꼬리 블록</th><th>형식</th><th>예</th><th>뜻</th></tr></thead>
     <tbody>
-      <tr><td>도금</td><td>영문·숫자 3·영문 (5자)</td><td><code class="b-plate">M206K</code></td><td><b>M</b> 도금 계열 · <b>2</b> 욕 조성 · <b>06</b> 편면 부착량÷10 · <b>K</b> 소둔</td></tr>
-      <tr><td>열처리</td><td><code>H</code> + 숫자 2</td><td><code class="b-heat">H03</code></td><td rowspan="3">관리 › 코드표의 번호. 도금 블록은 5자, 나머지는 3자라 길이만 봐도 구분됩니다.</td></tr>
+      <tr><td>도금</td><td>조건부 5자 + 변형번호 2 (표준이면 생략)</td><td><code class="b-plate">M206K03</code></td><td><b>M</b> 도금 계열 · <b>2</b> 욕 조성 · <b>06</b> 편면 부착량÷10 · <b>K</b> 소둔 · <b>03</b> 공정 계열 M2 안의 조건 카드(부착량을 뺀 목표 공정값이 모두 같은 조건). 공용 프리셋 그대로면 <code>M206K</code> — 숫자가 붙으면 프리셋에서 손댄 조건</td></tr>
+      <tr><td>열처리</td><td><code>H</code> + 숫자 2</td><td><code class="b-heat">H03</code></td><td rowspan="3">관리 › 코드표의 번호. 도금 블록은 5·7자, 나머지는 3자라 길이만 봐도 구분됩니다.</td></tr>
       <tr><td>전처리(화성 등)</td><td><code>T</code> + 숫자 2</td><td><code class="b-pre">T02</code></td></tr>
       <tr><td>도장</td><td><code>P</code> + 숫자 2</td><td><code class="b-paint">P12</code></td></tr>
     </tbody>
   </table></div>
+  <p class="small muted">변형번호(v3.2): 조건부 5자는 코드표 기준 분류라 이슬점 −42와 −40, 욕온·나이프 압력 차이를 가르지 못했습니다. 그래서 같은 계열 안에서 목표 공정값이 다르면 번호를 따로 줍니다. 부착량 시리즈는 번호가 같습니다(<code>M209K02</code> · <code>M206K02</code> = 같은 공정, 다른 부착량). 번호의 뜻은 관리 › 공정 계열에서 봅니다.</p>
 
   <div class="g-sim" data-sim>
     <div class="g-sim-head"><h3 class="g-h3">직접 해 보기 — 공정을 누르는 순서대로 번호가 만들어집니다</h3>
@@ -327,7 +328,8 @@
   <ol class="g-timeline">
     <li class="old"><div class="g-tl-v">v2.2 · v2.3</div><div class="g-tl-n"><code>M206K-26P4-P0101</code></div><p>조건부 – 과제 – 단계+일련 4자리. 단계는 P 도금원판 · C 시험편 · S 분석조각 셋뿐. <b>번호는 도금할 때 처음 생김.</b></p></li>
     <li><div class="g-tl-v">v3.0 · 2026-10-23</div><div class="g-tl-n"><code>QV3-A6-C-102-…</code></div><p>각인번호/전체번호 분리, 입고·전단 단계(A·B) 추가, 계보형 번호, 조건은 맨 뒤 꼬리로. 결정 D-1 ~ D-17.</p></li>
-    <li class="now"><div class="g-tl-v">v3.1 · 2026-10-24 <span class="pill same">현재</span></div><div class="g-tl-n">{{ n('QV3-A6-C-A02-K-M206K') }}</div><p>각인번호 구간마다 영문·숫자 교대, 각인 영문 21자, 시험런 → 분석런. 결정 D-18 ~ D-22.</p></li>
+    <li><div class="g-tl-v">v3.1 · 2026-10-24</div><div class="g-tl-n">{{ n('QV3-A6-C-A02-K-M206K') }}</div><p>각인번호 구간마다 영문·숫자 교대, 각인 영문 21자, 시험런 → 분석런. 결정 D-18 ~ D-22.</p></li>
+    <li class="now"><div class="g-tl-v">v3.2 · 2026-10-25 <span class="pill same">현재</span></div><div class="g-tl-n">{{ n('QV3-A6-C-A02-K-M206K03') }}</div><p>꼬리 도금 블록에 변형번호. 공용 프리셋 = 계열 표준(00, 생략), 같은 꼬리 = 같은 목표 조건. 결정 D-23 ~ D-26.</p></li>
   </ol>
 
   <h3 class="g-h3">현장에서 부딪힌 문제 → 우리가 내린 결정</h3>
@@ -337,6 +339,7 @@
     <div class="g-pd-row"><div class="p"><b>자식 과제코드는 항상 부모를 따름</b><small>다른 연구원이 다른 과제로 쓰는 경우를 표현 못 함</small></div><div class="ar" aria-hidden="true">→</div><div class="d"><b>쓰는 쪽 과제코드, 코일을 맨 앞에</b><small>D-4 · D-13 · 사용(USE) 이력</small></div></div>
     <div class="g-pd-row"><div class="p"><b>조건부가 맨 앞에 오고 각인에도 들어감</b><small>결과 중심, 조건이 바뀌면 각인과 어긋남</small></div><div class="ar" aria-hidden="true">→</div><div class="d"><b>조건은 맨 뒤 꼬리, 각인하지 않음</b><small>D-10 · D-16</small></div></div>
     <div class="g-pd-row"><div class="p"><b>단계가 도금 이후만 있음</b><small>도장·열처리만 한 시편, 도금 없이 도장한 시편을 표현 못 함</small></div><div class="ar" aria-hidden="true">→</div><div class="d"><b>D 열처리 · E 도장, 공정별 꼬리 블록</b><small>D-7 · D-8 · D-15</small></div></div>
+    <div class="g-pd-row v31"><div class="p"><b>(v3.1) 새 조건을 넣어도 꼬리가 계속 M206K</b><small>조건부는 분류라 허용오차 안 차이·욕온·나이프 압력을 못 가르고, 새 욕은 모두 X</small></div><div class="ar" aria-hidden="true">→</div><div class="d"><b>조건부 + 변형번호, 프리셋 = 계열 표준</b><small>D-23 ~ D-26 · M206K03</small></div></div>
     <div class="g-pd-row v31"><div class="p"><b>(v3.0) 각인번호가 숫자의 연속으로 보임</b><small><code>QV3102013</code> — 전폭 1과 블랭크 102도 헷갈림</small></div><div class="ar" aria-hidden="true">→</div><div class="d"><b>구간 경계마다 영문·숫자 교대</b><small>D-18 ~ D-20 · I·O·Q·S·Z 제외</small></div></div>
   </div>
 
@@ -348,7 +351,7 @@
     <div><span>충분한 용량</span><i aria-hidden="true">⇄</i><span>헷갈리지 않는 모양</span><p><b>→ 영문·숫자 교대로 용량을 일부 내주고(후절단 99 → 21) 읽기 쉬움을 택함.</b></p></div>
   </div>
 
-  <details class="g-dec"><summary><b>결정 흐름 D-1 ~ D-22 전체 보기</b></summary>
+  <details class="g-dec"><summary><b>결정 흐름 D-1 ~ D-26 전체 보기</b></summary>
     {%- set decisions = [
       ('D-1', '입고와 전단 단계를 추가', '보관함 시편과 전단 블랭크를 조회·인계해야 함'),
       ('D-2', '단계 문자를 A, B, C, D… 순서로 (P/C/S 폐기)', '알파벳이 커질수록 변화가 더 진행됐다고 직관적으로 알기 위해'),
@@ -372,6 +375,10 @@
       ('D-20', '분석조각은 1자리 (1~9)', '2자리면 가지와 모양이 같아짐'),
       ('D-21', '시험런 → 분석런 (TR- → AR-)', '공정런 = 실험, 분석런 = 평가'),
       ('D-22', '사내 과제번호는 8자 2026P123', '실제 사내 형식'),
+      ('D-23', '도금 블록 = 조건부 + 변형번호(공정 계열 안, 부착량 뺀 목표 공정값 기준)', '조건부만으로는 같은 꼬리가 같은 조건이 아니었음'),
+      ('D-24', '공용 프리셋 = 계열 표준 00(꼬리에 안 씀), 팀·개인 프리셋은 저장 때 번호', '프리셋과 번호를 1:1로, 숫자가 붙으면 바꾼 조건'),
+      ('D-25', '같은 조건부에서 목표 부착량이 겹치면 새 번호', '부착량 코드는 10 g/m² 단위 (45·50 → 05)'),
+      ('D-26', '코드표 밖 조건(X)도 번호로 가르고, 등록하면 새 계열로', 'X 하나로 묶이던 새 조건 구분, 자주 쓰면 코드표로 승격'),
     ] -%}
     <ol class="g-dlist">{% for no, what, why in decisions %}<li class="{{ 'v31' if loop.index > 17 }}"><code>{{ no }}</code><b>{{ what }}</b><span>{{ why }}</span></li>{% endfor %}</ol>
   </details>
@@ -423,6 +430,8 @@
     ('번호는 시스템이 주나요, 사람이 넣나요?', '코일코드와 과제코드는 시스템이 제안합니다. 전폭·조각·후절단·분석조각 번호는 시스템이 다음 빈 번호를 제안하고 사람이 고칠 수 있습니다. 미리 각인한 번호에 맞추거나, 의미 있게 번호를 묶는 현장 관행을 지원하기 위해서입니다.'),
     ('여러 사람이 한 과제에서 번호를 만들면 겹치지 않나요?', '시스템 전체에서 겹치지 않습니다. 계정과 관계없이 DB 유일 제약이 걸려 있어 같은 번호는 저장 자체가 거부되고, 동시에 저장해도 한쪽이 거부됩니다. 같은 모시편에서 두 사람이 각자 자식을 만들어도 번호는 반드시 다릅니다.'),
     ('같은 조건으로 5장을 만들면 번호는?', '1장마다 고유번호 1개가 붙습니다. 예를 들어 QV3-A02-A ~ QV3-A02-E가 되고, 모두 같은 꼬리 M206K를 가집니다. 조건이 같은지는 꼬리로 판단하므로, 번호로 조건을 표시할 필요가 없어졌습니다.'),
+    ('공정런에서 이슬점만 바꿨는데 꼬리가 M206K03이 되었어요. 03은 무엇인가요?', '변형번호입니다. 조건부 M206K는 코드표 기준 분류라 이슬점 −42와 −40을 가르지 못하므로, 같은 계열(M2) 안에서 목표 공정값이 다른 조건마다 번호를 줍니다. 공용 프리셋 그대로면 숫자가 붙지 않습니다(M206K). 03이 무엇을 바꾼 조건인지는 시편 상세의 조건 칸이나 관리 › 공정 계열에서 보고, 검색에 M2-03을 넣으면 부착량과 상관없이 그 조건의 시편이 모두 나옵니다.'),
+    ('코드표에 없는 새 욕 조성으로 도금하면?', '조건부 둘째 자리가 X가 되지만(MX06K01), 조성마다 변형번호가 달라 서로 섞이지 않습니다. 공정런 미리보기에 [욕 코드 등록] 링크가 뜨고, 관리자가 코드표에 등록하면 그 조건의 시편이 새 계열로 옮겨 갑니다(예: M306K01).'),
     ('단계가 E이면 도금·열처리도 다 거쳤다는 뜻인가요?', '아닙니다. E는 "도장된 시편"이라는 뜻일 뿐입니다. 블랭크를 바로 도장하면 B에서 E로 건너뜁니다(QV3-A6-E-A06-P12). 무엇을 거쳤는지는 꼬리와 공정 표시로 봅니다.'),
     ('도금판을 자르지 않고 바로 도장하면?', '각인번호는 그대로(QV3-A02)이고, 전체번호의 단계만 C에서 E로 바뀌며 꼬리에 P12가 붙습니다 → QV3-A6-E-A02-M206K-P12.'),
     ('조건 꼬리를 각인하지 않아도 되나요?', '오히려 그래야 합니다. 신원은 각인번호로 충분하고, 꼬리는 바뀔 수 있는 정보라 고칠 수 없는 각인에 넣으면 안 됩니다. 시스템 없이 조건을 봐야 할 때는 봉투나 보관함 인쇄 라벨에 전체번호를 출력합니다.'),

@@ -120,7 +120,7 @@ def test_run_xlsx(db: Session, tr: TestRun, base_url: str = "") -> bytes:
 def engrave_csv(specs: list[Specimen]) -> bytes:
     """레이저 각인 CSV. 각인하는 글자는 각인번호(short_id)뿐입니다(시편번호 체계 3.2절). 열·구분자·인코딩은
     각인기 형식(11.3)에 맞춰 설정합니다. 가능한 열: short_id(= 각인번호), datamatrix_text(= 각인번호),
-    display_id(전체번호, 참고용), condition_code, project_code, stage, coil_code"""
+    display_id(전체번호, 참고용), condition_code, condition_label(조건부+변형번호), project_code, stage, coil_code"""
     from ..config import ENGRAVE_COLUMNS, ENGRAVE_DELIMITER, ENGRAVE_ENCODING, ENGRAVE_HEADER
     buf = io.StringIO()
     w = csv.writer(buf, delimiter=ENGRAVE_DELIMITER, lineterminator="\r\n")
@@ -129,7 +129,8 @@ def engrave_csv(specs: list[Specimen]) -> bytes:
         w.writerow(cols)
     for s in specs:
         vals = {"short_id": s.short_id, "display_id": s.display_id, "datamatrix_text": s.short_id,
-                "condition_code": s.condition_code or "", "project_code": s.project_code, "stage": s.stage,
+                "condition_code": s.condition_code or "", "condition_label": s.condition_label or "",
+                "project_code": s.project_code, "stage": s.stage,
                 "coil_code": s.coil_code}
         w.writerow([vals.get(c, "") for c in cols])
     return buf.getvalue().encode(ENGRAVE_ENCODING, errors="replace")

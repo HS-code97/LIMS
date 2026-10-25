@@ -75,12 +75,23 @@ def _date(v) -> date:
     return date.fromisoformat(str(v).strip()[:10])
 
 
-def _keymap() -> dict[str, str]:
-    km = {}
+def _keymap():
+    """열 이름 → 사전 키. 그대로 맞는 이름이 먼저이고, 대소문자만 다른 이름은 하나로 정해질 때만 씁니다
+    (pot.T 욕온 ↔ pot.t 침지 시간처럼 대소문자로만 갈리는 키가 있어, 대문자로만 찾으면 욕온이 침지 시간에 들어감)."""
+    exact: dict[str, str] = {}
+    folded: dict[str, set[str]] = {}
     for k, p in pdict.params().items():
         for name in (k, p["l"], f"{p['section_nm']} {p['l']}", *p.get("aka", [])):
-            km[name.upper()] = k
-    return km
+            exact.setdefault(name, k)
+            folded.setdefault(name.upper(), set()).add(k)
+
+    def lookup(col: str) -> str | None:
+        col = str(col).strip()
+        if col in exact:
+            return exact[col]
+        ks = folded.get(col.upper(), set())
+        return next(iter(ks)) if len(ks) == 1 else None
+    return lookup
 
 
 def _split_sheet(db: Session, wb, sheet: str, user_id: int | None, report: dict) -> None:
@@ -146,7 +157,7 @@ def run_import(db: Session, data: bytes, user_id: int | None, dry_run: bool = Tr
                     continue
                 recipe = pdict.preset_recipe(preset.overrides)
                 for col, v in r.items():
-                    k = km.get(col.upper())
+                    k = km(col)
                     if k and v not in (None, "") and k != "out.cw":
                         sec, pk = k.split(".")
                         recipe.setdefault(sec, {})[pk] = float(v) if pdict.is_numeric(k) else v
@@ -195,7 +206,7 @@ def run_import(db: Session, data: bytes, user_id: int | None, dry_run: bool = Tr
             for col, v in r.items():
                 if col in ("공정런", "시편", "방법") or v in (None, ""):
                     continue
-                k = km.get(col.upper())
+                k = km(col)
                 if k is None:
                     report["warnings"].append(f"{where}: 사전에 없는 열 '{col}' 무시")
                     continue

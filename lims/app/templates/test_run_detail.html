@@ -41,7 +41,7 @@
         {% for b in rows %}{% set s = b.specimen %}
           <tr class="{{ 'off' if b.unloaded_at }}" data-row="{{ loop.index0 }}">
             <td class="spec"><a href="/specimens/{{ s.short_id }}"><b>{{ s.short_id }}</b></a>
-              <small>{% if b.slot %}Slot {{ b.slot }} · {% endif %}{{ s.condition_code or '' }}{% if b.unloaded_at %} · 회수 {{ b.unloaded_at.strftime('%m-%d') }}{% endif %}</small></td>
+              <small>{% if b.slot %}Slot {{ b.slot }} · {% endif %}{{ s.condition_label or '' }}{% if b.unloaded_at %} · 회수 {{ b.unloaded_at.strftime('%m-%d') }}{% endif %}</small></td>
             {% for c in cols %}{% set cell = cells.get((s.id, c.n)) %}
             <td><button class="cell {{ 'empty' if not cell }}" id="c-{{ s.short_id }}-{{ c.n }}"
                  hx-get="/test-runs/{{ tr.test_run_no }}/cell/{{ s.short_id }}/{{ c.n }}" hx-target="#cell-editor" hx-swap="innerHTML"

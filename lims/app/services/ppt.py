@@ -115,7 +115,7 @@ def test_run_pptx(db: Session, tr: TestRun) -> bytes:
     head = ["시편", "슬롯", "조건부"] + [f"W{c:02d}" for c in range(cycles)]
     rows = [head]
     for b in boards:
-        rows.append([b.specimen.short_id, b.slot or "", b.specimen.condition_code or ""] +
+        rows.append([b.specimen.short_id, b.slot or "", b.specimen.condition_label or ""] +
                     [cell_text(tpl, results[(b.specimen_id, c)].metrics) if (b.specimen_id, c) in results else ""
                      for c in range(cycles)])
     _table(s, Mm(12), Mm(46), Mm(273), rows[:20], size=8)

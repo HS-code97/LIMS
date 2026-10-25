@@ -74,3 +74,18 @@
 @media (max-width:1100px){.pr-commit{grid-template-columns:1fr}}
 .pr-commit .codeprev{font-size:24px;line-height:1.15;display:flex;flex-direction:column}
 .pr-commit .codeprev #range{color:var(--primary);font-size:13px;font-weight:600}
+
+/* ① 도금할 시편 고르기 */
+.pick-bar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:end}
+.pick-chips{flex:1;min-width:200px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;min-height:28px}
+.pick-chips .chip{background:var(--primary-fixed);border-color:var(--primary-2);color:var(--primary);font-weight:600}
+.pick-chips .chip button{border:0;background:transparent;color:inherit;cursor:pointer;padding:0 0 0 4px;font-size:14px;line-height:1}
+.pick-direct{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--ink-2);font-weight:500;min-width:260px}
+.pick-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;max-height:320px;overflow:auto;padding:2px}
+.pick-group{grid-column:1/-1;font-weight:700;font-size:12px;color:var(--ink-2);border-bottom:1px solid var(--line-2);padding:6px 0 2px}
+.pick{position:relative;display:flex;flex-direction:column;gap:2px;text-align:left;padding:8px 10px;border:1px solid var(--line);
+  border-radius:var(--r);background:var(--surface);cursor:pointer;user-select:none;color:var(--ink)}
+.pick:hover{border-color:var(--primary-2);background:var(--surface-2)}
+.pick.on{border:2px solid var(--primary);background:var(--primary-fixed);padding:7px 9px}
+.pick.on::after{content:"✓";position:absolute;top:6px;right:8px;color:var(--primary);font-weight:700}
+.pick span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

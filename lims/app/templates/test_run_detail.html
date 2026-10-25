@@ -3,7 +3,7 @@
 {% block content %}
 <div x-data="trPage()">
 <section class="hero">
-  <div class="crumb small mono muted"><a href="/test-runs">시험런</a> › {{ tr.test_type }} › {{ tr.test_run_no }}</div>
+  <div class="crumb small mono muted"><a href="/test-runs">분석런</a> › {{ tr.test_type }} › {{ tr.test_run_no }}</div>
   <h1 class="mono" style="font-size:24px;margin-top:6px">{{ tr.test_run_no }} <span class="sub" style="font-size:15px;color:var(--ink-3)">{{ tpl.name }}</span></h1>
   <div class="meta">
     <span class="chip st-{{ tr.status }}"><span class="dot"></span>{{ tr.status }}</span>
@@ -19,13 +19,13 @@
     <button class="btn" @click="ps.open=true">{{ icon('paste', 16) }} 엑셀 붙여넣기</button>
     <a class="btn" href="/api/test-runs/{{ tr.test_run_no }}/export.xlsx">{{ icon('download', 16) }} Excel 내보내기</a>
     <a class="btn" href="/api/test-runs/{{ tr.test_run_no }}/report.pptx">{{ icon('download', 16) }} PPT</a>
-    <a class="btn" href="/api/labels/print.pdf?test_run={{ tr.test_run_no }}" target="_blank">{{ icon('label', 16) }} 시험런 라벨</a>
+    <a class="btn" href="/api/labels/print.pdf?test_run={{ tr.test_run_no }}" target="_blank">{{ icon('label', 16) }} 분석런 라벨</a>
     {% if tr.status == 'RUNNING' %}<button class="btn danger" @click="finish()">{{ icon('check', 16) }} 종료 (전체 회수)</button>{% endif %}
   </div>
 </section>
 
 <div class="drop" id="tr-drop" style="margin-bottom:16px">{{ icon('upload', 24) }}
-  <div><b>사진 폴더를 여기로 끌어 놓으세요</b> — 파일명이 <code>QV3-102-01_W03_front.jpg</code> 형식이면 시편·회차 셀에 자동 배치합니다. 매칭되지 않은 파일은 내 미분류함으로 갑니다.
+  <div><b>사진 폴더를 여기로 끌어 놓으세요</b> — 파일명이 <code>QV3-A02-A_W03_front.jpg</code> 형식이면 시편·회차 셀에 자동 배치합니다. 매칭되지 않은 파일은 내 미분류함으로 갑니다.
   <ul class="upl-list" id="tr-upl"></ul></div></div>
 
 <div class="grid-wrap">
@@ -41,7 +41,7 @@
         {% for b in rows %}{% set s = b.specimen %}
           <tr class="{{ 'off' if b.unloaded_at }}" data-row="{{ loop.index0 }}">
             <td class="spec"><a href="/specimens/{{ s.short_id }}"><b>{{ s.short_id }}</b></a>
-              <small>{% if b.slot %}Slot {{ b.slot }} · {% endif %}{{ s.condition_code or '' }}{% if b.unloaded_at %} · 회수 {{ b.unloaded_at.strftime('%m-%d') }}{% endif %}</small></td>
+              <small>{% if b.slot %}Slot {{ b.slot }} · {% endif %}{{ s.condition_label or '' }}{% if b.unloaded_at %} · 회수 {{ b.unloaded_at.strftime('%m-%d') }}{% endif %}</small></td>
             {% for c in cols %}{% set cell = cells.get((s.id, c.n)) %}
             <td><button class="cell {{ 'empty' if not cell }}" id="c-{{ s.short_id }}-{{ c.n }}"
                  hx-get="/test-runs/{{ tr.test_run_no }}/cell/{{ s.short_id }}/{{ c.n }}" hx-target="#cell-editor" hx-swap="innerHTML"
@@ -72,7 +72,7 @@
   <div class="dlg" @click.outside="bd.open=false">
     <header><h3>시편 탑승 — {{ tr.test_run_no }}</h3><button class="btn ghost sm x" @click="bd.open=false">{{ icon('x', 16) }}</button></header>
     <div class="body form">
-      <label class="f">각인번호 스캔 후 Enter (슬롯은 공백 뒤에: <span class="mono">QV3-104-01 A-05</span>)
+      <label class="f">각인번호 스캔 후 Enter (슬롯은 공백 뒤에: <span class="mono">QV3-A04-A A-05</span>)
         <input class="in mono" x-model="bd.scan" @keydown.enter.prevent="bd.list.push(bd.scan.trim()); bd.scan=''"></label>
       <ul class="upl-list"><template x-for="(x,i) in bd.list" :key="i"><li class="mono" x-text="x"></li></template></ul>
     </div>
@@ -118,7 +118,7 @@ function trPage() {
     },
     async cycles(d) { try { await LIMS.api("POST", `/api/test-runs/${TR}/cycles`, {delta: d}); location.reload(); } catch (e) { LIMS.fail(e); } },
     async unload(sid) { if (!confirm(`${sid}를 회수할까요? (상태 AVAILABLE)`)) return; try { await LIMS.api("POST", `/api/test-runs/${TR}/unload`, {short_id: sid}); location.reload(); } catch (e) { LIMS.fail(e); } },
-    async finish() { if (!confirm("시험런을 종료하고 모든 시편을 회수할까요?")) return; try { await LIMS.api("POST", `/api/test-runs/${TR}/finish`); location.reload(); } catch (e) { LIMS.fail(e); } },
+    async finish() { if (!confirm("분석런을 종료하고 모든 시편을 회수할까요?")) return; try { await LIMS.api("POST", `/api/test-runs/${TR}/finish`); location.reload(); } catch (e) { LIMS.fail(e); } },
     async board() {
       const rows = this.bd.list.filter(Boolean).map(x => { const [sid, slot] = x.split(/\s+/); return {short_id: sid.toUpperCase(), slot: slot || null}; });
       if (this.bd.scan.trim()) { const [sid, slot] = this.bd.scan.trim().split(/\s+/); rows.push({short_id: sid.toUpperCase(), slot: slot || null}); }

@@ -2,6 +2,7 @@
 {% macro icon(name, size=18) -%}
 <svg width="{{ size }}" height="{{ size }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 {%- if name == 'logo' -%}<path d="M12 2 3 7l9 5 9-5-9-5Z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/>
+{%- elif name == 'book' -%}<path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5v-15Z"/><path d="M5 19.5A1.5 1.5 0 0 0 6.5 21H19v-3"/><path d="M9 7.5h6M9 11h4"/>
 {%- elif name == 'home' -%}<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>
 {%- elif name == 'run' -%}<path d="M4 20h16"/><path d="M6 20V9l4-3v14"/><path d="M14 20v-8l4-3v11"/><path d="M10 9h4"/>
 {%- elif name == 'spec' -%}<rect x="4" y="5" width="16" height="14" rx="1"/><path d="M8 9h8M8 13h5"/>

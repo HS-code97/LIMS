@@ -4,7 +4,7 @@
   <h2 class="mono" style="font-size:16px">{{ spec.short_id }} · W{{ '%02d' % cycle }}</h2>
   {% if day is not none %}<span class="chip st-IN_TEST"><b>D+{{ day }}</b>{% if when %} · {{ when.strftime('%m-%d') }}{% endif %}</span>{% endif %}
   <div class="r"><button class="btn ghost sm" title="닫기" onclick="document.getElementById('cell-editor').innerHTML='<div class=&quot;empty-note&quot;>셀을 누르면 사진과 빠른 입력 폼이 여기에 열립니다.</div>'">{{ icon('x', 16) }}</button></div>
-  <div class="small muted" style="flex-basis:100%">{% if slot %}Slot {{ slot }} · {% endif %}{{ spec.condition_code or '' }} · {{ spec.stage_name }} · <a href="/specimens/{{ spec.short_id }}">시편 상세</a></div>
+  <div class="small muted" style="flex-basis:100%">{% if slot %}Slot {{ slot }} · {% endif %}{{ spec.condition_label or '' }} · {{ spec.stage_name }} · <a href="/specimens/{{ spec.short_id }}">시편 상세</a></div>
 </header>
 <div class="body">
   <div class="small muted mono" style="letter-spacing:.04em;margin-bottom:6px">검사 이미지 (FRONT / BACK)</div>

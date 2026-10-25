@@ -1,4 +1,4 @@
-"""기준 정보 시드: 팀·사용자·공통 과제·코드표·공용 프리셋·시험 템플릿.
+"""기준 정보 시드: 팀·사용자·공통 과제·코드표·공용 프리셋·분석 템플릿.
 
 사용:  python -m scripts.seed            (lims 폴더에서, 운영)
        python -m scripts.seed --demo     (개발용 SQLite만: 개발 계정 + 기준 시나리오용 원소재·과제)
@@ -24,6 +24,7 @@ from app.config import SEED_DIR  # noqa: E402
 from app.db import Base, SessionLocal, engine  # noqa: E402
 from app.models import (Material, MasterCode, ProcessPreset, Project, Team, TestTemplate,  # noqa: E402
                         User)
+from app.services import condition_code as cc  # noqa: E402
 from app.services import param_dict as pdict  # noqa: E402
 
 TEAMS = ["부식", "표면·전기화학", "가공", "도금 품질", "표면연구"]
@@ -106,6 +107,8 @@ def seed(db, demo: bool = False, admin: tuple[str, str] | None = None) -> None:
             db.add(obj)
         obj.coating_system, obj.bath_code, obj.overrides = p["coating_system"], p["bath_code"], p["overrides"]
         obj.dict_version = pdict.version()
+        db.flush()
+        cc.register_preset(db, obj)       # 공용 프리셋 = 공정 계열의 표준(변형번호 00)
 
     for fp in sorted((SEED_DIR / "test_templates").glob("*.json")):
         with open(fp, encoding="utf-8") as f:
@@ -122,10 +125,10 @@ def seed(db, demo: bool = False, admin: tuple[str, str] | None = None) -> None:
 
     if demo:
         if db.get(Project, "A6") is None:
-            db.add(Project(project_code="A6", company_project_no="2026P1234",
+            db.add(Project(project_code="A6", company_project_no="2026P123",
                            project_name="M계 Al-Zn-Si-Mg 도금강판 내식성 향상", manager_id=users["hhs"].id))
         if db.get(Project, "B6") is None:
-            db.add(Project(project_code="B6", company_project_no="2026P5678",
+            db.add(Project(project_code="B6", company_project_no="2026P567",
                            project_name="도장 후 내식성 평가", manager_id=users["kim"].id))
         if db.scalar(select(Material).where(Material.coil_no == "CQV3141")) is None:
             db.add(Material(coil_no="CQV3141", coil_code="QV3", steel_grade="SPCC", thickness_mm=0.8,

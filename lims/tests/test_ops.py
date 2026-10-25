@@ -91,7 +91,8 @@ def test_alembic_head_matches_models(tmp_path):
 
 
 def test_alembic_0004_migrates_v23_numbers(tmp_path):
-    """v2.3 데이터(26P4-P0101·C·S) → v3.0 각인번호(코일-가지-후절단-조각), 과제 A6, 옛 번호는 legacy_id."""
+    """v2.3 데이터(26P4-P0101·C·S) → v3.0 각인번호(코일-가지-후절단-조각) → v3.1(0005, 영문·숫자 교대), 과제 A6,
+    옛 v2.3 번호는 legacy_id."""
     import sqlite3
     db_file = tmp_path / "old.db"
     env = {**os.environ, "LIMS_VAR_DIR": str(tmp_path), "LIMS_DATABASE_URL": f"sqlite:///{db_file.as_posix()}",
@@ -126,13 +127,125 @@ def test_alembic_0004_migrates_v23_numbers(tmp_path):
     c = sqlite3.connect(db_file)
     rows = dict((r[0], r[1:]) for r in c.execute(
         "SELECT legacy_id, short_id, project_code, stage, is_panel FROM specimens"))
-    assert rows["26P4-P0101"] == ("QV3-101", "A6", "C", 1)
-    assert rows["26P4-P0102"] == ("QV3-102", "A6", "C", 1)
-    assert rows["26P4-C0102"] == ("QV3-102-01", "A6", "C", 0)
-    assert rows["26P4-S0102"] == ("QV3-102-01-1", "A6", "C", 0)
-    assert rows["26P4-S0101"] == ("QV3-101-01", "A6", "C", 0)
+    assert rows["26P4-P0101"] == ("QV3-A01", "A6", "C", 1)
+    assert rows["26P4-P0102"] == ("QV3-A02", "A6", "C", 1)
+    assert rows["26P4-C0102"] == ("QV3-A02-A", "A6", "C", 0)
+    assert rows["26P4-S0102"] == ("QV3-A02-A-1", "A6", "C", 0)
+    assert rows["26P4-S0101"] == ("QV3-A01-A", "A6", "C", 0)
     assert rows["26X1-C0001"][1:] == ("Y6", "B", 0)                      # 코일 없던 시편 → '이관-26X1' 코일
     assert {r[0] for r in c.execute("SELECT project_code FROM projects")} == {"A6", "Y6"}
     assert c.execute("SELECT coil_code FROM materials WHERE coil_no = 'CQV3141'").fetchone() == ("QV3",)
-    assert c.execute("SELECT count(*) FROM specimen_events WHERE event_type = 'NOTE'").fetchone() == (6,)
+    assert c.execute("SELECT count(*) FROM specimen_events WHERE event_type = 'NOTE'").fetchone() == (12,)   # v2.3→v3.0, v3.0→v3.1
     assert c.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+def test_alembic_0005_migrates_v30_marks_and_run_numbers(tmp_path):
+    """v3.0 각인번호(QV3-1, QV3-102-01-3) → v3.1(QV3-A, QV3-A02-A-3), 탑승 당시 전체번호도, 분석런 TR- → AR-.
+    v3.1 범위를 넘는 번호(분석조각 A 등)가 있으면 이관을 멈춤."""
+    import sqlite3
+    db_file = tmp_path / "v30.db"
+    env = {**os.environ, "LIMS_VAR_DIR": str(tmp_path), "LIMS_DATABASE_URL": f"sqlite:///{db_file.as_posix()}",
+           "PYTHONDONTWRITEBYTECODE": "1", "PYTHONIOENCODING": "utf-8"}
+
+    def alembic(*args):
+        return subprocess.run([sys.executable, "-m", "alembic", *args], cwd=LIMS_DIR, env=env,
+                              capture_output=True, text=True, encoding="utf-8")
+
+    assert alembic("upgrade", "0004").returncode == 0
+    c = sqlite3.connect(db_file)
+    c.executescript("""
+        INSERT INTO projects (project_code, project_name, is_common) VALUES ('A6', '과제', 0);
+        INSERT INTO materials (id, coil_no, coil_code) VALUES (1, 'CQV3141', 'QV3');
+        INSERT INTO specimens (id, project_code, stage, coil_code, branch, cut_no, piece_no, short_id, is_panel,
+                               parent_id, material_id, status, is_deleted) VALUES
+            (1, 'A6', 'A', 'QV3', '1', NULL, NULL, 'QV3-1', 0, NULL, 1, 'AVAILABLE', 0),
+            (2, 'A6', 'C', 'QV3', '102', NULL, NULL, 'QV3-102', 1, 1, 1, 'AVAILABLE', 0),
+            (3, 'A6', 'C', 'QV3', '102', '02', NULL, 'QV3-102-02', 0, 2, 1, 'AVAILABLE', 0),
+            (4, 'A6', 'C', 'QV3', '102', '02', '3', 'QV3-102-02-3', 0, 3, 1, 'AVAILABLE', 0);
+        INSERT INTO test_templates (id, code, version, name, test_type, field_schema, is_active)
+            VALUES (1, 'SEM_SECTION', 1, 'SEM', 'SEM', '[]', 1);
+        INSERT INTO test_runs (id, test_run_no, test_type, template_id, start_date, status)
+            VALUES (1, 'TR-SEM-26001', 'SEM', 1, '2026-10-23', 'OPEN');
+        INSERT INTO run_specimens (test_run_id, specimen_id, display_at)
+            VALUES (1, 4, 'QV3-A6-C-102-02-3-M206K');
+    """)
+    c.commit()
+    c.close()
+    r = alembic("upgrade", "head")
+    assert r.returncode == 0, (r.stdout, r.stderr)
+    c = sqlite3.connect(db_file)
+    assert [r[0] for r in c.execute("SELECT short_id FROM specimens ORDER BY id")] == \
+        ["QV3-A", "QV3-A02", "QV3-A02-B", "QV3-A02-B-3"]
+    assert c.execute("SELECT branch, cut_no, piece_no FROM specimens WHERE id = 4").fetchone() == ("A02", "B", "3")
+    assert c.execute("SELECT display_at FROM run_specimens").fetchone() == ("QV3-A6-C-A02-B-3-M206K",)
+    assert c.execute("SELECT test_run_no FROM test_runs").fetchone() == ("AR-SEM-26001",)
+    assert c.execute("SELECT count(*) FROM specimen_events WHERE event_type = 'NOTE'").fetchone() == (4,)
+    c.close()
+
+    # 범위를 넘는 v3.0 번호(분석조각 10번째 = 'A')는 이관하지 않고 멈춤
+    bad = tmp_path / "bad.db"
+    env["LIMS_DATABASE_URL"] = f"sqlite:///{bad.as_posix()}"
+    assert alembic("upgrade", "0004").returncode == 0
+    c = sqlite3.connect(bad)
+    c.executescript("""
+        INSERT INTO projects (project_code, project_name, is_common) VALUES ('A6', '과제', 0);
+        INSERT INTO specimens (id, project_code, stage, coil_code, branch, cut_no, piece_no, short_id, is_panel,
+                               status, is_deleted) VALUES (1, 'A6', 'C', 'QV3', '102', '01', 'A', 'QV3-102-01-A', 0,
+                               'AVAILABLE', 0);
+    """)
+    c.commit()
+    c.close()
+    r = alembic("upgrade", "head")
+    assert r.returncode != 0 and "QV3-102-01-A" in r.stderr
+
+
+def test_alembic_0006_numbers_process_variants(tmp_path):
+    """0006: 공용 프리셋 = 계열 표준(00), 공정런 순서대로 시편에 변형번호. 자른 실험편은 원판 번호를 물려받고,
+    부착량만 다른 원판은 같은 번호, 이슬점만 다른 공정런은 새 번호."""
+    import json
+    import sqlite3
+    from app.services import param_dict as pdict
+    db_file = tmp_path / "v31.db"
+    env = {**os.environ, "LIMS_VAR_DIR": str(tmp_path), "LIMS_DATABASE_URL": f"sqlite:///{db_file.as_posix()}",
+           "PYTHONDONTWRITEBYTECODE": "1", "PYTHONIOENCODING": "utf-8"}
+
+    def alembic(*args):
+        r = subprocess.run([sys.executable, "-m", "alembic", *args], cwd=LIMS_DIR, env=env,
+                           capture_output=True, text=True, encoding="utf-8")
+        assert r.returncode == 0, (args, r.stdout, r.stderr)
+
+    over = {"nof": {"on": False}, "pot": {"T": 590, "Al": 70.5, "Mg": 0.5, "Si": 3.0}, "ga": {"on": False}}
+    std = pdict.preset_recipe(over)
+    std["out"]["cw"] = 60
+    dp = json.loads(json.dumps(std))
+    dp["rth"]["DP"] = -42
+    alembic("upgrade", "0005")
+    c = sqlite3.connect(db_file)
+    c.execute("INSERT INTO projects (project_code, project_name, is_common) VALUES ('A6', '과제', 0)")
+    c.execute("INSERT INTO process_presets (id, name, scope, coating_system, bath_code, overrides, dict_version, "
+              "is_active) VALUES (1, 'M2', 'PUBLIC', 'M', '2', ?, 'v', 1)", (json.dumps(over),))
+    for i, (no, d, rcp) in enumerate((("PR-26-0002", "2026-10-22", std), ("PR-26-0001", "2026-10-21", dp)), start=1):
+        c.execute("INSERT INTO process_runs (id, run_no, run_date, project_code, preset_id, source, dict_version, "
+                  "recipe, base_condition_code) VALUES (?, ?, ?, 'A6', 1, 'manual', 'v', ?, 'M206K')",
+                  (i, no, d, json.dumps(rcp)))
+    c.executescript("""
+        INSERT INTO specimens (id, project_code, stage, coil_code, branch, cut_no, short_id, is_panel, parent_id,
+                               process_run_id, target_overrides, condition_code, status, is_deleted) VALUES
+            (1, 'A6', 'C', 'QV3', 'A01', NULL, 'QV3-A01', 1, NULL, 1, NULL, 'M206K', 'AVAILABLE', 0),
+            (2, 'A6', 'C', 'QV3', 'A02', NULL, 'QV3-A02', 1, NULL, 1, '{"out.cw": 90}', 'M209K', 'AVAILABLE', 0),
+            (3, 'A6', 'C', 'QV3', 'A03', NULL, 'QV3-A03', 1, NULL, 2, NULL, 'M206K', 'AVAILABLE', 0),
+            (4, 'A6', 'C', 'QV3', 'A03', 'A', 'QV3-A03-A', 0, 3, 2, NULL, 'M206K', 'AVAILABLE', 0),
+            (5, 'A6', 'B', 'QV3', 'A04', NULL, 'QV3-A04', 0, NULL, NULL, NULL, NULL, 'AVAILABLE', 0);
+    """)
+    c.commit()
+    c.close()
+    alembic("upgrade", "head")
+    alembic("check")
+    c = sqlite3.connect(db_file)
+    seqs = dict(c.execute("SELECT short_id, variant_seq FROM specimens"))
+    # PR-0001(이슬점 −42, 먼저 등록) → 01, PR-0002(프리셋 그대로) → 00, 부착량만 다른 원판·자른 실험편은 같은 번호
+    assert seqs == {"QV3-A01": 0, "QV3-A02": 0, "QV3-A03": 1, "QV3-A03-A": 1, "QV3-A04": None}
+    assert c.execute("SELECT variant_seq FROM process_presets").fetchone() == (0,)
+    cards = {r[0]: r[1:] for r in c.execute("SELECT seq, family, origin, name FROM process_variants")}
+    assert cards[0][:2] == ("M2", "PUBLIC") and cards[1][:2] == ("M2", "RUN") and "-42" in cards[1][2]
+    c.close()

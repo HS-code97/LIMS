@@ -1,17 +1,18 @@
 """공정런 등록(HMI 기록 모드)·상세·실측 탭, 욕 분석 (5.2·5.3절, 6장)."""
 from __future__ import annotations
 
+import json
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..auth import ensure_can_edit, require_user
+from ..auth import can_edit, ensure_can_edit, require_user
 from ..db import get_db
-from ..models import BathAnalysis, Material, ParamActual, ProcessRun, Project, Specimen, User
+from ..models import BathAnalysis, MasterCode, Material, ParamActual, ProcessRun, Project, Specimen, User
 from ..schemas import ActualsIn, ApplyIn, BathAnalysisIn, PasteIn, ProcessRunIn, TargetCorrectionIn
-from ..services import actuals, workflow
+from ..services import actuals, marking, workflow
 from ..services import param_dict as pdict
 from ..services.condition_code import CodeBook
 from ..web import render
@@ -56,7 +57,7 @@ def new_page(request: Request, clone: str = "", user: User = Depends(require_use
     return render(request, "process_run_new.html", nav="pr", projects=projects, materials=materials,
                   presets=[preset_json(p) for p in visible_presets(db, user)],
                   recent=[workflow.clone_payload(r) | {"run_date": r.run_date.isoformat(),
-                                                        "code": r.base_condition_code} for r in recent],
+                                                        "code": r.base_condition_label} for r in recent],
                   clone=clone_data, dictionary=pdict.load())
 
 
@@ -75,7 +76,7 @@ def detail_page(request: Request, run_no: str, tab: str = "panels", add: str = "
         ParamActual.is_deleted.is_(False)))}
     return render(request, "process_run_detail.html", nav="pr", run=run, tab=tab, specs=run_specimens(db, run),
                   checks=pdict.checks(run.recipe, run.coating_system), near_ba=near, all_ba=all_ba,
-                  applied_ba=applied, add=",".join(extra), **ctx)
+                  applied_ba=applied, add=",".join(extra), can_edit_run=can_edit(user, run.operator_id), **ctx)
 
 
 def actuals_context(db: Session, run: ProcessRun, extra_keys: list[str] | None = None) -> dict:
@@ -106,7 +107,7 @@ def actuals_context(db: Session, run: ProcessRun, extra_keys: list[str] | None =
             cells[(p.id, k)] = {"eff": e, "manual": man[-1].value if man else None,
                                 "auto": any(r.source in ("test", "pv", "lab") for r in rows),
                                 "direct": bool(rows)}
-    # 시험 결과에서 자동 채워질 칸 표시용: 템플릿 maps_to
+    # 분석 결과에서 자동 채워질 칸 표시용: 템플릿 maps_to
     from ..models import TestTemplate
     maps = {}
     for t in db.scalars(select(TestTemplate).where(TestTemplate.is_active.is_(True))):
@@ -154,27 +155,62 @@ def correct_targets(run_no: str, data: TargetCorrectionIn, user: User = Depends(
 
 @router.post("/api/process-runs/preview-code")
 def preview_code(payload: dict, user: User = Depends(require_user), db: Session = Depends(get_db)):
-    """조건부 미리보기 (화면 하단 'M206K → …')."""
-    from ..services.condition_code import code_from_recipe
+    """조건부·변형번호 미리보기 (화면 하단 'M206K03 → …'). 저장하지 않으므로 새 조건의 번호는 예상값입니다."""
+    from ..services import condition_code as cc
     from ..models import ProcessPreset
     recipe = pdict.merge(pdict.defaults(), payload.get("recipe") or {})
     recipe.setdefault("out", {})["cw"] = payload.get("coating_weight_target") or pdict.get(recipe, "out.cw")
     preset = db.get(ProcessPreset, payload["preset_id"]) if payload.get("preset_id") else None
     sys_code = preset.coating_system if preset else (payload.get("coating_system") or "X")
     codes = CodeBook.load(db)
-    base = code_from_recipe(codes, sys_code, recipe, preset.bath_code if preset else None)
-    per_panel = []
-    for ov in payload.get("panel_overrides") or []:
-        per_panel.append(code_from_recipe(codes, sys_code, pdict.merge(recipe, ov), preset.bath_code if preset else None))
-    return {"code": base, "panel_codes": per_panel, "out_of_range": pdict.out_of_range(recipe),
-            "checks": pdict.checks(recipe, sys_code)}
+    preferred = preset.bath_code if preset else None
+    targets = [recipe] + [pdict.merge(recipe, ov) for ov in payload.get("panel_overrides") or []]
+    items = [(cc.code_from_recipe(codes, sys_code, t, preferred), t) for t in targets]
+    base_vals = cc.process_values(pdict.preset_recipe(preset.overrides)) if preset else None
+    variants = cc.preview_variants(db, items, base_vals)
+    return {"code": items[0][0], "panel_codes": [c for c, _ in items[1:]],
+            "variant": variants[0], "panel_variants": variants[1:],
+            "x_warning": _x_warning(db, codes, items[0][0], recipe),
+            "out_of_range": pdict.out_of_range(recipe), "checks": pdict.checks(recipe, sys_code)}
+
+
+def _x_warning(db: Session, codes: CodeBook, code: str, recipe: dict) -> dict | None:
+    """조건부에 X가 있으면 무엇이 코드표 밖인지와, 값을 채운 [코드표에 등록] 주소 (등록하면 X가 풀리고
+    그 조건의 시편이 새 계열로 옮겨감 — 관리 › 코드표 저장이 꼬리를 다시 계산). 변형번호가 X끼리도 가르므로
+    등록하지 않아도 서로 다른 새 조건이 섞이지는 않습니다."""
+    from urllib.parse import urlencode
+    texts, links = [], []
+    if code[1] == "X":
+        els = {el: pdict.get(recipe, "pot." + el) for el in ("Al", "Mg", "Si")}
+        els = {el: float(v) for el, v in els.items() if v is not None}
+        texts.append("코드표에 없는 욕 조성(" + " · ".join(f"{el} {v:g}" for el, v in els.items()) + ")")
+        used = {c[1:] for c in codes.bath if c[0] == code[0]}
+        nxt = next((d for d in "123456789" if d not in used), None)
+        if nxt:
+            spec = {"el": {el: [v, 1.0 if v >= 1 else 0.05] for el, v in els.items()}}
+            links.append({"label": f"욕 코드 {code[0]}{nxt}로 등록", "url": "/admin?" + urlencode({
+                "tab": "codes", "category": "BATH", "code": f"{code[0]}{nxt}",
+                "name": " · ".join(f"{el} {v:g}" for el, v in els.items()), "spec": json.dumps(spec)})})
+    if code[4] == "X":
+        T, t, dp = (pdict.get(recipe, k) for k in ("rth.T", "rts.t", "rth.DP"))
+        texts.append(f"코드표에 없는 소둔 조건(최고판온 {T} · 균열 {t}s · 이슬점 {dp})")
+        nxt = next((c for c in marking.LETTERS if c not in codes.annealing and c != "X"
+                    and db.get(MasterCode, ("ANNEALING", c)) is None), None)
+        if nxt and None not in (T, t, dp):
+            spec = {"T": T, "t": t, "DP": dp, "tol": {"T": 10, "t": 10, "DP": 5}}
+            links.append({"label": f"소둔 코드 {nxt}로 등록", "url": "/admin?" + urlencode({
+                "tab": "codes", "category": "ANNEALING", "code": nxt, "name": f"{T}°C {t}s DP {dp}",
+                "spec": json.dumps(spec)})})
+    return {"text": " / ".join(texts), "links": links} if texts else None
 
 
 def run_json(db: Session, run: ProcessRun) -> dict:
     return {"run_no": run.run_no, "run_date": run.run_date.isoformat(), "project_code": run.project_code,
-            "base_condition_code": run.base_condition_code, "recipe": run.recipe, "dict_version": run.dict_version,
+            "base_condition_code": run.base_condition_code, "base_condition_label": run.base_condition_label,
+            "recipe": run.recipe, "dict_version": run.dict_version,
             "coating_weight_target": run.coating_weight_target, "warnings": run.warnings,
             "panels": [{"short_id": p.short_id, "display_id": p.display_id, "condition_code": p.condition_code,
+                        "variant_seq": p.variant_seq, "condition_label": p.condition_label,
                         "target_overrides": p.target_overrides} for p in run.panels],
             "engrave_csv": f"/api/labels/engrave.csv?run={run.run_no}",
             "label_pdf": f"/api/labels/print.pdf?run={run.run_no}"}
@@ -184,7 +220,7 @@ def run_json(db: Session, run: ProcessRun) -> dict:
 def recent_runs(user: User = Depends(require_user), db: Session = Depends(get_db)):
     rs = db.scalars(select(ProcessRun).where(ProcessRun.operator_id == user.id)
                     .order_by(ProcessRun.created_at.desc(), ProcessRun.id.desc()).limit(10)).all()
-    return [workflow.clone_payload(r) | {"run_date": r.run_date.isoformat(), "code": r.base_condition_code} for r in rs]
+    return [workflow.clone_payload(r) | {"run_date": r.run_date.isoformat(), "code": r.base_condition_label} for r in rs]
 
 
 @router.get("/api/process-runs/{run_no}")
@@ -205,16 +241,21 @@ def _check_actual_edit(user: User, run: ProcessRun, specs: list[Specimen]) -> No
 def post_actuals(run_no: str, data: ActualsIn, user: User = Depends(require_user), db: Session = Depends(get_db)):
     run = get_run(db, run_no)
     if data.source not in ("manual", "pv"):
-        raise HTTPException(422, "이 경로의 출처는 manual 또는 pv입니다 (분석은 욕 분석 적용, 시험은 결과 저장).")
+        raise HTTPException(422, "이 경로의 출처는 manual 또는 pv입니다 (분석은 욕 분석 적용, 분석런은 결과 저장).")
     specs = {s.short_id: s for s in run_specimens(db, run)}
-    _check_actual_edit(user, run, [])
+    for row in data.rows:
+        if row.specimen and row.specimen.upper() not in specs:
+            raise HTTPException(422, f"{row.specimen}은 {run_no}의 시편이 아닙니다.")
+    # 시편 행만 있으면 그 시편들의 소유자도 저장 가능(시편 상세에서 수정). 세션 행이 있으면 작업자·관리자만.
+    if any(not row.specimen for row in data.rows):
+        _check_actual_edit(user, run, [])
+    else:
+        touched = {specs[row.specimen.upper()].id: specs[row.specimen.upper()] for row in data.rows}.values()
+        if not all(can_edit(user, run.operator_id, s.owner_id) for s in touched):
+            raise HTTPException(403, "작성자·시편 소유자·관리자만 수정할 수 있습니다.")
     n = 0
     for row in data.rows:
-        spec = None
-        if row.specimen:
-            spec = specs.get(row.specimen.upper())
-            if spec is None:
-                raise HTTPException(422, f"{row.specimen}은 {run_no}의 시편이 아닙니다.")
+        spec = specs[row.specimen.upper()] if row.specimen else None
         if pdict.param(row.key) is None:
             raise HTTPException(422, f"사전에 없는 키: {row.key}")
         if row.mode == "set" and data.source == "manual":
@@ -261,7 +302,7 @@ def bath_candidates(db: Session, ba: BathAnalysis) -> list[dict]:
     lo, hi = (ba.sampled_at - timedelta(days=1)).date(), (ba.sampled_at + timedelta(days=1)).date()
     rs = db.scalars(select(ProcessRun).where(ProcessRun.run_date >= lo, ProcessRun.run_date <= hi)
                     .order_by(ProcessRun.run_date)).all()
-    return [{"run_no": r.run_no, "run_date": r.run_date.isoformat(), "code": r.base_condition_code} for r in rs]
+    return [{"run_no": r.run_no, "run_date": r.run_date.isoformat(), "code": r.base_condition_label} for r in rs]
 
 
 @router.get("/api/bath-analyses/{ba_id}/candidates")

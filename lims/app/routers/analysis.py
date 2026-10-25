@@ -36,7 +36,7 @@ def scatter_page(request: Request, key: str = "out.cw_top", project: str = "", u
     if project:
         q = q.where(Specimen.project_code == project.upper())
     pts = [{"sid": s.short_id, "x": e.target, "y": e.actual, "dev": e.deviation, "oot": e.out_of_tol,
-            "code": s.condition_code, "level": e.level, "badge": e.badge if hasattr(e, "badge") else
+            "code": s.condition_label, "level": e.level, "badge": e.badge if hasattr(e, "badge") else
             actuals.badge_text(e.source, e.level, e.inherited_from)} for e, s in db.execute(q)]
     p = pdict.param(key)
     cfg = pdict.actual_cfg(key)
@@ -154,12 +154,12 @@ class XcutIn(BaseModel):
 
 @router.post("/api/integrations/xcut")
 def xcut_import(data: XcutIn, user: User = Depends(require_user), db: Session = Depends(get_db)):
-    """X-cut 블리스터 품질검사 앱이 내보낸 측정값을 시험 결과로 저장.
-    test_run_no가 있으면 그 시험런(템플릿 필드 이름이 같아야 함), 없으면 XCUT_BLISTER 시험런을 새로 만듭니다."""
+    """X-cut 블리스터 품질검사 앱이 내보낸 측정값을 분석 결과로 저장.
+    test_run_no가 있으면 그 분석런(템플릿 필드 이름이 같아야 함), 없으면 XCUT_BLISTER 분석런을 새로 만듭니다."""
     if data.test_run_no:
         tr = db.scalar(select(TestRun).where(TestRun.test_run_no == data.test_run_no))
         if tr is None:
-            raise HTTPException(404, f"시험런 {data.test_run_no}이 없습니다.")
+            raise HTTPException(404, f"분석런 {data.test_run_no}이 없습니다.")
     else:
         tpl = db.scalar(select(TestTemplate).where(TestTemplate.code == data.template_code, TestTemplate.is_active.is_(True)))
         if tpl is None:

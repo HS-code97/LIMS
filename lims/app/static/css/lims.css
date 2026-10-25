@@ -66,8 +66,13 @@ h1,h2,h3{margin:0}
 .nav a:hover{background:var(--surface-2);text-decoration:none}
 .nav a.on{background:var(--primary-2);color:#fff}
 .nav a.on svg{color:#fff}
+.nav a.sub{padding:6px 10px 6px 30px;font-size:13px}
+.nav a.sub svg{width:16px;height:16px}
 .nav svg{color:var(--ink-3);flex:none}
 .nav .spacer{flex:1}
+.nav a.guide{margin-bottom:6px;border:1px dashed var(--line)}
+.nav a.guide.on{border-color:var(--primary-2)}
+.topbar .m-guide{display:none}
 .nav .scan{border:1px solid var(--line);justify-content:center;color:var(--ink)}
 .main{padding:20px 24px 40px;min-width:0}
 .foot{margin-top:28px;padding-top:10px;border-top:1px solid var(--line);display:flex;justify-content:space-between;
@@ -75,7 +80,9 @@ h1,h2,h3{margin:0}
 @media (max-width:1100px){.shell{grid-template-columns:64px minmax(0,1fr)}.nav a span,.nav .org,.brand div{display:none}
   .brand{min-width:auto}.nav a{justify-content:center}}
 @media (max-width:640px){.shell{grid-template-columns:minmax(0,1fr)}.nav{display:none}.main{padding:16px}
-  .topbar .btn-label,.who div{display:none}}
+  .topbar .btn-label,.who div{display:none}.topbar .m-guide{display:inline-flex}
+  .topbar{gap:6px;padding:0 10px}.topbar .grow{display:none}.topbar>.btn{padding:0 8px;flex:none}
+  .gsearch{min-width:0}.gsearch input{padding-right:8px}.gsearch kbd{display:none}.who{gap:4px}}
 
 /* ── 공통 부품 ──────────────────────────────────────── */
 .page-head{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px 20px;margin-bottom:16px}
@@ -108,6 +115,8 @@ h1,h2,h3{margin:0}
 .btn:hover{border-color:var(--ink-3);text-decoration:none;background:var(--surface-2)}
 .btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
 .btn.primary:hover{background:var(--primary-2)}
+.topbar .btn:not(.primary){background:transparent}
+.topbar .btn:not(.primary):hover{background:var(--surface-2)}
 .btn.danger{color:var(--err);border-color:var(--err)}
 .btn.ghost{border-color:transparent;background:transparent}
 .btn.sm{height:28px;padding:0 9px;font-size:12px}
@@ -140,10 +149,16 @@ h1,h2,h3{margin:0}
 table.t{width:100%;border-collapse:collapse;font-size:13px}
 .t th{background:var(--surface-2);color:var(--ink-2);font-weight:600;font-size:12px;text-align:left;padding:8px 10px;
   border-bottom:1px solid var(--line);white-space:nowrap;position:sticky;top:0}
+.t th[data-sort]{cursor:pointer;user-select:none}
+.t th[data-sort]:hover{color:var(--ink)}
+.t th[data-sort]::after{content:" \2195";color:var(--ink-3);opacity:.5}
+.t th[aria-sort=ascending]::after{content:" \25B2";opacity:1;color:var(--primary)}
+.t th[aria-sort=descending]::after{content:" \25BC";opacity:1;color:var(--primary)}
 .t td{padding:8px 10px;border-bottom:1px solid var(--line-2);vertical-align:middle}
 .t tr:hover td{background:rgba(47,107,168,.04)}
 .t td.n,.t th.n{text-align:right;font-family:var(--f-num);font-variant-numeric:tabular-nums}
 .t td.mono,.t td .mono{white-space:nowrap}
+.t tr.on td{background:var(--primary-fixed)}
 .t tr.dev td{background:var(--dev-bg)}
 .t tr.dev td.dv{color:var(--dev);font-weight:600}
 .t .empty-row td{color:var(--ink-3);text-align:center;padding:24px}
@@ -228,7 +243,7 @@ textarea.in{height:auto;min-height:80px;padding:8px 10px;font-family:var(--f-num
 .upl-list .s.duplicate{background:var(--surface-3);color:var(--ink-2)}
 .upl-list .s.error{background:var(--err-bg);color:var(--err)}
 
-/* 시험런 그리드 (5.4절) */
+/* 분석런 그리드 (5.4절) */
 .rgrid{border-collapse:separate;border-spacing:0;font-size:13px;min-width:100%}
 .rgrid th{background:var(--surface-2);font-weight:600;font-size:12px;padding:6px 8px;border-bottom:1px solid var(--line);
   border-right:1px solid var(--line-2);position:sticky;top:0;z-index:2;text-align:center;white-space:nowrap}
@@ -297,7 +312,7 @@ textarea.in{height:auto;min-height:80px;padding:8px 10px;font-family:var(--f-num
   .side{position:static}
   .hero .acts .btn.lg{height:40px;font-size:14px}
 }
-/* 시험런 그리드 — Stitch 시안 반영: 선택 행·열 강조, 양수 녹 값 */
+/* 분석런 그리드 — Stitch 시안 반영: 선택 행·열 강조, 양수 녹 값 */
 .rgrid tr.selrow td.spec{box-shadow:inset 3px 0 0 var(--primary-2);background:#ebf3fb}
 .rgrid tr.selrow td.spec b{color:var(--primary-2)}
 .rgrid th.selcol{background:var(--primary-fixed);color:var(--primary)}

@@ -16,7 +16,7 @@
     st.base = H.applyPreset(p.overrides);
     st.sp = H.clone(st.base);
     st.presetId = p.id; st.presetName = p.name; st.coatingSystem = p.coating_system; st.bathCode = p.bath_code;
-    st.srcLabel = `${p.scope === "PUBLIC" ? "공용" : p.scope === "TEAM" ? "팀" : "개인"} 프리셋 ${p.name} (계열 ${p.coating_system}${p.bath_code})`;
+    st.srcLabel = `${p.scope === "PUBLIC" ? "공용" : p.scope === "TEAM" ? "팀" : "개인"} 프리셋 ${p.name} (${presetCard(p)})`;
     drawPresets();
     renderAll();
   }
@@ -35,14 +35,18 @@
     renderAll();
   }
 
+  // 프리셋의 조건 카드: 공용 표준이면 'M2 표준', 아니면 'M2-03' (계열 + 변형번호, 시편번호 체계 3.3절)
+  const presetCard = (p) => p.variant_id ? (p.variant_seq === 0 ? `${p.coating_system}${p.bath_code} 표준` : p.variant_id)
+    : `계열 ${p.coating_system}${p.bath_code}`;
+
   function drawPresets() {
     const pub = C.presets.filter((p) => p.scope === "PUBLIC");
     $("pub-presets").innerHTML = pub.map((p) =>
-      `<button aria-pressed="${p.id === st.presetId}" data-id="${p.id}" title="계열 ${p.coating_system}${p.bath_code}">${esc(p.name)}</button>`).join("");
+      `<button aria-pressed="${p.id === st.presetId}" data-id="${p.id}" title="${presetCard(p)}">${esc(p.name)}</button>`).join("");
     $("pub-presets").querySelectorAll("button").forEach((b) => (b.onclick = () => usePreset(C.presets.find((p) => p.id === +b.dataset.id))));
     const mine = C.presets.filter((p) => p.scope !== "PUBLIC");
     $("my-presets").innerHTML = `<option value="">내·팀 프리셋 ▼ (${mine.length})</option>` +
-      mine.map((p) => `<option value="${p.id}" ${p.id === st.presetId ? "selected" : ""}>${p.scope === "TEAM" ? "[팀] " : ""}${esc(p.name)} · ${p.coating_system}${p.bath_code}</option>`).join("");
+      mine.map((p) => `<option value="${p.id}" ${p.id === st.presetId ? "selected" : ""}>${p.scope === "TEAM" ? "[팀] " : ""}${esc(p.name)} · ${presetCard(p)}</option>`).join("");
     $("recipe-src").textContent = st.srcLabel ? "레시피: " + st.srcLabel : "";
   }
 
@@ -129,29 +133,95 @@
     return { recipe, coating_weight_target: cw, preset_id: st.presetId, coating_system: st.coatingSystem };
   }
 
-  /* 'QV3-101~105, QV3-201' → ['QV3-101', …] (범위는 마지막 숫자 자리) */
-  function marks() {
+  /* 'QV3-A01~A05, QV3-B01' → ['QV3-A01', …] (범위는 끝의 숫자 자리, 'QV3-A01~05'도 됨) */
+  function parseMarks(text) {
     const out = [];
-    $("marks").value.toUpperCase().split(/[,\s;]+/).filter(Boolean).forEach((part) => {
-      const m = part.match(/^(.*-)(\d+)~(\d+)$/);
-      if (!m) return out.push(part);
+    String(text || "").toUpperCase().split(/[,\s;]+/).filter(Boolean).forEach((part) => {
+      const m = part.match(/^(.*?)(\d+)~(\D*)(\d+)$/);
+      if (!m || !m[1].endsWith(m[3])) return out.push(part);
       const w = m[2].length;
-      for (let i = parseInt(m[2], 10); i <= parseInt(m[3], 10) && out.length < 200; i++) out.push(m[1] + String(i).padStart(w, "0"));
+      for (let i = parseInt(m[2], 10); i <= parseInt(m[4], 10) && out.length < 200; i++) out.push(m[1] + String(i).padStart(w, "0"));
     });
     return out;
   }
 
-  function onMarks() { $("count").value = marks().length; showConflicts([]); preview(); }
+  /* ── ① 도금할 시편 고르기: 후보 타일 클릭 = 선택/해제, 더블클릭 = 해제, Shift+클릭 = 범위 ── */
+  const byMark = (a, b) => a.localeCompare(b, "ko", { numeric: true });
+  const pick = { cands: [], set: new Set(), last: null };
 
-  async function loadBlanks() {
+  /** 선택한 각인번호 (각인번호 순 — 시리즈 값 순서와 같음) */
+  function marks() { return [...pick.set].sort(byMark); }
+
+  async function loadCands() {
     const opt = $("material").selectedOptions[0], coil = opt ? opt.dataset.coil : "";
     try {
-      const rows = await LIMS.api("GET", `/api/plating/candidates?coil=${encodeURIComponent(coil || "")}`);
-      if (!rows.length) return LIMS.toast(`도금 안 한 블랭크가 없습니다${coil ? " (코일 " + coil + ")" : ""}`, "err");
-      $("marks").value = rows.map((r) => r.short_id).join(", ");
-      onMarks();
-      LIMS.toast(`${rows.length}장 불러옴 — 쓸 것만 남기세요`, "ok");
-    } catch (e) { LIMS.fail(e); }
+      pick.cands = await LIMS.api("GET", `/api/plating/candidates?coil=${encodeURIComponent(coil || "")}`);
+    } catch (e) { pick.cands = []; LIMS.fail(e); }
+    pick.last = null;
+    drawCands();
+  }
+
+  function drawCands() {
+    const grid = $("pick-grid"), opt = $("material").selectedOptions[0], coil = opt ? opt.dataset.coil : "";
+    if (!pick.cands.length) {
+      grid.innerHTML = `<div class="small muted">도금할 수 있는 블랭크가 없습니다${coil ? ` (코일 ${esc(coil)})` : ""}. 시편 › 전단에서 전폭시편을 잘라 블랭크를 만드세요. 전폭시편은 위 칸에 각인번호를 직접 넣으면 됩니다.</div>`;
+    } else {
+      let h = "", group = null;
+      pick.cands.forEach((r, i) => {
+        const g = r.short_id.split("-")[0];
+        if (!coil && g !== group) { h += `<div class="pick-group mono">${esc(g)}</div>`; group = g; }
+        h += `<button type="button" class="pick ${pick.set.has(r.short_id) ? "on" : ""}" data-i="${i}" title="${esc(r.display_id)}">` +
+          `<b class="mono">${esc(r.short_id)}</b><span class="mono small">${esc(r.display_id)}</span>` +
+          `<span class="small muted">${esc([r.storage_location, r.owner].filter(Boolean).join(" · "))}</span></button>`;
+      });
+      grid.innerHTML = h;
+    }
+    drawPicks();
+  }
+
+  function drawPicks() {
+    const n = pick.set.size, inList = pick.cands.filter((r) => pick.set.has(r.short_id)).length;
+    $("pick-count").textContent = `선택 ${n} / ${pick.cands.length}장` + (n > inList ? ` (직접 추가 ${n - inList})` : "");
+    $("pick-chips").innerHTML = n ? marks().map((m) => `<span class="chip mono">${esc(m)}<button type="button" data-m="${esc(m)}" title="해제">×</button></span>`).join("")
+      : `<span class="small muted">아래에서 도금할 시편을 클릭하세요</span>`;
+    $("pick-grid").querySelectorAll(".pick").forEach((b) => b.classList.toggle("on", pick.set.has(pick.cands[+b.dataset.i].short_id)));
+    $("btn-save").disabled = !n;
+  }
+
+  function onPick() { drawPicks(); showConflicts([]); preview(); }
+
+  $("pick-grid").addEventListener("click", (e) => {
+    const b = e.target.closest(".pick");
+    if (!b) return;
+    const i = +b.dataset.i, sid = pick.cands[i].short_id;
+    if (e.shiftKey && pick.last !== null) {
+      const [a, z] = [Math.min(pick.last, i), Math.max(pick.last, i)];
+      for (let k = a; k <= z; k++) pick.set.add(pick.cands[k].short_id);
+    } else if (pick.set.has(sid)) pick.set.delete(sid);
+    else pick.set.add(sid);
+    pick.last = i;
+    onPick();
+  });
+  $("pick-grid").addEventListener("dblclick", (e) => {
+    const b = e.target.closest(".pick");
+    if (!b) return;
+    pick.set.delete(pick.cands[+b.dataset.i].short_id);
+    onPick();
+  });
+  $("pick-grid").addEventListener("mousedown", (e) => { if (e.shiftKey) e.preventDefault(); });   // Shift 범위 때 글자 선택 방지
+  $("pick-chips").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-m]");
+    if (b) { pick.set.delete(b.dataset.m); onPick(); }
+  });
+  $("pick-all").onclick = () => { pick.cands.forEach((r) => pick.set.add(r.short_id)); onPick(); };
+  $("pick-none").onclick = () => { pick.set.clear(); pick.last = null; onPick(); };
+  function addDirect() {
+    const ms = parseMarks($("marks").value);
+    if (!ms.length) return;
+    ms.forEach((m) => pick.set.add(m));
+    $("marks").value = "";
+    onPick();
+    LIMS.toast(`${ms.length}장 추가 — 저장할 때 도금할 수 있는지 확인합니다`, "ok");
   }
 
   function panelOverrides() {
@@ -167,13 +237,19 @@
       if (!st.sp) return;
       try {
         const r = await LIMS.api("POST", "/api/process-runs/preview-code", Object.assign(payloadBase(), { panel_overrides: st.series.length ? panelOverrides() : [] }));
-        $("code").textContent = r.code;
+        // 꼬리 = 조건부 + 변형번호(공정 계열 안의 조건 카드, 표준 00은 생략)
+        const v = r.variant, label = v.label;
+        $("code").textContent = label;
+        $("variant-note").textContent = v.seq === 0 ? `· ${v.variant_id} 공용 표준 그대로`
+          : v.is_new ? `· 새 조건 → ${v.variant_id} (${v.name})` : `· 기존 조건 ${v.variant_id} (${v.name})`;
+        const xw = $("x-warn");
+        xw.innerHTML = r.x_warning ? ` · ⚠ ${esc(r.x_warning.text)}` + r.x_warning.links.map((l) => ` <a href="${l.url}" target="_blank">[${esc(l.label)}]</a>`).join("") : "";
         const ms = marks(), proj = $("project").value;
-        const full = (m) => { const [coil, ...rest] = m.split("-"); return `${coil}-${proj}-C-${rest.join("-")}-${r.code}`; };
-        $("range").textContent = ms.length ? `→ ${full(ms[0])}${ms.length > 1 ? " ~ " + ms[ms.length - 1] + ` (${ms.length}장)` : ""}` : "→ 도금할 각인번호를 넣으세요";
+        const full = (m) => { const [coil, ...rest] = m.split("-"); return `${coil}-${proj}-C-${rest.join("-")}-${label}`; };
+        $("range").textContent = ms.length ? `→ ${full(ms[0])}${ms.length > 1 ? " ~ " + ms[ms.length - 1] + ` (${ms.length}장)` : ""}` : "→ ①에서 도금할 시편을 고르세요";
         if (st.series.length) {
-          const codes = [...new Set(r.panel_codes)];
-          $("series-summary").innerHTML = `<span class="mk-intent">◆</span> 시리즈 ${st.series.map((x) => `${esc(x.key)} = [${x.values.join(", ")}]`).join(" × ")} · 원판별 조건부 ${codes.join(", ")}`;
+          const labels = [...new Set(r.panel_variants.map((x) => x.label))];
+          $("series-summary").innerHTML = `<span class="mk-intent">◆</span> 시리즈 ${st.series.map((x) => `${esc(x.key)} = [${x.values.join(", ")}]`).join(" × ")} · 원판별 꼬리 ${labels.join(", ")}`;
         } else $("series-summary").textContent = "";
       } catch (e) { /* 미리보기 실패는 조용히 */ }
     }, 220);
@@ -231,7 +307,7 @@
   async function save(confirmRange) {
     const btn = $("btn-save");
     if (!st.sp) return LIMS.toast("프리셋을 고르거나 지난 공정런을 복제하세요", "err");
-    if (!marks().length) return LIMS.toast("도금할 시편의 각인번호를 넣으세요 (예: QV3-101~105)", "err");
+    if (!marks().length) return LIMS.toast("① 도금할 시편을 고르세요", "err");
     btn.disabled = true;
     const body = Object.assign(payloadBase(), {
       source: "manual", dict_version: C.dict.dict_version, project_code: $("project").value,
@@ -265,6 +341,17 @@
     $("dlg-done").classList.remove("hidden");
   }
 
+  /* 저장 후 같은 과제·원소재·조건에서 남은 시편을 다른 조건으로 이어서 도금 */
+  async function next() {
+    $("dlg-done").classList.add("hidden");
+    pick.set.clear();
+    st.series = [];
+    showConflicts([]);
+    await loadCands();
+    preview();
+    $("pick-grid").scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
   async function saveMyPreset() {
     if (!st.sp) return;
     const name = prompt("프리셋 이름 (예: M2 저이슬점 표준)", st.presetName ? st.presetName + " 변형" : "");
@@ -283,10 +370,16 @@
 
   /* ── 이벤트 연결 ── */
   $("my-presets").onchange = (e) => { const p = C.presets.find((x) => x.id === +e.target.value); if (p) usePreset(p); };
-  $("clone-runs").onchange = (e) => { const r = C.recent[+e.target.value]; if (r) useRun(r); e.target.value = ""; };
+  $("clone-runs").onchange = (e) => {
+    const r = C.recent[+e.target.value], mat = $("material").value;
+    if (r) { useRun(r); if ($("material").value !== mat) loadCands(); }
+    e.target.value = "";
+  };
   $("project").onchange = preview;
-  $("marks").oninput = onMarks;
-  $("btn-load").onclick = loadBlanks;
+  $("material").onchange = loadCands;
+  $("marks").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); addDirect(); } };
+  $("marks").onchange = addDirect;
+  $("done-next").onclick = next;
   $("cw").oninput = preview;
   $("btn-series").onclick = openSeries;
   $("series-cancel").onclick = () => $("dlg-series").classList.add("hidden");
@@ -306,6 +399,11 @@
     const first = C.presets.find((p) => p.scope === "PUBLIC" && p.name === "M2") || C.presets[0];
     if (first) usePreset(first);
   }
-  const q = new URLSearchParams(location.search).get("specimens");   // 시편 상세 [도금] → 각인번호 채움
-  if (q) { $("marks").value = q; onMarks(); }
+  const q = new URLSearchParams(location.search).get("specimens");   // 시편 상세·전단 완료 → 그 시편들을 미리 선택
+  parseMarks(q).forEach((m) => pick.set.add(m));
+  if (pick.set.size && !$("material").value) {     // 미리 고른 시편의 코일을 원소재로
+    const coil = marks()[0].split("-")[0], o = [...$("material").options].find((x) => x.dataset.coil === coil);
+    if (o) $("material").value = o.value;
+  }
+  loadCands().then(preview);
 })();

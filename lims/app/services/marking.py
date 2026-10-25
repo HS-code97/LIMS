@@ -1,13 +1,15 @@
-"""시편번호 체계 v3.0 (`시편번호 체계.md`): 각인번호·전체번호 형식, 단계, 코일코드·과제코드 제안.
+"""시편번호 체계 v3.1 (`시편번호 체계.md`): 각인번호·전체번호 형식, 단계, 코일코드·과제코드 제안.
 
 각인번호 (시편에 새김, 평생 불변, 유일키 = Specimen.short_id)
-    QV3 - 102 - 01 - 3
-    코일   가지  후절단 분석조각
-    코일 = 영문2+숫자1 · 가지 = 전폭번호 1자리(1~9) [+ 전폭을 자른 조각 2자리(01~99)]
-    후절단 = 숫자 2자리(01~99) · 분석조각 = 1자(1~9 다음 A~Z, I·O 제외)
+    QV3 - A02 - K - 3
+    코일   가지   후절단 분석조각
+    코일 = 영문2+숫자1 · 가지 = 전폭 영문1(A~) [+ 전폭을 자른 조각 숫자2(01~99)]
+    후절단 = 영문1(A~) · 분석조각 = 숫자1(1~9)
+    구간 경계마다 영문·숫자가 바뀌어 하이픈이 지워져도 끊어 읽힙니다(QV3A02K3).
 전체번호 (DB·화면·라벨)
-    QV3 - A6 - C - 102 - 01 - M206K-H03-T02-P12
-    코일   과제  단계 가지  후절단  조건부 꼬리(거친 공정 블록을 거친 순서대로)
+    QV3 - A6 - C - A02 - K - M206K03-H03-T02-P12
+    코일   과제  단계 가지  후절단 조건부 꼬리(거친 공정 블록을 거친 순서대로)
+    도금 블록 M206K03 = 조건부 M206K + 변형번호 03 (공정 계열 M2 안의 조건 카드, 표준 00은 생략)
 """
 from __future__ import annotations
 
@@ -18,7 +20,9 @@ from sqlalchemy.orm import Session
 
 # I·O는 숫자 1·0과 헷갈려 쓰지 않습니다.
 LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ"
-PIECE_CHARS = "123456789" + LETTERS
+# 각인 영문(전폭·후절단): 각인에서 숫자와 헷갈리는 Q(0)·S(5)·Z(2)도 뺍니다 — 21자
+MARK_LETTERS = "ABCDEFGHJKLMNPRTUVWXY"
+_L = f"[{MARK_LETTERS}]"
 
 STAGES = {"A": "전폭시편", "B": "전단 블랭크", "C": "도금", "D": "열처리", "E": "도장"}
 STAGE_ORDER = "ABCDE"
@@ -33,12 +37,16 @@ TREATMENTS = {
 
 COIL_CODE_RE = re.compile(r"^[A-Z]{2}\d$")
 PROJECT_CODE_RE = re.compile(r"^[A-Z]\d$")
-# 각인번호: 앞뒤가 영숫자가 아닌 자리에서만 (파일명 'QV3-102-01_W03_front.jpg'에서도 찾음)
-_MARK = r"(?P<coil>[A-Z]{2}\d)-(?P<branch>\d(?:\d{2})?)(?:-(?P<cut>\d{2})(?:-(?P<piece>[1-9A-Z]))?)?"
-MARK_RE = re.compile(rf"(?<![A-Z0-9]){_MARK}(?![A-Z0-9])")
+# 각인번호: 앞뒤가 영숫자가 아닌 자리에서만 (파일명 'QV3-A02-K_W03_front.jpg'에서도 찾음)
+_TAIL = rf"(?P<branch>{_L}(?:\d{{2}})?)(?:-(?P<cut>{_L})(?:-(?P<piece>[1-9]))?)?"
+# 뒤에 '-영숫자'가 이어지면 각인번호가 아님 (QV3-A02-01처럼 잘못 친 번호를 부모 QV3-A02로 읽지 않게)
+MARK_RE = re.compile(rf"(?<![A-Z0-9])(?P<coil>[A-Z]{{2}}\d)-{_TAIL}(?![A-Z0-9]|-[A-Z0-9])")
 # 전체번호: 코일-과제-단계-가지… (꼬리는 무시)
-FULL_RE = re.compile(r"(?<![A-Z0-9])(?P<coil>[A-Z]{2}\d)-[A-Z]\d-[A-E]-(?P<branch>\d(?:\d{2})?)"
-                     r"(?:-(?P<cut>\d{2})(?:-(?P<piece>[1-9A-Z]))?)?(?![0-9])")
+FULL_RE = re.compile(rf"(?<![A-Z0-9])(?P<coil>[A-Z]{{2}}\d)-[A-Z]\d-[A-E]-{_TAIL}(?![A-Z0-9])")
+# 하이픈이 지워진 각인을 읽은 대로 친 번호(QV3A02K3, 'QV3 A02K3'): 영문·숫자 교대라 끊는 자리가 하나뿐입니다.
+# 글 속에서 찾지 않고 입력 전체가 이 모양일 때만 씁니다(파일명 등에서 엉뚱한 번호를 잡지 않게).
+_SEP = re.compile(r"[\s\-/]+")
+COMPACT_RE = re.compile(rf"(?P<coil>[A-Z]{{2}}\d)(?P<branch>{_L}(?:\d{{2}})?)(?:(?P<cut>{_L})(?P<piece>[1-9])?)?")
 
 
 class MarkingError(ValueError):
@@ -58,31 +66,55 @@ def _mark_of(m: re.Match) -> str:
 
 
 def find_mark(text: str) -> str | None:
-    """글 속의 각인번호를 찾습니다. 전체번호(QV3-A6-C-102-M206K)를 넣어도 각인번호로 바꿔 줍니다."""
+    """글 속의 각인번호를 찾습니다. 전체번호(QV3-A6-C-A02-M206K)나 하이픈 없이 친 각인번호(QV3A02K3,
+    'QV3 A02K3')를 넣어도 각인번호로 바꿔 줍니다."""
     up = (text or "").upper()
     m = FULL_RE.search(up)
     if m:
         return _mark_of(m)
     m = MARK_RE.search(up)
+    if m:
+        return _mark_of(m)
+    m = COMPACT_RE.fullmatch(_SEP.sub("", up))
     return _mark_of(m) if m else None
 
 
 def parse_mark(text: str) -> dict:
     m = MARK_RE.fullmatch((text or "").strip().upper())
     if not m:
-        raise MarkingError(f"각인번호 형식이 아닙니다: {text} (예: QV3-102, QV3-102-01-3)")
+        raise MarkingError(f"각인번호 형식이 아닙니다: {text} (예: QV3-A02, QV3-A02-K-3)")
     return {k: m[k] for k in ("coil", "branch", "cut", "piece")}
 
 
-def tail_blocks(steps: list[dict] | None, condition_code: str | None) -> list[str]:
-    """거친 공정 → 꼬리 블록. 도금은 현재 조건부(목표 정정 시 다시 계산), 나머지는 머리글자 + 코드 2자리."""
+# 도금 블록 = 조건부 5자(계열·욕·부착량2·소둔) + 변형번호(공정 계열 안, 0이면 생략). 'M206K', 'M206K03', 'MX06K01'
+PLATE_RE = re.compile(r"^(?P<code>[A-Z][0-9X](?:\d{2}|XX)[A-Z])(?P<seq>\d{2,3})?$")
+# 조건 카드 ID = 계열 2자 + 변형번호 ('M2-03', 'MX-01')
+VARIANT_ID_RE = re.compile(r"^(?P<family>[A-Z][0-9X])-(?P<seq>\d{2,3})$")
+
+
+def plate_label(condition_code: str | None, variant_seq: int | None) -> str:
+    """도금 블록. 변형번호는 조건부 끝 영문(소둔) 뒤에 붙여 영문·숫자가 교대합니다(각인과 같은 원칙)."""
+    code = condition_code or "XXXXX"
+    return f"{code}{variant_seq:02d}" if variant_seq else code
+
+
+def parse_plate(text: str) -> tuple[str, int | None] | None:
+    """'M206K03' → ('M206K', 3), 'M206K' → ('M206K', None), 'M206K00' → ('M206K', 0)."""
+    m = PLATE_RE.match((text or "").strip().upper())
+    if not m:
+        return None
+    return m["code"], int(m["seq"]) if m["seq"] is not None else None
+
+
+def tail_blocks(steps: list[dict] | None, condition_code: str | None, variant_seq: int | None = None) -> list[str]:
+    """거친 공정 → 꼬리 블록. 도금은 현재 조건부+변형번호(목표 정정 시 다시 계산), 나머지는 머리글자 + 코드 2자리."""
     out = []
     for st in steps or []:
         t = TREATMENTS.get(st.get("k"))
         if t is None:
             continue
         if st["k"] == "PLATE":
-            out.append(condition_code or "XXXXX")
+            out.append(plate_label(condition_code, variant_seq))
         else:
             out.append(f"{t['prefix']}{st.get('code') or '00'}")
     return out
@@ -93,14 +125,15 @@ def full_id(coil: str, project: str, stage: str, branch: str, cut: str | None, p
     return "-".join(p for p in (coil, project, stage, branch, cut, piece, *tail) if p)
 
 
-def piece_char(n: int) -> str:
-    if not 1 <= n <= len(PIECE_CHARS):
-        raise MarkingError(f"분석조각 번호는 1~{len(PIECE_CHARS)}번째(1~9, A~Z)까지입니다.")
-    return PIECE_CHARS[n - 1]
+def letter_of(n: int) -> str:
+    """전폭·후절단 n번째 → 각인 영문 (1 → A, 21 → Y)."""
+    if not 1 <= n <= len(MARK_LETTERS):
+        raise MarkingError(f"전폭·후절단 번호는 1~{len(MARK_LETTERS)}번째(A~Y, I·O·Q·S·Z 제외)까지입니다.")
+    return MARK_LETTERS[n - 1]
 
 
-def piece_index(c: str) -> int:
-    return PIECE_CHARS.index(c) + 1
+def letter_index(c: str) -> int:
+    return MARK_LETTERS.index(c) + 1
 
 
 # ── 현장 코일번호 → 코일코드 (3.5절) ─────────────────────────────────

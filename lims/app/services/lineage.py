@@ -44,7 +44,7 @@ def processes(spec: Specimen) -> list[dict]:
     out = [{"k": "CUT", "name": "전단", "done": cut, "codes": []}]
     for k, t in TREATMENTS.items():
         steps = [s for s in spec.steps or [] if s.get("k") == k]
-        codes = [(spec.condition_code or "") if k == "PLATE" else f"{t['prefix']}{s.get('code', '')}" for s in steps]
+        codes = [(spec.condition_label or "") if k == "PLATE" else f"{t['prefix']}{s.get('code', '')}" for s in steps]
         out.append({"k": k, "name": t["name"], "done": bool(steps), "codes": codes})
     return out
 

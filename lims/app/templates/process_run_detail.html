@@ -3,7 +3,7 @@
 {% block content %}
 <section class="hero">
   <div class="crumb small mono muted"><a href="/process-runs">공정런</a> › {{ run.project_code }} › {{ run.run_no }}</div>
-  <h1 class="mono" style="font-size:24px;margin-top:6px">{{ run.run_no }} <span style="font-size:15px;color:var(--ink-3)">{{ run.base_condition_code }}</span></h1>
+  <h1 class="mono" style="font-size:24px;margin-top:6px">{{ run.run_no }} <span style="font-size:15px;color:var(--ink-3)">{{ run.base_condition_label }}</span></h1>
   <div class="meta">
     <span class="chip">일자 <b>{{ run.run_date|d }}</b></span>
     <span class="chip">과제 <b>{{ run.project.label if run.project else run.project_code }}</b></span>
@@ -30,12 +30,14 @@
   <section class="card">
     <header><h2>{{ icon('spec') }}도금한 시편과 자손</h2><span class="meta">조건부(전체번호 꼬리)는 원판 단위·목표 기준으로 생성 (◆ = 원판별 목표 변경) · 각인번호는 도금 전 그대로</span></header>
     <div class="tablewrap"><table class="t">
-      <tr><th>각인번호</th><th>전체번호</th><th>목표 변경</th><th>상태</th><th>자식</th></tr>
+      <tr><th>각인번호</th><th>전체번호</th><th>목표 변경</th><th>상태</th><th>자식</th>{% if can_edit_run %}<th></th>{% endif %}</tr>
       {% for p in panels %}
       <tr><td><a class="mono" href="/specimens/{{ p.short_id }}"><b>{{ p.short_id }}</b></a></td><td class="mono">{{ p.display_id }}</td>
         <td class="mono small">{% if p.target_overrides %}<span class="mk-intent">◆</span> {% for k, v in p.target_overrides.items() %}{{ pdict.label(k) }} {{ v|num }}{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}</td>
         <td><span class="chip st-{{ p.status }}">{{ p.status }}</span></td>
-        <td class="mono small">{% for c in p.children if not c.is_deleted %}<a href="/specimens/{{ c.short_id }}">{{ c.short_id[p.short_id|length + 1:] }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</td></tr>
+        <td class="mono small">{% for c in p.children if not c.is_deleted %}<a href="/specimens/{{ c.short_id }}">{{ c.short_id[p.short_id|length + 1:] }}</a>{% if not loop.last %}, {% endif %}{% endfor %}</td>
+        {% if can_edit_run %}<td class="nowrap"><button class="btn sm danger" onclick="LIMS.unplate('{{ p.short_id }}', '{{ run.run_no }}')" title="이 공정런에서 빼고 도금 전 단계로 되돌립니다">도금 취소</button></td>{% endif %}</tr>
+      {% else %}<tr class="empty-row"><td colspan="6">남은 원판이 없습니다 (모두 도금 취소됨).</td></tr>
       {% endfor %}
     </table></div>
   </section>
@@ -95,14 +97,14 @@
     <div class="kv" style="grid-column:1/-1">
       <b>욕 조성 <span class="muted small mono">POT</span></b>
       <span class="tgt">목표 {% for b in bath %}{{ b.el }} {{ b.target|num }}{% if not loop.last %} / {% endif %}{% endfor %} wt%</span>
-      <span class="mono small">{% if measured %}실측 <span class="bdg b-lab">분석</span> {{ measured[0].method or '' }} {{ measured[0].at|d }} →
+      <span class="mono small">{% if measured %}실측 <span class="bdg b-lab">욕분석</span> {{ measured[0].method or '' }} {{ measured[0].at|d }} →
         {% for b in bath %}{% if b.value is not none %}<span class="{{ 'mk-dev' if b.oot }}">{{ b.el }} {{ b.value|num }}{% if b.oot %} ●{% endif %}</span>{% if not loop.last %} / {% endif %}{% endif %}{% endfor %}
         {% else %}<span class="muted">실측 없음 — [욕 분석 적용]으로 넣습니다</span>{% endif %}</span>
     </div>
   </div>
 
   <div class="body" x-show="ba.open" style="border-top:1px solid var(--line-2);display:none">
-    <div class="small" style="margin-bottom:8px"><b>욕 분석 적용</b> — 욕 시료 1회 분석을 여러 공정런에 세션 실측(출처 <span class="bdg b-lab">분석</span>)으로 적용합니다. 기본 제안: 채취 시각 ±1일.
+    <div class="small" style="margin-bottom:8px"><b>욕 분석 적용</b> — 욕 시료 1회 분석을 여러 공정런에 세션 실측(출처 <span class="bdg b-lab">욕분석</span>)으로 적용합니다. 기본 제안: 채취 시각 ±1일.
       <a href="/admin?tab=bath">욕 분석 등록 →</a></div>
     <div class="tablewrap"><table class="t">
       <tr><th></th><th>채취</th><th>포트</th><th>방법</th><th>조성</th><th></th></tr>
@@ -125,7 +127,7 @@
 
 <section class="card">
   <header><h2>{{ icon('spec') }}원판별 실측</h2>
-    <span class="meta">· = 실측 없음(목표로 간주) · <span class="mk-dev">●</span> 허용편차 밖(색 표시만) · <span class="mk-intent">◆</span> 원판별 목표 변경 · <span class="bdg b-test">시험</span> 결과에서 자동</span>
+    <span class="meta">· = 실측 없음(목표로 간주) · <span class="mk-dev">●</span> 허용편차 밖(색 표시만) · <span class="mk-intent">◆</span> 원판별 목표 변경 · <span class="bdg b-test">분석</span> 분석런 결과에서 자동</span>
     <div class="r">
       <select class="in" style="height:28px;font-size:12px" @change="addCol($event.target.value)"><option value="">열 추가 ▼</option>
         {% for k in all_keys %}{% set p = pdict.param(k) %}<option value="{{ k }}">{{ p.section_nm }} {{ p.l }}</option>{% endfor %}</select>
@@ -133,7 +135,7 @@
   <div class="tablewrap"><table class="t act">
     <tr><th>원판</th>{% for k in panel_keys %}{% set p = pdict.param(k) %}<th class="n">{{ p.l }} {{ p.u }}<span class="tg">목표 {{ pdict.target_value(run.recipe, k)|num }}{% if maps.get(k) %} · {{ maps[k] }}{% endif %}</span></th>{% endfor %}</tr>
     {% for pn in panels %}
-    <tr><td class="mono"><a href="/specimens/{{ pn.short_id }}"><b>{{ pn.short_id }}</b></a> <span class="small muted">{{ pn.condition_code }}</span></td>
+    <tr><td class="mono"><a href="/specimens/{{ pn.short_id }}"><b>{{ pn.short_id }}</b></a> <span class="small muted">{{ pn.condition_label }}</span></td>
       {% for k in panel_keys %}{% set c = cells[(pn.id, k)] %}{% set e = c.eff %}
       <td class="n">
         {% if c.auto and c.manual is none %}
@@ -147,7 +149,7 @@
     </tr>
     {% endfor %}
   </table></div>
-  <div class="body small muted">모든 칸은 선택 입력입니다. 비워 두면 목표값으로 간주하고 출처를 "목표"로 표시합니다. 시험 템플릿의 <span class="mono">maps_to</span> 항목(예: CW_MEASURE → 부착량)은 결과 저장 시 자동으로 채워집니다.</div>
+  <div class="body small muted">모든 칸은 선택 입력입니다. 비워 두면 목표값으로 간주하고 출처를 "목표"로 표시합니다. 분석 템플릿의 <span class="mono">maps_to</span> 항목(예: CW_MEASURE → 부착량)은 결과 저장 시 자동으로 채워집니다.</div>
 </section>
 </div>
 {% endif %}

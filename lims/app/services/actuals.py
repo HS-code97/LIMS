@@ -22,7 +22,7 @@ from ..models import BathAnalysis, EffectiveParam, ParamActual, ProcessRun, Spec
 from . import condition_code as cc
 from . import param_dict as pdict
 
-SOURCE_LABEL = {"manual": "실측", "lab": "분석", "test": "시험", "pv": "PV", "target": "목표"}
+SOURCE_LABEL = {"manual": "실측", "lab": "욕분석", "test": "분석", "pv": "PV", "target": "목표"}   # test = 분석런 결과, lab = 욕 시료 분석
 
 
 @dataclass
@@ -85,7 +85,7 @@ def _when(r: ParamActual) -> datetime:
 
 def aggregate(rows: list[ParamActual], key: str) -> tuple[float | None, str]:
     """가장 최근에 잰 행의 출처(같은 시각이면 출처 순위)를 고르고, 그 출처 행들로 agg 계산 (D-37).
-    나중에 넣은 수기 정정이 앞선 시험 결과 값을 대신하게 됩니다."""
+    나중에 넣은 수기 정정이 앞선 분석 결과 값을 대신하게 됩니다."""
     rows = [r for r in rows if r.value is not None]
     if not rows:
         return None, ""

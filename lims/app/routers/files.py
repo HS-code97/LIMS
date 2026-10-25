@@ -29,7 +29,7 @@ async def upload(files: list[UploadFile] = File(...), test_run_no: str = Form(""
     if test_run_no:
         tr = db.scalar(select(TestRun).where(TestRun.test_run_no == test_run_no))
         if tr is None:
-            raise HTTPException(404, f"시험런 {test_run_no}이 없습니다.")
+            raise HTTPException(404, f"분석런 {test_run_no}이 없습니다.")
     out = []
     limit = MAX_UPLOAD_MB * 1024 * 1024
     for f in files:
@@ -71,7 +71,7 @@ def link_file(att_id: int, data: LinkIn, user: User = Depends(require_user), db:
     if data.test_run_no and data.cycle_no is not None:
         tr = db.scalar(select(TestRun).where(TestRun.test_run_no == data.test_run_no))
         if tr is None:
-            raise HTTPException(422, "시험런이 없습니다.")
+            raise HTTPException(422, "분석런이 없습니다.")
         result = db.scalar(select(TestResult).where(TestResult.test_run_id == tr.id, TestResult.specimen_id == spec.id,
                                                     TestResult.cycle_no == data.cycle_no))
         if result is None:

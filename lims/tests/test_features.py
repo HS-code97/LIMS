@@ -162,6 +162,35 @@ def test_specimen_restore_and_engrave_csv(hhs, kim):
     assert hhs.get(f"/api/specimens/{kid}").status_code == 200
 
 
+def test_specimen_detail_actual_edit(hhs, kim):
+    """시편 상세 실측 수정: 자른 실험편 자신의 수기 실측 저장·삭제, 시편 소유자 권한(세션 행·남의 원판은 403)."""
+    run = _make_run(hhs, 1)
+    panel = run["panels"][0]["short_id"]
+    kid = kim.post(f"/api/specimens/{panel}/split", json={"count": 1, "start": 1}).json()["children"][0]["short_id"]
+    no = run["run_no"]
+
+    page = kim.get(f"/specimens/{kid}").text
+    assert "실측 수정" in page and "공정런 공통" in page          # kim은 실험편 소유자 → 수정 가능, 세션 키는 링크
+
+    r = kim.post(f"/api/process-runs/{no}/actuals", json={"source": "manual", "rows": [
+        {"key": "out.cw_top", "value": 57.5, "specimen": kid, "mode": "set"}]})
+    assert r.status_code == 200, r.text
+    p = kim.get(f"/api/specimens/{kid}/params").json()["out.cw_top"]
+    assert p["effective"] == 57.5 and p["source"] == "manual" and p["inherited_from"] is None
+    assert hhs.get(f"/api/specimens/{panel}/params").json()["out.cw_top"]["source"] == "target"   # 원판은 그대로
+    assert 'value="57.5"' in kim.get(f"/specimens/{kid}").text                                     # 입력칸에 미리 채움
+
+    deny = [{"key": "rth.DP", "value": -40, "specimen": None, "mode": "set"},                       # 세션 행
+            {"key": "out.cw_top", "value": 61, "specimen": panel, "mode": "set"}]                    # hhs 소유 원판
+    for row in deny:
+        assert kim.post(f"/api/process-runs/{no}/actuals", json={"source": "manual", "rows": [row]}).status_code == 403
+
+    r = kim.post(f"/api/process-runs/{no}/actuals", json={"source": "manual", "rows": [
+        {"key": "out.cw_top", "value": None, "specimen": kid, "mode": "set"}]})                     # 비우면 삭제
+    assert r.status_code == 200
+    assert kim.get(f"/api/specimens/{kid}/params").json()["out.cw_top"]["source"] == "target"
+
+
 # ── 로그인 ───────────────────────────────────────────────────────────
 @pytest.mark.parametrize("nxt", ["//evil.example.com/x", "https://evil.example.com", "/\\evil.example.com"])
 def test_login_redirect_stays_on_site(hhs, nxt):

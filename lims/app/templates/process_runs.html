@@ -12,7 +12,7 @@
   <tr><th>공정런</th><th>일자</th><th>과제</th><th>프리셋</th><th>조건부</th><th class="n">목표 부착량</th><th class="n">원판</th><th>원소재</th><th>작업자</th><th>사전</th><th></th></tr>
   {% for r in runs %}
   <tr><td><a class="mono" href="/process-runs/{{ r.run_no }}"><b>{{ r.run_no }}</b></a></td><td class="mono">{{ r.run_date|d }}</td>
-    <td class="mono">{{ r.project_code }}</td><td>{{ r.preset.name if r.preset else '복제' }}</td><td class="mono"><b>{{ r.base_condition_code }}</b></td>
+    <td class="mono">{{ r.project_code }}</td><td>{{ r.preset.name if r.preset else '복제' }}</td><td class="mono"><b>{{ r.base_condition_label }}</b></td>
     <td class="n">{{ r.coating_weight_target|num }} g/m²</td><td class="n">{{ r.panels|length }}</td>
     <td class="mono small">{{ r.material.coil_no if r.material else '' }}</td><td class="small">{{ r.operator.name if r.operator else '' }}</td>
     <td class="mono small muted">{{ r.dict_version }}</td>

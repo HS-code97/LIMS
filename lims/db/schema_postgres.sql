@@ -1,4 +1,4 @@
--- 도금강판 R&D LIMS v2.3 (시편번호 v3.0) — PostgreSQL 15+ DDL (app/models에서 자동 생성, 직접 고치지 마세요)
+-- 도금강판 R&D LIMS v2.3 (시편번호 v3.2) — PostgreSQL 15+ DDL (app/models에서 자동 생성, 직접 고치지 마세요)
 -- 운영 적용은 Alembic(alembic upgrade head)을 쓰고, 이 파일은 검토·대조용입니다.
 
 CREATE TABLE master_codes (
@@ -126,6 +126,7 @@ CREATE TABLE process_presets (
 	dict_version VARCHAR(20) NOT NULL, 
 	is_active BOOLEAN NOT NULL, 
 	created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now() NOT NULL, 
+	variant_seq INTEGER, 
 	PRIMARY KEY (id), 
 	FOREIGN KEY(owner_id) REFERENCES users (id), 
 	FOREIGN KEY(team_id) REFERENCES teams (id)
@@ -189,6 +190,27 @@ CREATE TABLE process_runs (
 );
 CREATE INDEX idx_pr_recipe ON process_runs USING gin (recipe);
 
+CREATE TABLE process_variants (
+	id SERIAL NOT NULL, 
+	family VARCHAR(2) NOT NULL, 
+	seq INTEGER NOT NULL, 
+	fingerprint VARCHAR(40) NOT NULL, 
+	proc_values JSONB NOT NULL, 
+	cw_claims JSONB, 
+	name VARCHAR(120) NOT NULL, 
+	origin VARCHAR(10) NOT NULL, 
+	preset_id INTEGER, 
+	first_run_id BIGINT, 
+	created_by INTEGER, 
+	created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now() NOT NULL, 
+	PRIMARY KEY (id), 
+	UNIQUE (family, seq), 
+	FOREIGN KEY(preset_id) REFERENCES process_presets (id), 
+	FOREIGN KEY(first_run_id) REFERENCES process_runs (id), 
+	FOREIGN KEY(created_by) REFERENCES users (id)
+);
+CREATE INDEX idx_pv_fp ON process_variants (family, fingerprint);
+
 CREATE TABLE specimens (
 	id BIGSERIAL NOT NULL, 
 	project_code VARCHAR(4) NOT NULL, 
@@ -208,6 +230,7 @@ CREATE TABLE specimens (
 	owner_id INTEGER, 
 	target_overrides JSONB, 
 	condition_code VARCHAR(5), 
+	variant_seq INTEGER, 
 	sample_position VARCHAR(10), 
 	rolling_direction VARCHAR(5), 
 	surface_side VARCHAR(10), 
@@ -351,4 +374,4 @@ CREATE INDEX idx_act_run_key ON param_actuals (process_run_id, param_key) WHERE 
 CREATE INDEX idx_act_spec_key ON param_actuals (specimen_id, param_key) WHERE NOT is_deleted;
 
 -- 각인번호 형식 (PostgreSQL 전용 정규식 검사, 시편번호 체계 3.2절)
-ALTER TABLE specimens ADD CONSTRAINT ck_short_id_format CHECK (short_id ~ '^[A-Z]{2}[0-9]-[0-9]([0-9]{2})?(-[0-9]{2}(-[1-9A-Z])?)?$');
+ALTER TABLE specimens ADD CONSTRAINT ck_short_id_format CHECK (short_id ~ '^[A-Z]{2}[0-9]-[ABCDEFGHJKLMNPRTUVWXY]([0-9]{2})?(-[ABCDEFGHJKLMNPRTUVWXY](-[1-9])?)?$');

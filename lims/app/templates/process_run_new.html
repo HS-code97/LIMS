@@ -1,32 +1,50 @@
 {% extends "base.html" %}
 {% block title %}공정런 등록{% endblock %}
-{% block head %}<link rel="stylesheet" href="/static/hmi/hmi.css?v=2.2.0">{% endblock %}
+{% block head %}<link rel="stylesheet" href="/static/hmi/hmi.css?v=2.3.0">{% endblock %}
 {% block content %}
 <div class="hmi">
 <div class="page-head">
   <div><div class="crumb"><a href="/process-runs">공정런</a> › 등록 (HMI 기록 모드)</div><h1 style="font-family:var(--f-body)">공정런 등록</h1></div>
-  <div class="acts small muted">CGL 모사장치 HMI와 같은 화면입니다. "PLC로 전송" 대신 [저장]으로 공정런을 만들고 블랭크를 도금 단계로 올립니다. 사전 <span class="mono">{{ dictionary.dict_version }}</span></div>
+  <div class="acts small muted">과제·원소재를 고르고 ① 도금할 시편을 클릭해 담은 뒤 ② 공정 조건과 ③ 목표를 넣고 [저장]합니다. 남은 시편은 이어서 다른 조건으로 도금할 수 있습니다. 사전 <span class="mono">{{ dictionary.dict_version }}</span></div>
 </div>
 
-{# Stitch 시안 design/stitch/04_process_run_new.png: 과제·원소재·일자·프리셋 한 줄 #}
+{# 순서: 과제·원소재 → ① 도금할 시편 고르기 → ② 공정 조건(프리셋·설비) → ③ 도금 목표 → 저장 #}
 <section class="card">
   <div class="body pr-top">
     <label class="f">과제<select class="in mono" id="project">
       {% for p in projects %}<option value="{{ p.project_code }}">{{ p.project_code }}{% if p.company_project_no %} = {{ p.company_project_no }}{% endif %} · {{ p.project_name[:20] }}</option>{% endfor %}</select></label>
-    <label class="f">원소재(코일)<span style="display:flex;gap:6px"><select class="in mono" id="material" style="flex:1"><option value="">(선택 안 함)</option>
+    <label class="f">원소재(코일)<span style="display:flex;gap:6px"><select class="in mono" id="material" style="flex:1"><option value="">(전체 코일)</option>
       {% for m in materials %}<option value="{{ m.id }}" data-coil="{{ m.coil_code or '' }}">{{ m.label }}</option>{% endfor %}</select><a class="btn" href="/admin?tab=materials" title="원소재 등록">+</a></span></label>
     <label class="f">일자<input class="in" type="date" id="run_date" value="{{ today().isoformat() }}"></label>
-    <div class="f">프리셋<div class="seg" id="pub-presets" role="group" aria-label="공용 프리셋"></div></div>
-  </div>
-  <div class="body presetbar" style="border-top:1px solid var(--line-2);padding-top:10px;padding-bottom:10px">
-    <select class="in" id="my-presets" style="min-width:180px"><option value="">내·팀 프리셋 ▼</option></select>
-    <select class="in" id="clone-runs" style="min-width:220px"><option value="">지난 공정런 복제 ▼</option>
-      {% for r in recent %}<option value="{{ loop.index0 }}">{{ r.run_no }} · {{ r.run_date }} · {{ r.code }} · {{ r.coating_weight_target|num }} g/m²</option>{% endfor %}</select>
-    <span class="small muted" id="recipe-src"></span>
   </div>
 </section>
 
-<div class="hmi-grid">
+<section class="card" style="margin-top:16px">
+  <header><h2>① 도금할 시편</h2><span class="meta">클릭 = 선택/해제 · 더블클릭 = 해제 · Shift+클릭 = 범위 선택. 각인번호는 그대로이고 단계가 C(도금)로, 전체번호에 조건 꼬리가 붙습니다</span>
+    <span class="r mono small" id="pick-count"></span></header>
+  <div class="body pick-bar">
+    <button class="btn sm" id="pick-all">전체 선택</button><button class="btn sm" id="pick-none">선택 해제</button>
+    <div class="pick-chips" id="pick-chips"></div>
+    <label class="f pick-direct">각인번호 직접 추가 (스캐너·범위 QV3-A01~A05)<input class="in mono" id="marks" placeholder="QV3-A01~A05 → Enter"></label>
+  </div>
+  <div class="body" style="padding-top:0">
+    <div class="pick-grid" id="pick-grid"></div>
+    <div class="flash err hidden" id="conflicts" style="margin-top:10px"></div>
+  </div>
+</section>
+
+<section class="card" style="margin-top:16px">
+  <header><h2>② 공정 조건</h2><span class="meta">프리셋을 고르거나 지난 공정런을 복제한 뒤 설비를 눌러 조정합니다</span></header>
+  <div class="body pr-top" style="padding-bottom:10px">
+    <div class="f">공용 프리셋<div class="seg" id="pub-presets" role="group" aria-label="공용 프리셋"></div></div>
+    <select class="in" id="my-presets" style="min-width:180px;align-self:end"><option value="">내·팀 프리셋 ▼</option></select>
+    <select class="in" id="clone-runs" style="min-width:220px;align-self:end"><option value="">지난 공정런 복제 ▼</option>
+      {% for r in recent %}<option value="{{ loop.index0 }}">{{ r.run_no }} · {{ r.run_date }} · {{ r.code }} · {{ r.coating_weight_target|num }} g/m²</option>{% endfor %}</select>
+    <span class="small muted" id="recipe-src" style="align-self:end"></span>
+  </div>
+</section>
+
+<div class="hmi-grid" style="margin-top:16px">
   <div class="stack">
     <section class="card">
       <header><h2>라인 개요</h2><span class="meta">설비를 눌러 조건을 수정합니다 · 프리셋 대비 바뀐 값은 굵게 + ●</span><span class="r mono small muted" id="line-status"></span></header>
@@ -47,21 +65,16 @@
 </div>
 
 <section class="card" style="margin-top:16px">
-  <header><h2>도금할 시편</h2><span class="meta">이미 입고·전단한 블랭크의 각인번호를 넣습니다. 번호는 그대로이고 단계가 C(도금)로, 전체번호에 조건 꼬리가 붙습니다</span></header>
+  <header><h2>③ 도금 목표</h2><span class="meta">선택한 시편 모두에 같은 목표 · 원판마다 다르게 하려면 시리즈 설정</span></header>
   <div class="body savebar">
     <label class="f">목표 부착량(단면)<span class="sfx"><input class="in num mono" id="cw" type="number" min="10" max="300" value="60" style="width:96px"><em>g/m²</em></span></label>
-    <label class="f" style="flex:1;min-width:280px">각인번호 (쉼표·줄바꿈, 범위 QV3-101~105)<input class="in mono" id="marks" placeholder="QV3-101~105"></label>
-    <label class="f">원판 수<input class="in num mono" id="count" type="number" value="0" readonly style="width:70px"></label>
-    <button class="btn" id="btn-load" title="선택한 원소재(코일)의 도금 안 한 블랭크를 불러옵니다">블랭크 불러오기</button>
-    <button class="btn" id="btn-series">시리즈 설정…</button>
-  </div>
-  <div class="body" style="padding-top:0">
-    <div class="flash err hidden" id="conflicts"></div>
-    <div class="small mono" id="series-summary"></div>
+    <button class="btn" id="btn-series" style="align-self:end">시리즈 설정…</button>
+    <div class="small mono" id="series-summary" style="align-self:center"></div>
   </div>
   <div class="body" style="padding-top:0">
     <div class="pr-commit">
-      <div class="codeprev"><small>조건부 미리보기 (목표 기준 · 전체번호 꼬리)</small><span id="code">-----</span><span class="small mono" id="range"></span></div>
+      <div class="codeprev"><small>조건 꼬리 미리보기 (조건부 + 변형번호 · 목표 기준)</small><span id="code">-----</span><span class="small mono" id="range"></span>
+        <span class="small" id="variant-note"></span><span class="small mk-dev" id="x-warn"></span></div>
       <input class="in" id="note" placeholder="메모 입력… (실험 목적·특이사항)">
       <button class="btn" id="btn-mypreset">내 프리셋으로 저장</button>
       <button class="btn primary lg" id="btn-save">{{ icon('check', 18) }} 저장</button>
@@ -88,7 +101,8 @@
     <header><h3 id="done-title">저장 완료</h3></header>
     <div class="body" id="done-body"></div>
     <footer><a class="btn" id="done-csv">{{ icon('csv', 16) }} 각인 CSV</a><a class="btn" id="done-label" target="_blank">{{ icon('label', 16) }} 라벨 출력</a>
-      <a class="btn" id="done-actuals">실측 입력</a><a class="btn primary" id="done-open">공정런 열기</a></footer>
+      <a class="btn" id="done-actuals">실측 입력</a><a class="btn" id="done-open">공정런 열기</a>
+      <button class="btn primary" id="done-next">나머지 시편 이어서 도금</button></footer>
   </div>
 </div>
 </div>
@@ -104,5 +118,5 @@ window.LIMS_HMI = {
 };
 </script>
 <script src="/static/hmi/hmi-core.js?v=2.2.0"></script>
-<script src="/static/hmi/hmi-lims.js?v=2.2.0"></script>
+<script src="/static/hmi/hmi-lims.js?v=2.3.1"></script>
 {% endblock %}

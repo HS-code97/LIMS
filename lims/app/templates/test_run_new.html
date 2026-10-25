@@ -1,14 +1,14 @@
 {% extends "base.html" %}
-{% block title %}시험런 생성{% endblock %}
+{% block title %}분석런 생성{% endblock %}
 {% block content %}
 <div x-data="trNew()" x-init="init()">
-<div class="page-head"><div><div class="crumb"><a href="/test-runs">시험런</a> › 새 시험런</div><h1 style="font-family:var(--f-body)">시험런 생성</h1></div>
-  <div class="acts"><span class="small muted mono" x-show="tpl">번호는 저장 시 TR-<span x-text="tpl && tpl.test_type"></span>-YY### 형식으로 자동 발번</span></div></div>
+<div class="page-head"><div><div class="crumb"><a href="/test-runs">분석런</a> › 새 분석런</div><h1 style="font-family:var(--f-body)">분석런 생성</h1></div>
+  <div class="acts"><span class="small muted mono" x-show="tpl">번호는 저장 시 AR-<span x-text="tpl && tpl.test_type"></span>-YY### 형식으로 자동 발번</span></div></div>
 <div class="grid2">
   <section class="card">
     <header><h2>{{ icon('test') }}1. 템플릿·설비·운전조건</h2></header>
     <div class="body form">
-      <label class="f">시험 템플릿
+      <label class="f">분석 템플릿
         <select class="in" x-model.number="tplId" @change="pick()">
           {% for t in templates_json %}<option value="{{ t.id }}">{{ t.test_type }} · {{ t.code }} v{{ t.version }} — {{ t.name }}{% if t.team %} ({{ t.team }}){% endif %}</option>{% endfor %}
         </select></label>
@@ -32,7 +32,7 @@
     <header><h2>{{ icon('scan') }}2. 시편 탑승</h2><span class="meta" x-text="rows.length + '개'"></span></header>
     <div class="body form">
       <label class="f">시편 스캔 또는 각인번호 입력 후 Enter
-        <input class="in mono" x-ref="scan" x-model="scan" @keydown.enter.prevent="add()" placeholder="QV3-102-01" autofocus></label>
+        <input class="in mono" x-ref="scan" x-model="scan" @keydown.enter.prevent="add()" placeholder="QV3-A02-A" autofocus></label>
       <div class="tablewrap"><table class="t">
         <tr><th>#</th><th>각인번호</th><th>전체번호</th><th>상태</th><th>슬롯</th><th></th></tr>
         <template x-for="(r, i) in rows" :key="r.short_id">
@@ -46,7 +46,7 @@
       <button class="btn sm" @click="autoSlots()" x-show="rows.length">슬롯 자동 (A-01부터)</button>
     </div>
     <footer style="padding:12px 16px;border-top:1px solid var(--line-2);display:flex;gap:8px;justify-content:flex-end">
-      <a class="btn" href="/test-runs">취소</a><button class="btn primary lg" :disabled="busy" @click="save()">{{ icon('check', 18) }} 시험런 저장</button></footer>
+      <a class="btn" href="/test-runs">취소</a><button class="btn primary lg" :disabled="busy" @click="save()">{{ icon('check', 18) }} 분석런 저장</button></footer>
   </section>
 </div>
 </div>

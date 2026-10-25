@@ -74,14 +74,14 @@ def test_series_base_is_merged_recipe(db, user_id, m2):
 # ── 번호: 999·9999 뒤에도 같은 번호를 다시 내지 않음 ───────────────────────
 def test_test_run_number_past_999(db, user_id):
     tpl = db.scalar(select(TestTemplate).where(TestTemplate.code == "BEND_0T"))
-    db.add(TestRun(test_run_no="TR-ZZQ-26999", test_type="ZZQ", template_id=tpl.id, start_date=date(2026, 1, 5),
+    db.add(TestRun(test_run_no="AR-ZZQ-26999", test_type="ZZQ", template_id=tpl.id, start_date=date(2026, 1, 5),
                    owner_id=user_id))
     db.flush()
     nxt = numbering.next_test_run_no(db, "ZZQ", date(2026, 3, 1))
-    assert nxt == "TR-ZZQ-261000"
+    assert nxt == "AR-ZZQ-261000"
     db.add(TestRun(test_run_no=nxt, test_type="ZZQ", template_id=tpl.id, start_date=date(2026, 3, 1), owner_id=user_id))
     db.flush()
-    assert numbering.next_test_run_no(db, "ZZQ", date(2026, 3, 1)) == "TR-ZZQ-261001"
+    assert numbering.next_test_run_no(db, "ZZQ", date(2026, 3, 1)) == "AR-ZZQ-261001"
 
 
 # ── 상태 규칙: 폐기는 탑승·자르기·도금 금지, 소진은 자르기만 ─────────────────────
@@ -95,7 +95,7 @@ def test_scrap_and_consumed_rules(db, user_id, m2):
                                       user_id)
     p1, p2 = sorted(run.panels, key=lambda p: p.short_id)
     tpl = db.scalar(select(TestTemplate).where(TestTemplate.code == "BEND_0T"))
-    tr = TestRun(test_run_no="TR-ZZS-26001", test_type="ZZS", template_id=tpl.id, start_date=date(2026, 10, 22),
+    tr = TestRun(test_run_no="AR-ZZS-26001", test_type="ZZS", template_id=tpl.id, start_date=date(2026, 10, 22),
                  owner_id=user_id)
     db.add(tr)
     db.flush()
@@ -133,7 +133,7 @@ def test_nan_and_length_rejected(hhs, m2):
 
     r = hhs.post(f"/api/specimens/{p1}/split", json={"count": 1, "start": 1, "rolling_direction": "TOO-LONG"})
     assert r.status_code == 422 and any("rolling_direction" in x for x in r.json()["items"]), r.text
-    assert hhs.get(f"/api/specimens/{p1}-01").status_code == 404
+    assert hhs.get(f"/api/specimens/{p1}-A").status_code == 404
 
 
 # ── 오류 응답: 범위·FK·경합·손상 파일 → 422/409 (이전에는 500) ──────────────
@@ -141,7 +141,7 @@ def test_errors_map_to_4xx(hhs, m2, monkeypatch):
     marks = api_blanks(hhs, 3)
     sheet = marks[0].rsplit("-", 1)[0] + "-" + marks[0].split("-")[1][0]
     assert hhs.post(f"/api/specimens/{sheet}/split", json={"count": 2, "start": 99}).status_code == 422   # 99 넘음
-    assert hhs.post("/api/process-runs", json=_run_body(m2, ["QV3-1"], project_code="A66")).status_code == 422
+    assert hhs.post("/api/process-runs", json=_run_body(m2, ["QV3-A"], project_code="A66")).status_code == 422
     assert hhs.post("/api/process-runs", json=_run_body(m2, marks[:1], material_id=987654)).status_code == 422
     first = _make_run(hhs, m2, 1)
     # 두 사람이 동시에 저장해 같은 공정런 번호를 받은 상황 → UNIQUE 위반 → 409

@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}전단{% endblock %}
+{% block content %}
+<div x-data="shearPage()" x-init="init()" x-cloak>
+<div class="page-head"><div><div class="crumb"><a href="/specimens">시편</a> › 전단</div><h1 style="font-family:var(--f-body)">전단 · 자식 시편 만들기</h1></div>
+  <div class="acts small muted">모시편을 골라 개수만큼 자르면 각인번호가 이어서 생깁니다. 전폭(A)을 자르면 블랭크(B)가 되어 공정런에서 도금할 수 있습니다.</div></div>
+
+<div class="grid2">
+  <section class="card">
+    <header><h2>{{ icon('spec') }}1. 모시편 고르기</h2><span class="meta">각인번호·전체번호 스캔 또는 목록에서 클릭</span></header>
+    <div class="body form">
+      <div class="row">
+        <label class="f" style="flex:1;min-width:220px">각인번호 / 전체번호<input class="in mono" x-model="q" @keydown.enter.prevent="pick(q)" placeholder="AA1-A 또는 AA1-A6-A-A" autofocus></label>
+        <button class="btn" style="align-self:end" @click="pick(q)">{{ icon('search', 16) }} 찾기</button>
+      </div>
+      <div class="row">
+        <label class="f">코일<select class="in mono" x-model="coil" @change="load()"><option value="">전체</option>
+          {% for c in coils %}<option value="{{ c.coil_code }}">{{ c.coil_code }} · {{ c.coil_no }}</option>{% endfor %}</select></label>
+        <label class="f">과제<select class="in mono" x-model="proj" @change="load()"><option value="">전체</option>
+          {% for p in projects %}<option value="{{ p.project_code }}">{{ p.project_code }} · {{ p.project_name[:16] }}</option>{% endfor %}</select></label>
+        <label class="small" style="display:flex;gap:6px;align-items:center;height:34px;align-self:end"><input type="checkbox" x-model="wide" @change="load()"> 블랭크·실험편도 표시 (후절단)</label>
+      </div>
+    </div>
+    <div class="tablewrap" style="max-height:460px;overflow:auto"><table class="t">
+      <thead><tr><th>각인번호</th><th>전체번호</th><th>단계</th><th>상태</th><th class="n">자식</th><th>크기</th><th>보관</th></tr></thead>
+      <tbody>
+        <template x-for="s in list" :key="s.short_id">
+          <tr @click="select(s)" style="cursor:pointer" :class="parent && parent.short_id === s.short_id ? 'on' : ''">
+            <td class="mono"><b x-text="s.short_id"></b></td><td class="mono small" x-text="s.display_id"></td>
+            <td><span class="stage" x-text="s.stage"></span> <span class="small muted" x-text="s.stage_name"></span></td>
+            <td><span class="chip" :class="'st-' + s.status" x-text="s.status"></span></td>
+            <td class="n" x-text="s.children"></td><td class="mono small" x-text="s.size_text || ''"></td><td class="small" x-text="s.storage_location || ''"></td></tr>
+        </template>
+        <tr class="empty-row" x-show="!list.length"><td colspan="7">자를 수 있는 시편이 없습니다. 먼저 시편 › 입고에서 전폭시편을 등록하세요.</td></tr>
+      </tbody></table></div>
+  </section>
+
+  <section class="card">
+    <header><h2>{{ icon('split') }}2. 전단</h2><span class="meta" x-show="parent" x-text="parent ? parent.level_name + ' 1~' + parent.max : ''"></span></header>
+    <div class="body muted small" x-show="!parent">왼쪽에서 모시편을 고르세요.</div>
+    <template x-if="parent">
+      <div class="body form">
+        <div class="small">모시편 <a class="mono" :href="'/specimens/' + parent.short_id"><b x-text="parent.short_id"></b></a>
+          <span class="mono muted" x-text="parent.display_id"></span> · 이미 자른 자식 <b x-text="parent.children"></b>개</div>
+        <p class="small muted" style="margin:0" x-text="parent.stage === 'A' ? '전폭 → 블랭크는 단계가 A → B로 바뀝니다.' : '단계(' + parent.stage + ')·조건 꼬리는 그대로 물려받습니다.'"></p>
+        <div class="row">
+          <label class="f">개수<input class="in num" type="number" min="1" :max="parent.max" x-model.number="sp.count" @input.debounce.250ms="sp.suggest()"></label>
+          <label class="f">시작 번호<input class="in num mono" type="number" min="1" :max="parent.max" x-model.number="sp.start" @input.debounce.250ms="sp.check()"></label>
+          <label class="f">쓸 과제<select class="in mono" x-model="sp.project">
+            {% for p in projects %}<option value="{{ p.project_code }}">{{ p.project_code }} · {{ p.project_name[:16] }}</option>{% endfor %}</select></label>
+        </div>
+        <div class="small mono">→ 각인번호 <b x-text="sp.range"></b> <span class="muted">(코일·공정런·조건 상속)</span></div>
+        <div class="small" x-show="sp.project !== parent.project_code">다른 과제(<b x-text="sp.project"></b>)로 씁니다 — 자식은 그 과제코드를 받고, 모시편에는 사용 이력이 남습니다.</div>
+        <div class="flash err" x-show="sp.conflicts.length" x-text="'이미 쓰인 번호: ' + sp.conflicts.join(', ')"></div>
+        <div class="row">
+          <label class="f">크기<input class="in" x-model="sp.size_text" :placeholder="{branch: '200x300', cut: '70x150', piece: '20x20'}[parent.level]"></label>
+          <label class="f">폭 위치<select class="in" x-model="sp.sample_position"><option value="">-</option><option>DS</option><option>C</option><option>WS</option></select></label>
+          <label class="f">방향<select class="in" x-model="sp.rolling_direction"><option value="">-</option><option>RD</option><option>TD</option></select></label>
+          <label class="f">평가면<select class="in" x-model="sp.surface_side"><option value="">-</option><option>TOP</option><option>BOTTOM</option></select></label>
+        </div>
+        <label class="f">보관 위치<input class="in" x-model="sp.storage_location" :placeholder="parent.storage_location || ''"></label>
+        <label class="small" style="display:flex;gap:6px;align-items:center"><input type="checkbox" x-model="sp.consume"> 모시편을 모두 잘라 썼음 (상태 → CONSUMED)</label>
+      </div>
+    </template>
+    <footer x-show="parent" style="padding:12px 16px;display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn primary lg" :disabled="sp.busy || sp.conflicts.length > 0 || !sp.range" @click="save()">{{ icon('check', 18) }} 전단 저장</button></footer>
+  </section>
+</div>
+
+<div class="modal" x-show="done" x-transition.opacity style="display:none">
+  <div class="dlg">
+    <header><h3>전단 완료 — <span x-text="done ? done.children.length : 0"></span>개 생성</h3><button class="btn ghost sm x" @click="done=null">{{ icon('x', 16) }}</button></header>
+    <div class="body"><table class="t"><tr><th>각인번호</th><th>전체번호</th><th>단계</th></tr>
+      <template x-for="s in (done ? done.children : [])"><tr><td class="mono"><a :href="'/specimens/' + s.short_id"><b x-text="s.short_id"></b></a></td>
+        <td class="mono small" x-text="s.display_id"></td><td><span class="stage" x-text="s.stage"></span></td></tr></template></table></div>
+    <footer><a class="btn" :href="done && done.engrave_csv">{{ icon('csv', 16) }} 각인 CSV</a><a class="btn" target="_blank" :href="done && done.label_pdf">{{ icon('label', 16) }} 라벨 출력</a>
+      <a class="btn" :href="parent && '/specimens/' + parent.short_id">모시편 상세</a>
+      <button class="btn" @click="again()">계속 전단</button>
+      <a class="btn primary" x-show="done && done.children[0].stage === 'B'" :href="done && '/process-runs/new?specimens=' + done.children.map(c => c.short_id).join(',')">{{ icon('run', 16) }} 이 시편들로 공정런 등록</a></footer>
+  </div>
+</div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const DEFAULT_COUNT = {branch: 10, cut: 2, piece: 3};
+function shearPage() {
+  return {
+    q: "{{ sid }}", coil: "", proj: "", wide: false, list: [], parent: null, done: null,
+    sp: shearForm("", ""),
+    async init() { await this.load(); if (this.q) this.pick(this.q); },
+    async load() {
+      try {
+        const p = new URLSearchParams({coil: this.coil, project: this.proj, wide: this.wide ? 1 : 0});
+        this.list = await LIMS.api("GET", `/api/shear/candidates?${p}`);
+      } catch (e) { LIMS.fail(e); }
+    },
+    async pick(text) {
+      if (!(text || "").trim()) return;
+      try { this.select(await LIMS.api("GET", `/api/shear/parent/${encodeURIComponent(text.trim().toUpperCase())}`)); }
+      catch (e) { LIMS.fail(e); }
+    },
+    select(s) {
+      this.parent = s; this.q = s.short_id;
+      this.sp.reset(s.short_id, s.project_code, DEFAULT_COUNT[s.level] || 1);
+      this.sp.suggest();
+    },
+    async save() {
+      const r = await this.sp.save();
+      if (!r) return;
+      this.done = r;
+      LIMS.toast(`${r.children.length}개 생성`, "ok");
+      this.load();
+    },
+    async again() {
+      this.done = null;
+      await this.pick(this.parent.short_id);    // 자식 수·다음 번호 새로
+    },
+  };
+}
+</script>
+{% endblock %}

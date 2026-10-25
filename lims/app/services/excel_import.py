@@ -1,21 +1,22 @@
 """과거 엑셀 데이터 일괄 가져오기 (11.1 2단계).
 
-양식(시트 이름 고정, 없는 시트는 건너뜀) — 처리 순서: 입고 → 전단 → 공정런 → 분기 → 실측 → 시험결과
+양식(시트 이름 고정, 없는 시트는 건너뜀) — 처리 순서: 입고 → 전단 → 공정런 → 분기 → 실측 → 분석결과
   입고:     코일번호 | 과제 | 매수 | 시작번호 | 채취위치 | 강종 | 두께 | 크기 | 보관위치
-            (현장 코일번호 CQV3141T → 코일코드 QV3, 전폭시편 QV3-1, QV3-2 …)
-  전단:     부모 | 개수 | 시작번호 | 과제 | 크기 | 보관위치        (전폭 QV3-1 → 블랭크 QV3-101 …)
+            (현장 코일번호 CQV3141T → 코일코드 QV3, 전폭시편 QV3-A, QV3-B …. 시작번호는 n번째: 1 = A)
+  전단:     부모 | 개수 | 시작번호 | 과제 | 크기 | 보관위치        (전폭 QV3-A → 블랭크 QV3-A01 …)
   공정런:   키 | 과제 | 일자 | 프리셋 | 목표부착량 | 시편 | 원소재 | 메모 | (사전 키 열: pot.T, rth.DP …)
-            '시편'은 도금할 각인번호 목록(쉼표) 또는 범위 'QV3-101~105'.
+            '시편'은 도금할 각인번호 목록(쉼표) 또는 범위 'QV3-A01~A05'.
             '키'는 이 파일 안에서만 쓰는 이름(예: R1). 실측 시트에서 공정런을 가리킬 때 씁니다.
-  분기:     부모 | 개수 | 시작번호 | 과제 | 크기 | 위치 | 방향 | 평가면   (도금판 → 실험편 → 분석조각)
+  분기:     부모 | 개수 | 시작번호 | 과제 | 크기 | 위치 | 방향 | 평가면   (도금판 → 실험편 QV3-A01-A → 분석조각 QV3-A01-A-1, 시작번호는 n번째)
   실측:     공정런(키 또는 PR-번호) | 시편(빈칸 = 세션 공통) | (사전 키 또는 라벨 열…) | 방법
-  시험결과: 그룹 | 템플릿 | 설비 | 시작일 | 시편 | 슬롯 | 회차 | (템플릿 필드 키 또는 라벨 열…)
-            같은 '그룹' 값의 행은 한 시험런으로 묶입니다(시험런 번호는 자동 발번).
+  분석결과: 그룹 | 템플릿 | 설비 | 시작일 | 시편 | 슬롯 | 회차 | (템플릿 필드 키 또는 라벨 열…)
+            같은 '그룹' 값의 행은 한 분석런으로 묶입니다(분석런 번호는 자동 발번). 옛 시트 이름 '시험결과'도 읽습니다.
 모든 시트를 한 트랜잭션으로 처리하고, 오류가 하나라도 있으면 아무것도 저장하지 않습니다.
 """
 from __future__ import annotations
 
 import io
+import re
 import zipfile
 from datetime import date, datetime
 
@@ -30,11 +31,11 @@ from . import actuals, marking, workflow
 from . import param_dict as pdict
 from .templates_engine import MetricsError
 
-SHEETS = ("입고", "전단", "공정런", "분기", "실측", "시험결과")
+SHEETS = ("입고", "전단", "공정런", "분기", "실측", "분석결과")
 
 
 def expand_marks(text) -> list[str]:
-    """'QV3-101~105, QV3-201' → ['QV3-101', …, 'QV3-105', 'QV3-201']. 범위는 마지막 자리 숫자만."""
+    """'QV3-A01~A05, QV3-B01' → ['QV3-A01', …, 'QV3-A05', 'QV3-B01']. 범위는 끝의 숫자만('QV3-A01~05'도 됨)."""
     out = []
     for part in str(text or "").replace("\n", ",").replace(";", ",").split(","):
         part = part.strip().upper()
@@ -42,10 +43,11 @@ def expand_marks(text) -> list[str]:
             continue
         if "~" in part:
             a, b = (x.strip() for x in part.split("~", 1))
-            head, _, last = a.rpartition("-")
-            if not (last.isdigit() and b.isdigit()):
-                raise ValueError(f"범위는 숫자 자리만: {part}")
-            out += [f"{head}-{n:0{len(last)}d}" for n in range(int(last), int(b) + 1)]
+            ma, mb = re.fullmatch(r"(.*?)(\d+)", a), re.fullmatch(r"(\D*)(\d+)", b)
+            if not (ma and mb and ma[1].endswith(mb[1])):
+                raise ValueError(f"범위는 끝의 숫자 자리만: {part} (예: QV3-A01~A05)")
+            head, last = ma[1], ma[2]
+            out += [f"{head}{n:0{len(last)}d}" for n in range(int(last), int(mb[2]) + 1)]
         else:
             out.append(part)
     return out
@@ -73,12 +75,23 @@ def _date(v) -> date:
     return date.fromisoformat(str(v).strip()[:10])
 
 
-def _keymap() -> dict[str, str]:
-    km = {}
+def _keymap():
+    """열 이름 → 사전 키. 그대로 맞는 이름이 먼저이고, 대소문자만 다른 이름은 하나로 정해질 때만 씁니다
+    (pot.T 욕온 ↔ pot.t 침지 시간처럼 대소문자로만 갈리는 키가 있어, 대문자로만 찾으면 욕온이 침지 시간에 들어감)."""
+    exact: dict[str, str] = {}
+    folded: dict[str, set[str]] = {}
     for k, p in pdict.params().items():
         for name in (k, p["l"], f"{p['section_nm']} {p['l']}", *p.get("aka", [])):
-            km[name.upper()] = k
-    return km
+            exact.setdefault(name, k)
+            folded.setdefault(name.upper(), set()).add(k)
+
+    def lookup(col: str) -> str | None:
+        col = str(col).strip()
+        if col in exact:
+            return exact[col]
+        ks = folded.get(col.upper(), set())
+        return next(iter(ks)) if len(ks) == 1 else None
+    return lookup
 
 
 def _split_sheet(db: Session, wb, sheet: str, user_id: int | None, report: dict) -> None:
@@ -144,7 +157,7 @@ def run_import(db: Session, data: bytes, user_id: int | None, dry_run: bool = Tr
                     continue
                 recipe = pdict.preset_recipe(preset.overrides)
                 for col, v in r.items():
-                    k = km.get(col.upper())
+                    k = km(col)
                     if k and v not in (None, "") and k != "out.cw":
                         sec, pk = k.split(".")
                         recipe.setdefault(sec, {})[pk] = float(v) if pdict.is_numeric(k) else v
@@ -193,7 +206,7 @@ def run_import(db: Session, data: bytes, user_id: int | None, dry_run: bool = Tr
             for col, v in r.items():
                 if col in ("공정런", "시편", "방법") or v in (None, ""):
                     continue
-                k = km.get(col.upper())
+                k = km(col)
                 if k is None:
                     report["warnings"].append(f"{where}: 사전에 없는 열 '{col}' 무시")
                     continue
@@ -208,17 +221,18 @@ def run_import(db: Session, data: bytes, user_id: int | None, dry_run: bool = Tr
         for run in {r for r in run_keys.values()} | set(db.scalars(select(ProcessRun).where(ProcessRun.id.in_(touched)))):
             actuals.recompute_run(db, run)
 
-    # ── 시험결과 ──
-    if "시험결과" in wb.sheetnames:
+    # ── 분석결과 (옛 이름 '시험결과'도 읽음) ──
+    res_sheet = next((n for n in ("분석결과", "시험결과") if n in wb.sheetnames), None)
+    if res_sheet:
         groups: dict[str, list[tuple[int, dict]]] = {}
-        for i, r in enumerate(_rows(wb["시험결과"]), start=2):
+        for i, r in enumerate(_rows(wb[res_sheet]), start=2):
             groups.setdefault(str(r.get("그룹") or f"행{i}"), []).append((i, r))
         for g, rows in groups.items():
             first = rows[0][1]
             tpl = db.scalar(select(TestTemplate).where(TestTemplate.code == str(first.get("템플릿", "")).strip().upper(),
                                                        TestTemplate.is_active.is_(True)))
             if tpl is None:
-                err.append(f"시험결과 그룹 {g}: 템플릿 '{first.get('템플릿')}'이 없습니다")
+                err.append(f"분석결과 그룹 {g}: 템플릿 '{first.get('템플릿')}'이 없습니다")
                 continue
             fmap = {f["key"].upper(): f["key"] for f in tpl.field_schema} | \
                    {f["label"].upper(): f["key"] for f in tpl.field_schema}
@@ -230,7 +244,7 @@ def run_import(db: Session, data: bytes, user_id: int | None, dry_run: bool = Tr
                 elif sid not in boards:
                     boards[sid] = r.get("슬롯")
             if missing:
-                err.append(f"시험결과 그룹 {g}: 없는 시편 {', '.join(sorted(set(missing)))}")
+                err.append(f"분석결과 그룹 {g}: 없는 시편 {', '.join(sorted(set(missing)))}")
                 continue
             try:
                 tr = workflow.create_test_run(db, TestRunIn(
@@ -244,12 +258,12 @@ def run_import(db: Session, data: bytes, user_id: int | None, dry_run: bool = Tr
                         continue
                     spec = workflow.find_specimen(db, str(r["시편"]))
                     _, w = workflow.save_result(db, tr, spec, int(r.get("회차") or 0), metrics, user_id)
-                    report["warnings"] += [f"시험결과 {i}행: {x}" for x in w]
+                    report["warnings"] += [f"분석결과 {i}행: {x}" for x in w]
                     report["created"]["results"] += 1
             except MetricsError as e:
-                err.append(f"시험결과 그룹 {g}: {'; '.join(e.errors)}")
+                err.append(f"분석결과 그룹 {g}: {'; '.join(e.errors)}")
             except (workflow.Invalid, ValueError, TypeError) as e:
-                err.append(f"시험결과 그룹 {g}: {e}")
+                err.append(f"분석결과 그룹 {g}: {e}")
 
     if err or dry_run:
         db.rollback()
@@ -266,24 +280,24 @@ def template_workbook() -> bytes:
     ws = wb.active
     ws.title = "입고"
     ws.append(["코일번호", "과제", "매수", "시작번호", "채취위치", "강종", "두께", "크기", "보관위치"])
-    ws.append(["CQV3141T", "A6", 2, None, "T", "SPCC", 0.8, "1200x600", "보관함 A-3"])
+    ws.append(["CQV3141T", "A6", 2, None, "T", "590DP", 0.8, "1200x600", "보관함 A-3"])
     ws = wb.create_sheet("전단")
     ws.append(["부모", "개수", "시작번호", "과제", "크기", "보관위치"])
-    ws.append(["QV3-1", 3, 1, None, "200x300", "보관함 A-3"])
+    ws.append(["QV3-A", 3, 1, None, "200x300", "보관함 A-3"])
     ws = wb.create_sheet("공정런")
     ws.append(["키", "과제", "일자", "프리셋", "목표부착량", "시편", "원소재", "메모", "pot.T", "rth.DP"])
-    ws.append(["R1", "A6", "2025-03-14", "M2", 60, "QV3-101~103", "CQV3141", "과거 데이터", 590, -40])
+    ws.append(["R1", "A6", "2025-03-14", "M2", 60, "QV3-A01~A03", "CQV3141", "과거 데이터", 590, -40])
     ws = wb.create_sheet("분기")
     ws.append(["부모", "개수", "시작번호", "과제", "크기", "위치", "방향", "평가면"])
-    ws.append(["QV3-101", 2, 1, None, "70x150", "C", "RD", "TOP"])
+    ws.append(["QV3-A01", 2, 1, None, "70x150", "C", "RD", "TOP"])
     ws = wb.create_sheet("실측")
     ws.append(["공정런", "시편", "방법", "욕온", "이슬점", "최고 판온", "부착량 윗면", "부착량 아랫면"])
     ws.append(["R1", "", "열전대", 588, -38, None, None, None])
-    ws.append(["R1", "QV3-101", "중량법", None, None, 801, 57, 59])
-    ws = wb.create_sheet("시험결과")
+    ws.append(["R1", "QV3-A01", "중량법", None, None, 801, 57, 59])
+    ws = wb.create_sheet("분석결과")
     ws.append(["그룹", "템플릿", "설비", "시작일", "시편", "슬롯", "회차", "red_rust_pct", "white_rust_pct"])
-    ws.append(["G1", "CCT_STD", "CCT-01", "2025-03-20", "QV3-101-01", "A-01", 0, 0, 0])
-    ws.append(["G1", "CCT_STD", "CCT-01", "2025-03-20", "QV3-101-01", "A-01", 1, 0, 5])
+    ws.append(["G1", "CCT_STD", "CCT-01", "2025-03-20", "QV3-A01-A", "A-01", 0, 0, 0])
+    ws.append(["G1", "CCT_STD", "CCT-01", "2025-03-20", "QV3-A01-A", "A-01", 1, 0, 5])
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()

@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from ..auth import can_edit, ensure_can_edit, require_admin, require_user
 from ..db import get_db
-from ..models import (Attachment, Material, MasterCode, ProcessRun, Project, RunSpecimen, Specimen, SpecimenEvent,
-                      TestResult, TestRun, User)
+from ..models import (Attachment, Material, MasterCode, ProcessRun, ProcessVariant, Project, RunSpecimen, Specimen,
+                      SpecimenEvent, TestResult, TestRun, User)
 from ..schemas import EventIn, IntakeIn, SplitIn, TreatIn
 from ..services import actuals, export, lineage, marking, numbering, workflow
 from ..services import param_dict as pdict
@@ -23,7 +23,8 @@ router = APIRouter()
 # 직접 넣는 이벤트. HEAT·PRETREAT·PAINT는 단계·꼬리를 바꾸는 공정(workflow.treat), PLATE·USE는 시스템이 남김.
 EVENT_TYPES = {"HEAT": "열처리", "PRETREAT": "전처리(화성 등)", "PAINT": "도장", "MOVE": "보관 이동",
                "SCRAP": "폐기", "NOTE": "메모"}
-EVENT_NAMES = EVENT_TYPES | {"PLATE": "도금", "USE": "사용(과제·담당 변경)", "POST_TREAT": "후처리(이전 기록)"}
+EVENT_NAMES = EVENT_TYPES | {"PLATE": "도금", "UNPLATE": "도금 취소", "CUT": "전단·자르기", "USE": "사용(과제·담당 변경)",
+                             "POST_TREAT": "후처리(이전 기록)"}
 STATUSES = ("AVAILABLE", "IN_TEST", "CONSUMED", "SCRAP")
 
 
@@ -55,7 +56,8 @@ def list_page(request: Request, project: str = "", stage: str = "", status: str 
     if plated in ("0", "1"):         # 거친 공정은 JSON이라 파이썬에서 거름
         specs = [s for s in specs if s.has_step("PLATE") == (plated == "1")]
     projects = db.scalars(select(Project).order_by(Project.project_code.desc())).all()
-    return render(request, "specimens.html", nav="spec", specs=specs, projects=projects, f=dict(
+    coils = db.scalars(select(Material).where(Material.coil_code.is_not(None)).order_by(Material.coil_code)).all()
+    return render(request, "specimens.html", nav="spec", specs=specs, projects=projects, coils=coils, f=dict(
         project=project, stage=stage, status=status, mine=mine, deleted=deleted, coil=coil, plated=plated),
         statuses=STATUSES, STAGES=marking.STAGES)
 
@@ -66,6 +68,48 @@ def intake_page(request: Request, user: User = Depends(require_user), db: Sessio
     coils = db.scalars(select(Material).where(Material.coil_code.is_not(None))
                        .order_by(Material.received_date.desc().nulls_last(), Material.id.desc()).limit(50)).all()
     return render(request, "specimen_intake.html", nav="spec", projects=projects, coils=coils)
+
+
+@router.get("/specimens/shear")
+def shear_page(request: Request, sid: str = "", user: User = Depends(require_user), db: Session = Depends(get_db)):
+    """전단: 모시편을 골라 자식 시편(전폭 → 블랭크, 그 뒤 후절단·분석조각)을 일괄 생성. 로직은 split API 재사용."""
+    projects = db.scalars(select(Project).order_by(Project.is_common, Project.project_code.desc())).all()
+    coils = db.scalars(select(Material).where(Material.coil_code.is_not(None)).order_by(Material.coil_code)).all()
+    return render(request, "specimen_shear.html", nav="shear", projects=projects, coils=coils, sid=sid.strip().upper())
+
+
+def shear_json(s: Specimen) -> dict:
+    """전단 화면의 모시편 정보: 다음 번호 제안·번호 자리 이름·상한."""
+    level = numbering.child_level(s)
+    out = spec_json(s) | {"children": sum(not c.is_deleted for c in s.children), "level": level}
+    if level is not None:
+        name, _, hi = numbering.LEVELS[level]
+        out |= {"level_name": name, "max": hi, "child_stage": "B" if s.stage == "A" else s.stage}
+    return out
+
+
+@router.get("/api/shear/candidates")
+def shear_candidates(coil: str = "", project: str = "", wide: int = 0, user: User = Depends(require_user),
+                     db: Session = Depends(get_db)):
+    """자를 수 있는 모시편: 기본은 쓸 수 있는 전폭시편(A), wide=1이면 블랭크·실험편까지(분석조각·폐기·소진 제외)."""
+    q = select(Specimen).where(Specimen.is_deleted.is_(False), Specimen.status.not_in(("SCRAP", "CONSUMED")))
+    if not wide:
+        q = q.where(Specimen.stage == "A")
+    if coil:
+        q = q.where(Specimen.coil_code == coil.strip().upper())
+    if project:
+        q = q.where(Specimen.project_code == project.strip().upper())
+    specs = db.scalars(q.order_by(Specimen.short_id).limit(300)).all()
+    return [shear_json(s) for s in specs if numbering.child_level(s) is not None]
+
+
+@router.get("/api/shear/parent/{short_id}")
+def shear_parent(short_id: str, user: User = Depends(require_user), db: Session = Depends(get_db)):
+    """각인번호·전체번호(AA1-A6-A-A)로 모시편 찾기."""
+    s = get_spec(db, short_id)
+    if numbering.child_level(s) is None:
+        raise HTTPException(422, f"{s.short_id}은 분석조각이라 더 자를 수 없습니다.")
+    return shear_json(s)
 
 
 @router.post("/api/specimens/{short_id}/restore")
@@ -88,6 +132,8 @@ def detail_context(db: Session, spec: Specimen) -> dict:
     # 공정 조건 (목표 → 실측): 사전 순서, 값이 있는 키만
     params = []
     actual_code = None
+    own_manual = {}             # 이 시편에 직접 넣은 수기 실측 (시편 상세에서 수정하는 값)
+    run_keys = set()            # 세션 공통 키: 공정런 전체 값이라 시편 화면에서는 고치지 않음
     if spec.process_run is not None:
         ra = actuals.RunActuals(db, spec.process_run)
         eff = ra.all_for(spec)
@@ -95,8 +141,13 @@ def detail_context(db: Session, spec: Specimen) -> dict:
         for k in [*quick, *[k for k in pdict.numeric_keys() if k not in quick]]:
             if k in eff and k != "out.cw":
                 params.append(eff[k])
+                if pdict.actual_cfg(k)["level"] == "run":
+                    run_keys.add(k)
+                man = [r for r in ra.rows.get((spec.id, k), []) if r.source == "manual" and r.value is not None]
+                if man:
+                    own_manual[k] = man[-1].value
         actual_code = actuals.actual_condition_code(db, spec)
-    # 시험 이력: 자신 + 조상 (조각 상세에서도 원판·쿠폰 시험이 한 화면에, 11.2 #7)
+    # 분석 이력: 자신 + 조상 (조각 상세에서도 원판·쿠폰 분석이 한 화면에, 11.2 #7)
     boardings = db.scalars(select(RunSpecimen).where(RunSpecimen.specimen_id.in_(ids))
                            .join(TestRun).order_by(TestRun.start_date.desc())).all()
     tests = []
@@ -128,18 +179,25 @@ def detail_context(db: Session, spec: Specimen) -> dict:
         MasterCode.category == k, MasterCode.is_active.is_(True)).order_by(MasterCode.code))]
         for k in ("HEAT", "PRETREAT", "PAINT")}
     projects = db.scalars(select(Project).order_by(Project.is_common, Project.project_code.desc())).all()
+    variant = None
+    if spec.condition_code and spec.variant_seq is not None:
+        variant = db.scalar(select(ProcessVariant).where(ProcessVariant.family == spec.condition_code[:2],
+                                                         ProcessVariant.seq == spec.variant_seq))
     return {"spec": spec, "chain": lineage.chain(spec), "tree": lineage.descendants_tree(spec), "params": params,
-            "actual_code": actual_code, "tests": tests, "files": files, "events": events,
+            "actual_code": actual_code, "variant": variant, "tests": tests, "files": files, "events": events,
             "split": split, "EVENT_TYPES": EVENT_TYPES, "EVENT_NAMES": EVENT_NAMES, "STATUSES": STATUSES,
             "processes": lineage.processes(spec), "treat_codes": treat_codes, "projects": projects,
-            "TREATMENTS": marking.TREATMENTS}
+            "TREATMENTS": marking.TREATMENTS, "run": spec.process_run, "own_manual": own_manual,
+            "run_keys": run_keys}
 
 
 @router.get("/specimens/{short_id}")
 def detail_page(request: Request, short_id: str, user: User = Depends(require_user), db: Session = Depends(get_db)):
     spec = get_spec(db, short_id)
     ctx = detail_context(db, spec)
-    return render(request, "specimen_detail.html", nav="spec", can_edit=can_edit(user, spec.owner_id), **ctx)
+    run = spec.process_run
+    return render(request, "specimen_detail.html", nav="spec", can_edit=can_edit(user, spec.owner_id),
+                  can_edit_actual=bool(run) and can_edit(user, spec.owner_id, run.operator_id), **ctx)
 
 
 # ── API ──────────────────────────────────────────────────────────
@@ -147,7 +205,8 @@ def spec_json(s: Specimen) -> dict:
     return {"short_id": s.short_id, "display_id": s.display_id, "engraved_label": s.engraved_label,
             "stage": s.stage, "stage_name": s.stage_name, "kind": s.kind_name, "status": s.status,
             "project_code": s.project_code, "coil_code": s.coil_code, "tail": s.tail,
-            "steps": s.steps or [], "condition_code": s.condition_code,
+            "steps": s.steps or [], "condition_code": s.condition_code, "variant_seq": s.variant_seq,
+            "condition_label": s.condition_label,
             "parent": s.parent.short_id if s.parent else None,
             "process_run": s.process_run.run_no if s.process_run else None,
             "material": s.material.coil_no if s.material else None, "size_text": s.size_text,
@@ -197,7 +256,7 @@ def coil_suggest(coil_no: str, count: int = 1, user: User = Depends(require_user
     """현장 코일번호 → 코일코드 제안 + 다음 전폭번호. 이미 등록된 코일이면 그 코드."""
     base, pos = marking.split_field_coil(coil_no)
     mat = db.scalar(select(Material).where(Material.coil_no == base))
-    count = max(1, min(count, 9))
+    count = max(1, min(count, len(marking.MARK_LETTERS)))
     try:
         code, derived = marking.suggest_coil_code(db, base)
         sheet = numbering.next_sheet(db, code, count)
@@ -205,7 +264,7 @@ def coil_suggest(coil_no: str, count: int = 1, user: User = Depends(require_user
         raise HTTPException(422, str(e))
     return {"coil_no": base, "position": pos, "coil_code": code, "existing": bool(mat and mat.coil_code),
             "derived": derived, "sheet_start": sheet,
-            "marks": [marking.mark_id(code, str(n)) for n in range(sheet, sheet + count)]}
+            "marks": [marking.mark_id(code, marking.letter_of(n)) for n in range(sheet, sheet + count)]}
 
 
 @router.get("/api/plating/candidates")
@@ -254,6 +313,22 @@ def treat_api(short_id: str, data: TreatIn, user: User = Depends(require_user), 
     spec = workflow.treat(db, get_spec(db, short_id), data, user.id)
     db.commit()
     return spec_json(spec)
+
+
+class UnplateIn(BaseModel):
+    reason: str | None = Field(default=None, max_length=200)
+
+
+@router.post("/api/specimens/{short_id}/unplate")
+def unplate_api(short_id: str, data: UnplateIn | None = None, user: User = Depends(require_user),
+                db: Session = Depends(get_db)):
+    """도금 취소: 공정런에서 빼고 도금 전 단계(블랭크)로 되돌림. 시편 소유자·공정런 작업자·관리자만."""
+    spec = get_spec(db, short_id)
+    run = spec.process_run
+    ensure_can_edit(user, spec.owner_id, run.operator_id if run else None)
+    run = workflow.unplate(db, spec, user.id, data.reason if data else None)
+    db.commit()
+    return spec_json(spec) | {"run_no": run.run_no, "panels_left": len(run.panels)}
 
 
 @router.post("/api/specimens/{short_id}/events")

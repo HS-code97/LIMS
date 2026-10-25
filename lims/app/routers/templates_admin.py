@@ -1,4 +1,4 @@
-"""시험 템플릿 편집 (2단계, D-24). 고치면 새 버전이 생기고 기존 결과는 저장 당시 버전으로 해석합니다."""
+"""분석 템플릿 편집 (2단계, D-24). 고치면 새 버전이 생기고 기존 결과는 저장 당시 버전으로 해석합니다."""
 from __future__ import annotations
 
 import re
@@ -18,7 +18,7 @@ from ..web import render
 router = APIRouter()
 KEY_RE = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
 CODE_RE = re.compile(r"^[A-Z][A-Z0-9_]{1,29}$")
-# 시험런 번호 TR-{종류}-{YY}{순번}이 test_run_no(20자)에 들어가도록 종류는 10자까지
+# 분석런 번호 AR-{종류}-{YY}{순번}이 test_run_no(20자)에 들어가도록 종류는 10자까지
 TYPE_RE = re.compile(r"^[A-Z][A-Z0-9]{1,9}$")
 FIELD_TYPES = ("number", "select", "text", "bool")
 
@@ -52,7 +52,7 @@ def validate_template(data: TemplateIn) -> list[str]:
     if not CODE_RE.match(data.code):
         errs.append("코드는 영문 대문자·숫자·_ (예: CCT_STD)")
     if not TYPE_RE.match(data.test_type):
-        errs.append("시험 종류는 영문 대문자·숫자 2~10자 (예: CCT) — 시험런 번호 TR-{종류}-YY### 에 쓰입니다")
+        errs.append("분석 종류는 영문 대문자·숫자 2~10자 (예: CCT) — 분석런 번호 AR-{종류}-YY### 에 쓰입니다")
     if not data.field_schema:
         errs.append("결과 필드가 하나 이상 있어야 합니다")
     for group, fields in (("결과", data.field_schema), ("운전조건", data.condition_schema)):

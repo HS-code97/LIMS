@@ -1,15 +1,15 @@
-"""업무 흐름: 입고(전폭시편), 공정런 도금(P1), 열처리·전처리·도장, 자르기(P2), 시험런·탑승(P3), 결과 저장(P4), 실측 붙여넣기."""
+"""업무 흐름: 입고(전폭시편), 공정런 도금(P1), 열처리·전처리·도장, 자르기(P2), 분석런·탑승(P3), 결과 저장(P4), 실측 붙여넣기."""
 from __future__ import annotations
 
 import copy
 import re
 from datetime import date, datetime
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from ..errors import Conflict, Invalid  # noqa: F401  (기존 import 경로 workflow.Conflict·Invalid 유지)
-from ..models import (MasterCode, Material, ParamActual, ProcessPreset, ProcessRun, Project, RunSpecimen, Specimen,
+from ..models import (EffectiveParam, MasterCode, Material, ParamActual, ProcessPreset, ProcessRun, Project, RunSpecimen, Specimen,
                       SpecimenEvent, TestResult, TestRun, TestTemplate)
 from ..schemas import IntakeIn, ProcessRunIn, SplitIn, TestRunIn, TreatIn
 from . import actuals, marking
@@ -73,7 +73,7 @@ def _raise_stage(spec: Specimen, stage: str | None) -> None:
 
 def _unusable(spec: Specimen) -> str | None:
     if spec.status in NO_BOARDING or spec.status == "IN_TEST":
-        return STATUS_NAME.get(spec.status, "시험 중")
+        return STATUS_NAME.get(spec.status, "분석 중")
     return None
 
 
@@ -109,7 +109,7 @@ def intake(db: Session, data: IntakeIn, user_id: int | None) -> list[Specimen]:
         raise Conflict("이미 쓰인 전폭번호가 있습니다.", clash)
     out = []
     for n in range(start, start + data.count):
-        sp = Specimen(project_code=data.project_code, stage="A", coil_code=code, branch=str(n), material_id=mat.id,
+        sp = Specimen(project_code=data.project_code, stage="A", coil_code=code, branch=marking.letter_of(n), material_id=mat.id,
                       owner_id=user_id, coil_position=(data.coil_position or pos or None), steps=[],
                       size_text=data.size_text or None, storage_location=data.storage_location or None,
                       note=data.note or None)
@@ -172,15 +172,56 @@ def create_process_run(db: Session, payload: ProcessRunIn, user_id: int | None) 
     db.add(run)
     db.flush()
     # 3. 같은 트랜잭션에서 시편마다 도금 단계로 (과제는 공정런 과제로, 다른 사람 시편이면 USE 이력)
+    #    원판마다 조건부 + 변형번호(공정 계열 안의 조건 카드, 없으면 새로 발급)
+    base_vals = _preset_values(preset)
     for i, sp in enumerate(specs):
         ov = overrides[i] or None
-        code = cc.code_from_recipe(codes, sys_code, pdict.merge(recipe, ov), preferred)
+        target = pdict.merge(recipe, ov)
+        code = cc.code_from_recipe(codes, sys_code, target, preferred)
+        seq = cc.assign_variant(db, code, target, base=base_vals, run_id=run.id, user_id=user_id)
         _use(db, sp, user_id, payload.project_code, f"도금 {run.run_no}", payload.run_date)
-        sp.process_run_id, sp.is_panel, sp.target_overrides, sp.condition_code = run.id, True, ov, code
-        sp.steps = [*(sp.steps or []), {"k": "PLATE", "run": run.run_no, "date": payload.run_date.isoformat()}]
+        sp.process_run_id, sp.is_panel, sp.target_overrides = run.id, True, ov
+        sp.condition_code, sp.variant_seq = code, seq
+        sp.steps = [*(sp.steps or []), {"k": "PLATE", "run": run.run_no, "date": payload.run_date.isoformat(),
+                                         "from": sp.stage}]     # 도금 취소 때 되돌릴 단계
         _raise_stage(sp, "C")
         db.add(SpecimenEvent(specimen_id=sp.id, event_type="PLATE", event_date=payload.run_date, user_id=user_id,
-                             params={"run": run.run_no, "code": code}))
+                             params={"run": run.run_no, "code": sp.condition_label}))
+    db.flush()
+    db.expire(run, ["panels"])
+    actuals.recompute_run(db, run)
+    return run
+
+
+def unplate(db: Session, spec: Specimen, user_id: int | None, reason: str | None = None) -> ProcessRun:
+    """도금 취소: 잘못 고른 시편을 공정런에서 빼고 도금 전 단계로 되돌립니다. 각인번호·과제·담당은 그대로.
+    도금 뒤 기록(후공정·자식·분석런 탑승·실측)이 생겼으면 되돌리면 이력이 어긋나므로 막습니다."""
+    steps = list(spec.steps or [])
+    i = next((i for i, s in enumerate(steps) if s.get("k") == "PLATE"), None)
+    run = spec.process_run
+    if i is None or run is None or not spec.is_panel:
+        raise Invalid(f"{spec.short_id}은 공정런으로 도금한 원판이 아닙니다.")
+    blocks = []
+    if steps[i + 1:]:
+        blocks.append("도금 뒤 다른 공정(" + ", ".join(marking.TREATMENTS[s["k"]]["name"] for s in steps[i + 1:]
+                                              if s.get("k") in marking.TREATMENTS) + ")이 있음")
+    if any(not c.is_deleted for c in spec.children):
+        blocks.append("이미 자른 자식 시편이 있음")
+    if db.scalar(select(RunSpecimen.specimen_id).where(RunSpecimen.specimen_id == spec.id).limit(1)) is not None:
+        blocks.append("분석런에 탑승한 이력이 있음")
+    if db.scalar(select(ParamActual.id).where(ParamActual.specimen_id == spec.id).limit(1)) is not None:
+        blocks.append("이 시편의 실측값이 있음")
+    if blocks:
+        raise Invalid(f"{spec.short_id}은 도금을 취소할 수 없습니다.", blocks)
+    plate = steps.pop(i)
+    code = spec.condition_label
+    spec.steps = steps
+    spec.stage = plate.get("from") or ("B" if spec.parent_id else "A")
+    spec.process_run, spec.is_panel, spec.target_overrides, spec.condition_code = None, False, None, None
+    spec.variant_seq = None
+    db.execute(delete(EffectiveParam).where(EffectiveParam.specimen_id == spec.id))
+    db.add(SpecimenEvent(specimen_id=spec.id, event_type="UNPLATE", event_date=date.today(), user_id=user_id,
+                         params={"run": run.run_no, "code": code, "reason": reason or None}))
     db.flush()
     db.expire(run, ["panels"])
     actuals.recompute_run(db, run)
@@ -213,19 +254,26 @@ def treat(db: Session, spec: Specimen, data: TreatIn, user_id: int | None) -> Sp
 
 
 # ── 목표 정정 (6.7 목표 변경 시 재계산) ─────────────────────────────────
+def _preset_values(preset: ProcessPreset | None) -> dict | None:
+    """새 조건 카드 이름(바뀐 값)의 비교 기준: 출발한 프리셋의 공정값 (계열에 공용 표준이 있으면 표준이 우선)."""
+    return cc.process_values(pdict.preset_recipe(preset.overrides)) if preset else None
+
+
 def refresh_condition_codes(db: Session, run: ProcessRun, codes: cc.CodeBook | None = None) -> int:
-    """공정런 시편들(원판과 자른 실험편)의 현재 조건부(목표 기준)를 다시 만듭니다. 조건부는 전체번호의 꼬리라
-    DB에만 있으므로 바로 바뀌고, 각인번호는 그대로입니다(시편번호 체계 3.3절). 바뀐 시편 수를 돌려줌."""
+    """공정런 시편들(원판과 자른 실험편)의 현재 조건부(목표 기준)와 변형번호를 다시 만듭니다. 꼬리는 DB에만
+    있으므로 바로 바뀌고, 각인번호는 그대로입니다(시편번호 체계 3.3절). 바뀐 시편 수를 돌려줌."""
     codes = codes or cc.CodeBook.load(db)
     preferred = run.preset.bath_code if run.preset else None
     run.base_condition_code = cc.code_from_recipe(codes, run.coating_system, run.recipe, preferred)
+    base_vals = _preset_values(run.preset)
     changed = 0
-    for s in db.scalars(select(Specimen).where(Specimen.process_run_id == run.id)):
+    for s in db.scalars(select(Specimen).where(Specimen.process_run_id == run.id).order_by(Specimen.id)):
         panel = cc.panel_of(s)
-        code = cc.code_from_recipe(codes, run.coating_system,
-                                   pdict.merge(run.recipe, panel.target_overrides if panel else None), preferred)
-        if s.condition_code != code:
-            s.condition_code = code
+        target = pdict.merge(run.recipe, panel.target_overrides if panel else None)
+        code = cc.code_from_recipe(codes, run.coating_system, target, preferred)
+        seq = cc.assign_variant(db, code, target, base=base_vals, run_id=run.id)
+        if (s.condition_code, s.variant_seq) != (code, seq):
+            s.condition_code, s.variant_seq = code, seq
             changed += 1
     return changed
 
@@ -310,7 +358,8 @@ def split(db: Session, parent: Specimen, data: SplitIn, user_id: int | None) -> 
     for n in range(data.start, data.start + data.count):
         k = Specimen(project_code=project, stage=stage, coil_code=parent.coil_code, parent_id=parent.id,
                      process_run_id=parent.process_run_id, material_id=parent.material_id, owner_id=user_id,
-                     condition_code=parent.condition_code, steps=list(parent.steps or []),
+                     condition_code=parent.condition_code, variant_seq=parent.variant_seq,
+                     steps=list(parent.steps or []),
                      coil_position=parent.coil_position,
                      sample_position=data.sample_position, rolling_direction=data.rolling_direction,
                      surface_side=data.surface_side, size_text=data.size_text or DEFAULT_SIZE[level],
@@ -319,10 +368,12 @@ def split(db: Session, parent: Specimen, data: SplitIn, user_id: int | None) -> 
         k.set_mark()
         db.add(k)
         kids.append(k)
+    what = f"자르기 {kids[0].short_id}" + (f" ~ {kids[-1].short_id}" if len(kids) > 1 else "")
+    db.add(SpecimenEvent(specimen_id=parent.id, event_type="CUT", event_date=date.today(), user_id=user_id,
+                         params={"what": what, "count": len(kids), "size": kids[0].size_text, "project": project}))
     if project != parent.project_code or (user_id is not None and parent.owner_id not in (None, user_id)):
         db.add(SpecimenEvent(specimen_id=parent.id, event_type="USE", event_date=date.today(), user_id=user_id,
-                             params={"what": f"자르기 {kids[0].short_id}" + (f" ~ {kids[-1].short_id}" if len(kids) > 1 else ""),
-                                     "to_project": project}))
+                             params={"what": what, "to_project": project}))
     if data.mark_parent_consumed:
         parent.status = "CONSUMED"
     db.flush()
@@ -331,9 +382,9 @@ def split(db: Session, parent: Specimen, data: SplitIn, user_id: int | None) -> 
     return kids
 
 
-# ── P3. 시험런 생성·탑승 ───────────────────────────────────────────
+# ── P3. 분석런 생성·탑승 ───────────────────────────────────────────
 def find_specimen(db: Session, short_id: str) -> Specimen | None:
-    """각인번호(QV3-102-01)로 찾습니다. 전체번호(QV3-A6-C-102-01-M206K)를 넣어도 됩니다."""
+    """각인번호(QV3-A02-A)로 찾습니다. 전체번호(QV3-A6-C-A02-A-M206K)를 넣어도 됩니다."""
     raw = (short_id or "").strip().upper()
     mk = marking.find_mark(raw) or raw
     spec = db.scalar(select(Specimen).where(Specimen.short_id == mk, Specimen.is_deleted.is_(False)))
@@ -476,7 +527,7 @@ def split_table(text: str) -> list[list[str]]:
 
 
 def parse_results_paste(db: Session, tr: TestRun, text: str) -> tuple[list[dict], list[str]]:
-    """시험런 붙여넣기. 첫 행 머리글: 시편 | W00 | W01 … (grid 필드 값) 또는 시편 | 회차 | 필드키…"""
+    """분석런 붙여넣기. 첫 행 머리글: 시편 | W00 | W01 … (grid 필드 값) 또는 시편 | 회차 | 필드키…"""
     rows = split_table(text)
     if not rows:
         return [], ["붙여넣은 내용이 없습니다."]

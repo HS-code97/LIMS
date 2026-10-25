@@ -9,9 +9,9 @@ from sqlalchemy import select
 
 from app.db import SessionLocal
 from app.main import app
-from app.models import Material, ProcessPreset, TestTemplate
+from app.models import Material, ProcessPreset, Specimen, SpecimenEvent, TestTemplate
 from app.services import param_dict as pdict
-from helpers import api_blanks
+from helpers import api_blanks, new_coil
 
 
 @pytest.fixture(scope="module")
@@ -54,7 +54,7 @@ def test_full_flow(client):
     assert r.status_code == 200, r.text
     sheet = r.json()["specimens"][0]["short_id"]
     nxt = client.get(f"/api/specimens/{sheet}/next?count=3").json()
-    assert nxt["first"] == f"{sheet}{nxt['suggest']:02d}"                 # 전폭 QV3-3 → 블랭크 QV3-301
+    assert nxt["first"] == f"{sheet}{nxt['suggest']:02d}"                 # 전폭 QV3-C → 블랭크 QV3-C01
     r = client.post(f"/api/specimens/{sheet}/split", json={"count": 3, "start": nxt["suggest"]})
     assert r.status_code == 200, r.text
     marks = [c["short_id"] for c in r.json()["children"]]
@@ -101,7 +101,7 @@ def test_full_flow(client):
     r = client.post(f"/api/specimens/{p1}/split", json={"count": 2, "start": 1})
     assert r.status_code == 200, r.text
     kids = [k["short_id"] for k in r.json()["children"]]
-    assert kids == [f"{p1}-01", f"{p1}-02"]
+    assert kids == [f"{p1}-A", f"{p1}-B"]
     assert client.post(f"/api/specimens/{p1}/split", json={"count": 1, "start": 1}).status_code == 409
     r = client.post(f"/api/specimens/{kids[0]}/events", json={"event_type": "PRETREAT", "event_date": "2026-10-22",
                                                               "code": "01", "params": {"type": "Cr-free"}})
@@ -109,13 +109,13 @@ def test_full_flow(client):
     assert client.post(f"/api/specimens/{kids[0]}/events", json={"event_type": "NOTE", "event_date": "2026-10-22",
                                                                  "params": {"memo": "x"}}).status_code == 200
 
-    # 시험런 + 결과 + 붙여넣기 + 사진
+    # 분석런 + 결과 + 붙여넣기 + 사진
     r = client.post("/api/test-runs", json={"template_id": cct_id, "equipment": "CCT-01", "conditions": {"salt_conc": 5},
                                             "start_date": "2026-10-23",
                                             "specimens": [{"short_id": kids[0], "slot": "A-01"}, {"short_id": kids[1]}]})
     assert r.status_code == 200, r.text
     tr = r.json()["test_run_no"]
-    assert tr.startswith("TR-CCT-26")
+    assert tr.startswith("AR-CCT-26")
     r = client.put(f"/api/test-runs/{tr}/results/{kids[0]}/1", json={"metrics": {"red_rust_pct": 2, "junk": 1}})
     assert r.status_code == 200 and r.json()["warnings"]
     assert client.put(f"/api/test-runs/{tr}/results/{kids[0]}/2", json={"metrics": {"red_rust_pct": 200}}).status_code == 422
@@ -162,7 +162,105 @@ def test_full_flow(client):
     assert client.get(f"/api/specimens/{kids[0]}").json()["status"] == "AVAILABLE"
 
 
+def test_numbering_guide(client):
+    """시편체계 안내: 메뉴 맨 위 링크, 코드와 같은 각인 영문·코일코드 제안, 로그인 필요."""
+    page = client.get("/guide/numbering")
+    assert page.status_code == 200
+    html = page.text
+    assert html.index('href="/guide/numbering"') < html.index('<span>내 작업</span>')     # 왼쪽 메뉴 맨 위
+    assert "QV3-A02-K-3" in html and "QV3-A6-E-A03-M206K-H03-T02-P12" in html
+    assert ">QV3</span>" in html and "<code>QV1</code>" in html                         # coil_code_candidates('CQV3141T')
+    assert 'title="I ↔ 숫자 1 혼동"' in html and "<b>K</b><small>10</small>" in html   # MARK_LETTERS: I 제외, 10번째 = K
+    with TestClient(app) as anon:
+        assert anon.get("/guide/numbering", follow_redirects=False).status_code == 303
+
+
+def test_go_mark_without_hyphens(client):
+    """하이픈이 지워진 각인을 읽은 대로 쳐도(QV3A02K3, 'QV3 A02') 검색창·스캐너가 그 시편으로 감 (Q18)."""
+    r = client.post("/api/specimens/intake", json={"coil_no": new_coil(), "project_code": "A6", "count": 1})
+    sheet = r.json()["specimens"][0]
+    r = client.post(f"/api/specimens/{sheet['short_id']}/split", json={"count": 1, "start": 2})
+    mark = r.json()["children"][0]["short_id"]                                # 예: AB1-A02
+    for typed in (mark.replace("-", ""), mark.replace("-", " ").lower()):
+        r = client.get(f"/go?q={typed}", follow_redirects=False)
+        assert r.status_code == 303 and r.headers["location"] == f"/specimens/{mark}", typed
+    assert any(i["label"] == mark for i in client.get(f"/search/suggest?q={mark.replace('-', '')}").json())
+
+
+def test_shear_menu(client):
+    """시편 › 전단: 전폭 고르기(전체번호로도) → 10장 → 블랭크 01~10, 모시편에 CUT 이력, 공정런 미리채움."""
+    r = client.post("/api/specimens/intake", json={"coil_no": new_coil(), "project_code": "A6", "count": 1})
+    sheet = r.json()["specimens"][0]
+    page = client.get(f"/specimens/shear?sid={sheet['short_id']}")
+    assert page.status_code == 200 and "전단" in page.text
+    cands = client.get(f"/api/shear/candidates?coil={sheet['coil_code']}").json()
+    assert [c["short_id"] for c in cands] == [sheet["short_id"]] and cands[0]["level"] == "branch"
+    p = client.get(f"/api/shear/parent/{sheet['display_id']}").json()      # 전체번호(AA1-A6-A-A)로 찾기
+    assert p["short_id"] == sheet["short_id"] and p["children"] == 0 and p["child_stage"] == "B"
+
+    r = client.post(f"/api/specimens/{sheet['short_id']}/split", json={"count": 10, "start": 1})
+    assert r.status_code == 200, r.text
+    kids = r.json()["children"]
+    assert [k["short_id"] for k in kids] == [f"{sheet['short_id']}{n:02d}" for n in range(1, 11)]
+    assert all(k["stage"] == "B" for k in kids)
+    with SessionLocal() as db:
+        sid = db.scalar(select(Specimen.id).where(Specimen.short_id == sheet["short_id"]))
+        ev = db.scalars(select(SpecimenEvent).where(SpecimenEvent.specimen_id == sid,
+                                                    SpecimenEvent.event_type == "CUT")).all()
+    assert len(ev) == 1 and ev[0].params["count"] == 10
+
+    assert client.get(f"/api/shear/parent/{sheet['short_id']}").json()["children"] == 10
+    assert client.get(f"/api/specimens/{sheet['short_id']}/next?count=1").json()["suggest"] == 11
+    wide = {c["short_id"] for c in client.get(f"/api/shear/candidates?coil={sheet['coil_code']}&wide=1").json()}
+    assert {k["short_id"] for k in kids} <= wide                            # 블랭크도 후절단 후보
+    assert client.get("/process-runs/new?specimens=" + ",".join(k["short_id"] for k in kids)).status_code == 200
+
+
+def test_split_plating_and_unplate(client):
+    """블랭크 10장 중 5장씩 다른 조건으로 도금 → 1장 도금 취소(블랭크로 복원) → 다시 도금 가능. 자식이 있으면 취소 막힘."""
+    with SessionLocal() as db:
+        m2 = db.scalar(select(ProcessPreset).where(ProcessPreset.name == "M2"))
+        m2_id, recipe = m2.id, pdict.preset_recipe(m2.overrides)
+    blanks = api_blanks(client, 10)
+    assert client.get("/process-runs/new").status_code == 200
+
+    def plate(specs, cw):
+        body = {"dict_version": pdict.version(), "preset_id": m2_id, "project_code": "A6", "run_date": "2026-10-24",
+                "coating_weight_target": cw, "specimens": specs, "recipe": recipe, "changed_from_preset": [],
+                "warnings": []}
+        r = client.post("/api/process-runs", json=body)
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    r1, r2 = plate(blanks[:5], 60), plate(blanks[5:], 90)
+    assert len(r1["panels"]) == 5 and len(r2["panels"]) == 5
+    cands = {c["short_id"] for c in client.get(f"/api/plating/candidates?coil={blanks[0].split('-')[0]}").json()}
+    assert not cands & set(blanks)                                              # 모두 도금돼 후보에서 빠짐
+
+    sid = blanks[0]
+    before = client.get(f"/api/specimens/{sid}").json()
+    assert before["stage"] == "C" and before["condition_code"]
+    r = client.post(f"/api/specimens/{sid}/unplate", json={"reason": "조건 잘못 선택"})
+    assert r.status_code == 200, r.text
+    after = r.json()
+    assert after["stage"] == "B" and after["condition_code"] is None and after["process_run"] is None
+    assert after["display_id"].split("-")[2] == "B" and before["condition_code"] not in after["display_id"]
+    assert after["run_no"] == r1["run_no"] and after["panels_left"] == 4
+    assert sid in {c["short_id"] for c in client.get(f"/api/plating/candidates?coil={sid.split('-')[0]}").json()}
+    assert client.post(f"/api/specimens/{sid}/unplate").status_code == 422             # 이미 취소됨
+    assert len(plate([sid], 70)["panels"]) == 1                                          # 다시 도금 가능
+
+    kid_parent = blanks[1]
+    assert client.post(f"/api/specimens/{kid_parent}/split", json={"count": 1, "start": 1}).status_code == 200
+    r = client.post(f"/api/specimens/{kid_parent}/unplate")
+    assert r.status_code == 422 and "자식" in r.text
+    with SessionLocal() as db:
+        spec_id = db.scalar(select(Specimen.id).where(Specimen.short_id == sid))
+        types = [e.event_type for e in db.scalars(select(SpecimenEvent).where(SpecimenEvent.specimen_id == spec_id))]
+    assert types.count("PLATE") == 2 and types.count("UNPLATE") == 1
+
+
 def test_admin_project_code(client):
-    r = client.post("/admin/projects", data={"company_project_no": "2026P9994", "project_name": "테스트 과제"},
+    r = client.post("/admin/projects", data={"company_project_no": "2026P999", "project_name": "테스트 과제"},
                     follow_redirects=False)
     assert r.status_code == 303 and "C6" in r.headers["location"]       # A6·B6가 있어 다음 등록 순서 C6

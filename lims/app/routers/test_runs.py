@@ -1,4 +1,4 @@
-"""시험런: 생성·탑승·결과 그리드·셀 입력·엑셀 붙여넣기 (5.4절, 7장 P3·P4)."""
+"""분석런: 생성·탑승·결과 그리드·셀 입력·엑셀 붙여넣기 (5.4절, 7장 P3·P4)."""
 from __future__ import annotations
 
 from datetime import date, timedelta
@@ -22,8 +22,10 @@ router = APIRouter()
 
 def get_tr(db: Session, no: str) -> TestRun:
     tr = db.scalar(select(TestRun).where(TestRun.test_run_no == no))
+    if tr is None and no.upper().startswith("TR-"):      # 옛 번호(0005 이관 전 TR-…)
+        tr = db.scalar(select(TestRun).where(TestRun.test_run_no == "AR-" + no[3:].upper()))
     if tr is None:
-        raise HTTPException(404, f"시험런 {no}이 없습니다.")
+        raise HTTPException(404, f"분석런 {no}이 없습니다.")
     return tr
 
 
@@ -149,7 +151,7 @@ def get_api(no: str, user: User = Depends(require_user), db: Session = Depends(g
 @router.post("/api/test-runs/{no}/board")
 def board(no: str, data: list[Boarding], user: User = Depends(require_user), db: Session = Depends(get_db)):
     tr = get_tr(db, no)
-    ensure_can_edit(user, tr.owner_id)          # 탑승·회수·회차는 시험런 담당자·관리자 (결과 입력은 누구나)
+    ensure_can_edit(user, tr.owner_id)          # 탑승·회수·회차는 분석런 담당자·관리자 (결과 입력은 누구나)
     missing = [b.short_id for b in data if workflow.find_specimen(db, b.short_id) is None]
     if missing:
         raise HTTPException(422, "없는 시편: " + ", ".join(missing))
@@ -223,7 +225,7 @@ def paste(no: str, data: PasteIn, user: User = Depends(require_user), db: Sessio
     boarded = {b.specimen.short_id for b in tr.boardings}
     for it in items:
         if it["short_id"] not in boarded:
-            errors.append(f"{it['short_id']}은 이 시험런에 탑승하지 않았습니다.")
+            errors.append(f"{it['short_id']}은 이 분석런에 탑승하지 않았습니다.")
     warnings: list[str] = []
     if not errors:
         try:

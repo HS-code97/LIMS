@@ -1,4 +1,4 @@
-"""관리: 과제·원소재·코드표·프리셋·시험 템플릿·사용자·욕 분석 (5.1 #6)."""
+"""관리: 과제·원소재·코드표·프리셋·분석 템플릿·사용자·욕 분석 (5.1 #6)."""
 from __future__ import annotations
 
 import json
@@ -7,13 +7,13 @@ from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..auth import API_SCOPES, hash_api_key, hash_password, new_api_key, require_admin, require_user
 from ..db import get_db
-from ..models import (ApiKey, BathAnalysis, Material, MasterCode, ProcessPreset, ProcessRun, Project, Team,
-                      TestTemplate, User)
+from ..models import (ApiKey, BathAnalysis, Material, MasterCode, ProcessPreset, ProcessRun, ProcessVariant, Project,
+                      Specimen, Team, TestTemplate, User)
 from ..services import actuals, marking, workflow
 from ..services.condition_code import CodeBook
 from ..web import render
@@ -21,23 +21,54 @@ from ..web import render
 router = APIRouter()
 
 TABS = [("projects", "과제"), ("materials", "코일"), ("bath", "욕 분석"), ("codes", "코드표"),
-        ("presets", "프리셋"), ("templates", "시험 템플릿"), ("dictionary", "실측 항목·허용편차"),
+        ("presets", "프리셋"), ("variants", "공정 계열"), ("templates", "분석 템플릿"), ("dictionary", "실측 항목·허용편차"),
         ("import", "엑셀 가져오기"), ("users", "사용자"), ("apikeys", "API 키"),
         ("settings", "시스템 설정")]
 API_SCOPE_NAMES = {"pv": "HMI PV 실행기록", "xcut": "X-cut 앱 결과", "files": "파일 업로드"}
-PROJECT_NO = re.compile(r"^(?P<y>\d{4})(?P<k>[A-Z])(?P<n>\d+)$")
+PROJECT_NO = re.compile(r"^(?P<y>\d{4})(?P<k>[A-Z])(?P<n>\d{3})$")
 
 
 def project_code_for(db: Session, company_no: str) -> str:
-    """사내 과제번호 2026P1234 → 그해 등록 순서 영문 + 연도 끝자리 (A6, B6, …). 사내 번호는 DB에 연결
+    """사내 과제번호 2026P123(8자) → 그해 등록 순서 영문 + 연도 끝자리 (A6, B6, …). 사내 번호는 DB에 연결
     (시편번호 체계 3.3절, D-13). X·Y·Z는 공용 코드로 예약."""
     m = PROJECT_NO.match(company_no.strip().upper())
     if not m:
-        raise HTTPException(422, "사내 과제번호 형식: 2026P1234 (연도4 + 성격1 + 일련번호)")
+        raise HTTPException(422, "사내 과제번호 형식: 2026P123 (연도4 + 성격1 + 일련번호3, 8자)")
     try:
         return marking.next_project_code(db, int(m["y"]))
     except marking.MarkingError as e:
         raise HTTPException(409, str(e))
+
+
+def variant_families(db: Session) -> list[dict]:
+    """공정 계열 탭: 계열(M2)마다 조건 카드(변형번호)와 쓰인 시편·공정런 수, 표준 대비 바뀐 값.
+    같은 지문이 다른 계열에도 있으면(코드표 등록으로 X → M3 승격) 그 카드를 '→'로 보여 줍니다."""
+    from ..services import condition_code as cc
+    rows = db.scalars(select(ProcessVariant).order_by(ProcessVariant.family, ProcessVariant.seq)).all()
+    specs: dict = {}
+    runs: dict = {}
+    for code, seq, run_id, n in db.execute(
+            select(Specimen.condition_code, Specimen.variant_seq, Specimen.process_run_id, func.count(Specimen.id))
+            .where(Specimen.is_deleted.is_(False), Specimen.variant_seq.is_not(None))
+            .group_by(Specimen.condition_code, Specimen.variant_seq, Specimen.process_run_id)):
+        k = (code[:2], seq)                                 # 부착량·소둔 등급이 달라도 같은 카드
+        specs[k] = specs.get(k, 0) + n
+        runs.setdefault(k, set()).add(run_id)
+    counts = {k: (n, len(runs[k])) for k, n in specs.items()}
+    by_fp: dict = {}
+    for v in rows:
+        by_fp.setdefault(v.fingerprint, []).append(v)
+    presets = {p.id: p for p in db.scalars(select(ProcessPreset))}
+    out: dict[str, dict] = {}
+    for v in rows:
+        fam = out.setdefault(v.family, {"family": v.family, "standard": cc.standard_of(db, v.family), "cards": []})
+        std = fam["standard"]
+        n, r = counts.get((v.family, v.seq), (0, 0))
+        out[v.family]["cards"].append({
+            "v": v, "specimens": n, "runs": r, "preset": presets.get(v.preset_id),
+            "diff": cc.describe_changes(v.proc_values, std.proc_values) if std and v.seq else "",
+            "moved": [o.variant_id for o in by_fp[v.fingerprint] if o.family != v.family]})
+    return list(out.values())
 
 
 def _back(tab: str, msg: str = "") -> RedirectResponse:
@@ -58,8 +89,14 @@ def admin_page(request: Request, tab: str = "projects", msg: str = "", user: Use
         ctx["bath_values"] = actuals.bath_values
     elif tab == "codes":
         ctx["codes"] = db.scalars(select(MasterCode).order_by(MasterCode.category, MasterCode.code)).all()
+        # 공정런 미리보기의 [코드표에 등록] (X 해소): 분류·코드·이름·spec을 채운 채로 엽니다
+        q = request.query_params
+        if q.get("category"):
+            ctx["prefill"] = {k: q.get(k, "") for k in ("category", "code", "name", "spec", "description")}
     elif tab == "presets":
         ctx["presets"] = db.scalars(select(ProcessPreset).order_by(ProcessPreset.scope, ProcessPreset.id)).all()
+    elif tab == "variants":
+        ctx["families"] = variant_families(db)
     elif tab == "templates":
         ctx["tpls"] = db.scalars(select(TestTemplate).order_by(TestTemplate.test_type, TestTemplate.code,
                                                                TestTemplate.version.desc())).all()
@@ -197,7 +234,9 @@ def edit_code(category: str = Form(...), code: str = Form(...), name: str = Form
     db.flush()
     # 코드표가 바뀌면 전체번호 꼬리의 조건부를 다시 만듭니다. 각인번호는 그대로(시편번호 체계 3.3절)
     codes = CodeBook.load(db)
-    n = sum(workflow.refresh_condition_codes(db, run, codes) for run in db.scalars(select(ProcessRun)))
+    # 새 변형번호를 받는 시편이 생길 수 있으므로 공정런 순서대로 (번호는 먼저 쓴 조건부터)
+    n = sum(workflow.refresh_condition_codes(db, run, codes)
+            for run in db.scalars(select(ProcessRun).order_by(ProcessRun.run_date, ProcessRun.run_no)))
     db.commit()
     return _back("codes", f"{category} {obj.code} 저장" + (f" — 현재 조건부가 바뀐 시편 {n}개" if n else ""))
 

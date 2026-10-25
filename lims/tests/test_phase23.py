@@ -56,21 +56,21 @@ def test_excel_import(client):
     wb = load_workbook(io.BytesIO(wb_bytes))
     # 양식 예시 그대로(CQV3141T → QV3)는 기준 시나리오와 겹치므로 새 코일 CXM5123 → XM5로 바꿈
     wb["입고"]["A2"], wb["입고"]["B2"] = "CXM5123T", "Y6"
-    wb["전단"]["A2"] = "XM5-1"
-    wb["공정런"]["B2"], wb["공정런"]["F2"], wb["공정런"]["G2"] = "Y6", "XM5-101~103", "CXM5123"
-    wb["분기"]["A2"] = "XM5-101"
-    wb["실측"]["B3"] = "XM5-101"
-    wb["시험결과"]["E2"] = wb["시험결과"]["E3"] = "XM5-101-01"
+    wb["전단"]["A2"] = "XM5-A"
+    wb["공정런"]["B2"], wb["공정런"]["F2"], wb["공정런"]["G2"] = "Y6", "XM5-A01~A03", "CXM5123"
+    wb["분기"]["A2"] = "XM5-A01"
+    wb["실측"]["B3"] = "XM5-A01"
+    wb["분석결과"]["E2"] = wb["분석결과"]["E3"] = "XM5-A01-A"
     buf = io.BytesIO()
     wb.save(buf)
     files = {"file": ("imp.xlsx", buf.getvalue())}
     dry = client.post("/api/import/excel", files=files, data={"dry_run": "true"}).json()
     assert not dry["errors"], dry["errors"]
-    assert not dry["saved"] and client.get("/api/specimens/XM5-101").status_code == 404
+    assert not dry["saved"] and client.get("/api/specimens/XM5-A01").status_code == 404
     real = client.post("/api/import/excel", files=files, data={"dry_run": "false"}).json()
     assert real["saved"] and real["created"]["results"] == 2, real
-    assert client.get("/api/specimens/XM5-101-01").json()["display_id"] == "XM5-Y6-C-101-01-M206K"
-    p = client.get("/api/specimens/XM5-101/params").json()
+    assert client.get("/api/specimens/XM5-A01-A").json()["display_id"] == "XM5-Y6-C-A01-A-M206K"
+    p = client.get("/api/specimens/XM5-A01/params").json()
     assert p["out.cw_top"]["actual"] == 57 and p["pot.T"]["badge"] == "세션"
     again = client.post("/api/import/excel", files=files, data={"dry_run": "true"}).json()
     assert any("이미 쓰인" in e for e in again["errors"])
@@ -125,7 +125,7 @@ def test_xcut_and_reports(client, run):
         {"short_id": panel, "cycle": 0, "blister_area_pct": 2.4, "blister_count": 17, "max_blister_mm": 1.2, "creep_mm": 0.8}]})
     assert r.status_code == 200, r.text
     tr = r.json()["test_run_no"]
-    assert tr.startswith("TR-XCUT-")
+    assert tr.startswith("AR-XCUT-")
     assert client.post("/api/integrations/xcut", json={"results": [{"short_id": panel, "blister_area_pct": 300}]}).status_code == 422
     img = io.BytesIO()
     Image.new("RGB", (80, 60), "gray").save(img, "JPEG")

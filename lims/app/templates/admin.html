@@ -15,7 +15,7 @@
   {% if user.is_admin %}
   <section class="card"><header><h2>과제 추가</h2></header>
     <form class="body form" method="post" action="/admin/projects">
-      <label class="f">사내 과제번호<input class="in mono" name="company_project_no" placeholder="2026P1234"></label>
+      <label class="f">사내 과제번호<input class="in mono" name="company_project_no" placeholder="2026P123" maxlength="8"></label>
       <label class="f">또는 공통 과제코드<input class="in mono" name="common_code" placeholder="X6 공통 · Y6 선행 · Z6 기타"></label>
       <label class="f">과제명<input class="in" name="project_name" required></label>
       <label class="f">책임자<select class="in" name="manager_id"><option value="">-</option>{% for u in users %}<option value="{{ u.id }}">{{ u.name }}</option>{% endfor %}</select></label>
@@ -32,7 +32,7 @@
   <section class="card"><header><h2>코일 등록</h2><span class="meta">코일코드는 자동 제안 (CQV3141T → QV3)</span></header>
     <form class="body form" method="post" action="/admin/materials">
       <label class="f">코일번호<input class="in mono" name="coil_no" required placeholder="CQV3141T"></label>
-      <div class="row"><label class="f">강종<input class="in" name="steel_grade" placeholder="SPCC"></label><label class="f">두께 (mm)<input class="in num" name="thickness_mm" type="number" step="0.01"></label></div>
+      <div class="row"><label class="f">강종<input class="in" name="steel_grade" list="steel-grades" placeholder="예: 590DP, 1180 TRIP"></label><label class="f">두께 (mm)<input class="in num" name="thickness_mm" type="number" step="0.01"></label></div>
       <label class="f">입고일<input class="in" type="date" name="received_date"></label>
       <label class="f">비고<input class="in" name="note"></label>
       <button class="btn primary">등록</button></form></section>
@@ -87,14 +87,29 @@
 
 {% elif tab == 'presets' %}
 <section class="card"><header><h2>공정 프리셋</h2><span class="meta">공용(관리자) · 팀 · 개인 — 사전 기본값과 다른 값만 저장</span></header>
-  <div class="tablewrap"><table class="t"><tr><th>이름</th><th>범위</th><th>계열·욕</th><th>기본값과 다른 값</th><th>사전</th><th>만든 사람</th><th></th></tr>
-    {% for p in presets %}<tr {% if not p.is_active %}style="opacity:.5"{% endif %}><td><b>{{ p.name }}</b></td><td><span class="chip">{{ p.scope }}</span></td><td class="mono">{{ p.coating_system }}{{ p.bath_code }}</td>
+  <div class="tablewrap"><table class="t"><tr><th>이름</th><th>범위</th><th>조건 카드</th><th>기본값과 다른 값</th><th>사전</th><th>만든 사람</th><th></th></tr>
+    {% for p in presets %}<tr {% if not p.is_active %}style="opacity:.5"{% endif %}><td><b>{{ p.name }}</b></td><td><span class="chip">{{ p.scope }}</span></td><td class="mono">{% if p.variant_id %}<a href="?tab=variants#{{ p.coating_system }}{{ p.bath_code }}">{{ p.variant_id }}</a>{% if p.variant_seq == 0 %} <span class="small muted">표준</span>{% endif %}{% else %}{{ p.coating_system }}{{ p.bath_code }}{% endif %}</td>
       <td class="mono small">{% for sec, vals in p.overrides.items() %}{{ sec }}{{ vals|tojson_compact }} {% endfor %}</td><td class="mono small">{{ p.dict_version }}</td>
       <td>{{ p.owner.name if p.owner else '' }}</td>
       <td>{% if user.is_admin %}<form method="post" action="/admin/presets/{{ p.id }}/toggle"><button class="btn sm">{{ '끄기' if p.is_active else '켜기' }}</button></form>{% endif %}</td></tr>{% endfor %}</table></div></section>
 
+{% elif tab == 'variants' %}
+<section class="card"><header><h2>공정 계열 · 조건 카드</h2><span class="meta">꼬리 M206K<b>03</b>의 03 = 계열 M2 안의 조건 카드 · 00(공용 표준 프리셋 그대로)은 꼬리에 쓰지 않음 · 번호는 다시 쓰지 않음</span></header>
+  <div class="body small muted" style="padding-bottom:0">같은 카드 = 부착량을 뺀 목표 공정값이 모두 같음. 부착량·소둔 등급은 조건부 5자에 보이므로 카드가 같아도 꼬리 앞부분은 다를 수 있습니다(M209K02 · M206K02). 같은 조건부 안에서 부착량 목표가 겹치면(45·50 → 05) 나중 것은 새 카드를 받습니다.</div>
+  {% for f in families %}
+  <h3 class="mono" id="{{ f.family }}" style="margin:16px 16px 6px">{{ f.family }} <span class="small muted" style="font-family:var(--f-body)">{% if f.standard %}표준 = {{ f.standard.name }}{% else %}공용 표준 없음 — 모든 조건에 번호가 붙음{% endif %}{% if 'X' in f.family %} · 코드표에 없는 조성·조건(관리 › 코드표에 등록하면 해당 계열로 옮겨감){% endif %}</span></h3>
+  <div class="tablewrap"><table class="t"><tr><th>카드</th><th>이름</th><th>표준 대비 바뀐 값</th><th>출처</th><th class="n">시편</th><th class="n">공정런</th><th></th></tr>
+    {% for c in f.cards %}{% set v = c.v %}<tr {% if not c.specimens and c.moved %}style="opacity:.55"{% endif %}>
+      <td class="mono"><b>{{ v.variant_id }}</b>{% if v.seq == 0 %} <span class="chip">표준</span>{% endif %}</td>
+      <td>{{ v.name }}</td><td class="small">{{ c.diff if c.diff != v.name }}</td>
+      <td class="small">{{ {'PUBLIC': '공용 프리셋', 'TEAM': '팀 프리셋', 'PERSONAL': '개인 프리셋', 'RUN': '공정런'}[v.origin] }}{% if c.preset %} {{ c.preset.name }}{% endif %}</td>
+      <td class="n">{{ c.specimens }}</td><td class="n">{{ c.runs }}</td>
+      <td class="small">{% if c.specimens %}<a href="/search?code={{ v.variant_id }}">시편 검색</a>{% endif %}{% for m in c.moved %} → {{ m }}{% endfor %}</td></tr>{% endfor %}</table></div>
+  {% else %}<div class="body muted">아직 조건 카드가 없습니다.</div>{% endfor %}
+</section>
+
 {% elif tab == 'templates' %}
-<section class="card"><header><h2>시험 템플릿</h2><span class="meta">초기값은 JSON 시드(data/seed/test_templates). 고치면 새 버전이 생기고 기존 결과는 저장 당시 버전으로 해석합니다.</span>
+<section class="card"><header><h2>분석 템플릿</h2><span class="meta">초기값은 JSON 시드(data/seed/test_templates). 고치면 새 버전이 생기고 기존 결과는 저장 당시 버전으로 해석합니다.</span>
   <div class="r"><a class="btn primary sm" href="/admin/templates/edit">{{ icon('plus', 14) }} 새 템플릿</a></div></header>
   <div class="tablewrap"><table class="t"><tr><th>코드</th><th>버전</th><th>이름</th><th>종류</th><th>팀</th><th class="n">기본 회차</th><th>필드 (grid ★ / maps_to →)</th><th></th></tr>
     {% for t in tpls %}<tr {% if not t.is_active %}style="opacity:.5"{% endif %}><td class="mono"><b>{{ t.code }}</b></td><td class="mono">v{{ t.version }}</td><td>{{ t.name }}</td><td class="mono">{{ t.test_type }}</td><td>{{ t.team.name if t.team else '' }}</td>
@@ -122,7 +137,7 @@
 
 {% elif tab == 'import' %}
 <div class="grid2" x-data="imp()">
-  <section class="card"><header><h2>{{ icon('upload') }}과거 엑셀 데이터 가져오기</h2><span class="meta">시트: 공정런 → 분기 → 실측 → 시험결과 · 오류가 하나라도 있으면 아무것도 저장하지 않습니다</span></header>
+  <section class="card"><header><h2>{{ icon('upload') }}과거 엑셀 데이터 가져오기</h2><span class="meta">시트: 공정런 → 분기 → 실측 → 분석결과 · 오류가 하나라도 있으면 아무것도 저장하지 않습니다</span></header>
     <div class="body form">
       <a class="btn" href="/api/import/template.xlsx">{{ icon('download', 16) }} 양식 내려받기 (예시 포함)</a>
       <input class="in" type="file" accept=".xlsx" x-ref="f" style="height:auto;padding:6px">
@@ -134,7 +149,7 @@
       <div class="flash" :class="rep && rep.errors.length ? 'err' : 'ok'" x-text="rep && (rep.errors.length ? '오류 ' + rep.errors.length + '건' : (rep.saved ? '저장 완료' : '검증 통과 — 저장할 수 있습니다'))"></div>
       <ul class="upl-list"><template x-for="e in (rep ? rep.errors : [])"><li><span class="s error">오류</span><span x-text="e"></span></li></template>
         <template x-for="w in (rep ? rep.warnings : [])"><li><span class="s unmatched">주의</span><span x-text="w"></span></li></template></ul>
-      <div class="small mono" x-show="rep" x-text="rep && ('공정런 ' + rep.created.process_runs.length + ' · 시편 ' + rep.created.specimens.length + ' · 실측 ' + rep.created.actuals + ' · 시험런 ' + rep.created.test_runs.length + ' · 결과 ' + rep.created.results)"></div>
+      <div class="small mono" x-show="rep" x-text="rep && ('공정런 ' + rep.created.process_runs.length + ' · 시편 ' + rep.created.specimens.length + ' · 실측 ' + rep.created.actuals + ' · 분석런 ' + rep.created.test_runs.length + ' · 결과 ' + rep.created.results)"></div>
     </div></section>
 </div>
 
@@ -216,6 +231,7 @@ function imp() {
   };
 }
 function fillCode(c) { const f = document.getElementById("codeform"); for (const k in c) if (f[k]) f[k].value = c[k]; f.scrollIntoView({behavior: "smooth"}); }
+{% if prefill and user.is_admin %}document.addEventListener("DOMContentLoaded", () => fillCode({{ prefill|tojson }}));{% endif %}
 function bathApply() {
   return {
     id: null, cands: [], pick: [], extra: "",

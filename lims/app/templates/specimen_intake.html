@@ -7,7 +7,7 @@
 
 <div class="grid2">
   <section class="card">
-    <header><h2>{{ icon('spec') }}입고 정보</h2><span class="meta">각인번호 = 코일코드-전폭번호 (예: QV3-1)</span></header>
+    <header><h2>{{ icon('spec') }}입고 정보</h2><span class="meta">각인번호 = 코일코드-전폭번호 (예: QV3-A)</span></header>
     <div class="body form">
       <div class="row">
         <label class="f">현장 코일번호<input class="in mono" x-model="f.coil_no" @input.debounce.300ms="suggest()" placeholder="CQV3141T" autofocus></label>
@@ -21,12 +21,12 @@
       <div class="row">
         <label class="f">과제<select class="in mono" x-model="f.project_code">
           {% for p in projects %}<option value="{{ p.project_code }}">{{ p.project_code }}{% if p.company_project_no %} = {{ p.company_project_no }}{% endif %} · {{ p.project_name[:20] }}</option>{% endfor %}</select></label>
-        <label class="f">매수<input class="in num" type="number" min="1" max="9" x-model.number="f.count" @input.debounce.300ms="suggest()"></label>
-        <label class="f">시작 전폭번호<input class="in num mono" type="number" min="1" max="9" x-model.number="f.sheet_start"></label>
+        <label class="f">매수<input class="in num" type="number" min="1" max="21" x-model.number="f.count" @input.debounce.300ms="suggest()"></label>
+        <label class="f">시작 전폭번호 (n번째 = 영문)<input class="in num mono" type="number" min="1" max="21" x-model.number="f.sheet_start"></label>
         <label class="f">채취위치<input class="in mono" x-model="f.coil_position" maxlength="2" style="width:60px" :placeholder="s.position || ''"></label>
       </div>
       <div class="row">
-        <label class="f">강종<input class="in" x-model="f.steel_grade" placeholder="SPCC"></label>
+        <label class="f">강종<input class="in" x-model="f.steel_grade" list="steel-grades" placeholder="예: 590DP, 1180 TRIP"></label>
         <label class="f">두께 (mm)<input class="in num" type="number" step="0.01" x-model.number="f.thickness_mm"></label>
         <label class="f">크기<input class="in" x-model="f.size_text"></label>
       </div>
@@ -42,11 +42,11 @@
     <div class="body small">
       <p style="margin-top:0">시편에는 <b>각인번호</b>만 새깁니다: <span class="mono">코일-가지[-후절단][-조각]</span></p>
       <ul>
-        <li><span class="mono">QV3-1</span> 전폭시편 1번 (이 화면)</li>
-        <li><span class="mono">QV3-102</span> 전폭 1번을 자른 2번 블랭크 (시편 상세 › 자르기)</li>
-        <li><span class="mono">QV3-102-01</span> 도금판을 자른 실험편, <span class="mono">QV3-102-01-3</span> 분석조각</li>
+        <li><span class="mono">QV3-A</span> 전폭시편 1번 (이 화면)</li>
+        <li><span class="mono">QV3-A02</span> 전폭 1번을 자른 2번 블랭크 (시편 › 전단)</li>
+        <li><span class="mono">QV3-A02-A</span> 도금판을 자른 실험편, <span class="mono">QV3-A02-A-3</span> 분석조각</li>
       </ul>
-      <p>과제·단계·조건은 DB의 <b>전체번호</b>에만 있습니다: <span class="mono">QV3-A6-C-102-M206K</span>. 도금·열처리·도장을 해도 각인번호는 그대로이고 단계와 꼬리만 바뀝니다.</p>
+      <p>과제·단계·조건은 DB의 <b>전체번호</b>에만 있습니다: <span class="mono">QV3-A6-C-A02-M206K</span>. 도금·열처리·도장을 해도 각인번호는 그대로이고 단계와 꼬리만 바뀝니다.</p>
       <p class="muted" style="margin-bottom:0">같은 현장 코일(채취위치만 다르거나 다시 가져온 경우)은 같은 코일코드를 쓰고 전폭번호가 이어집니다. 자세한 규칙: 저장소의 <span class="mono">시편번호 체계.md</span></p>
     </div>
     {% if coils %}
@@ -85,8 +85,10 @@ function intakePage() {
       } catch (e) { LIMS.fail(e); }
     },
     preview() {
+      // 전폭 n번째 → 각인 영문 (marking.MARK_LETTERS와 같은 순서, I·O·Q·S·Z 제외)
+      const L = "{{ mark_letters }}", ch = (k) => L[k - 1] || "?";
       const c = (this.f.coil_code || "???").toUpperCase(), a = this.f.sheet_start || 1, n = this.f.count || 1;
-      return n > 1 ? `${c}-${a} ~ ${c}-${a + n - 1} (${n}장)` : `${c}-${a}`;
+      return n > 1 ? `${c}-${ch(a)} ~ ${c}-${ch(a + n - 1)} (${n}장)` : `${c}-${ch(a)}`;
     },
     async save() {
       this.busy = true;

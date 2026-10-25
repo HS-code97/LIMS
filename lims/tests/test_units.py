@@ -92,6 +92,13 @@ def test_marking_reads_without_hyphens():
         m = shape.match(mark.replace("-", ""))
         assert m and "-".join(g for g in m.groups() if g) == mark
         assert marking.parse_mark(mark)
+        assert marking.find_mark(mark.replace("-", "")) == mark                # 읽은 대로 친 번호로도 찾음
+    for typed in ("QV3A02K3", "qv3a02k3", "QV3 A02K3", "QV3 / A02K3", "QV3-A02K3", "QV3 A02 K 3"):
+        assert marking.find_mark(typed) == "QV3-A02-K-3", typed
+    # 모양이 다르면 각인번호로 읽지 않음: 후절단 없는 분석조각, 각인 밖 영문, 과제 붙은 번호, 코일번호·런 번호
+    for other in ("QV3A023", "QV3A02I3", "QV3A6", "CQV3141T", "PR-26-0001", "AR-SEM-26001", "QV3", "QV3A02K3X"):
+        assert marking.find_mark(other) is None, other
+    assert marking.find_mark("QV3A02K_W03_front.jpg") is None                 # 글 속에서는 하이픈 있는 번호만
 
 
 def test_coil_code_candidates():

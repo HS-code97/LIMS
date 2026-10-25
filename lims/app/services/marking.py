@@ -42,6 +42,10 @@ _TAIL = rf"(?P<branch>{_L}(?:\d{{2}})?)(?:-(?P<cut>{_L})(?:-(?P<piece>[1-9]))?)?
 MARK_RE = re.compile(rf"(?<![A-Z0-9])(?P<coil>[A-Z]{{2}}\d)-{_TAIL}(?![A-Z0-9]|-[A-Z0-9])")
 # 전체번호: 코일-과제-단계-가지… (꼬리는 무시)
 FULL_RE = re.compile(rf"(?<![A-Z0-9])(?P<coil>[A-Z]{{2}}\d)-[A-Z]\d-[A-E]-{_TAIL}(?![A-Z0-9])")
+# 하이픈이 지워진 각인을 읽은 대로 친 번호(QV3A02K3, 'QV3 A02K3'): 영문·숫자 교대라 끊는 자리가 하나뿐입니다.
+# 글 속에서 찾지 않고 입력 전체가 이 모양일 때만 씁니다(파일명 등에서 엉뚱한 번호를 잡지 않게).
+_SEP = re.compile(r"[\s\-/]+")
+COMPACT_RE = re.compile(rf"(?P<coil>[A-Z]{{2}}\d)(?P<branch>{_L}(?:\d{{2}})?)(?:(?P<cut>{_L})(?P<piece>[1-9])?)?")
 
 
 class MarkingError(ValueError):
@@ -61,12 +65,16 @@ def _mark_of(m: re.Match) -> str:
 
 
 def find_mark(text: str) -> str | None:
-    """글 속의 각인번호를 찾습니다. 전체번호(QV3-A6-C-A02-M206K)를 넣어도 각인번호로 바꿔 줍니다."""
+    """글 속의 각인번호를 찾습니다. 전체번호(QV3-A6-C-A02-M206K)나 하이픈 없이 친 각인번호(QV3A02K3,
+    'QV3 A02K3')를 넣어도 각인번호로 바꿔 줍니다."""
     up = (text or "").upper()
     m = FULL_RE.search(up)
     if m:
         return _mark_of(m)
     m = MARK_RE.search(up)
+    if m:
+        return _mark_of(m)
+    m = COMPACT_RE.fullmatch(_SEP.sub("", up))
     return _mark_of(m) if m else None
 
 

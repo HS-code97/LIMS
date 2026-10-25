@@ -175,6 +175,18 @@ def test_numbering_guide(client):
         assert anon.get("/guide/numbering", follow_redirects=False).status_code == 303
 
 
+def test_go_mark_without_hyphens(client):
+    """하이픈이 지워진 각인을 읽은 대로 쳐도(QV3A02K3, 'QV3 A02') 검색창·스캐너가 그 시편으로 감 (Q18)."""
+    r = client.post("/api/specimens/intake", json={"coil_no": new_coil(), "project_code": "A6", "count": 1})
+    sheet = r.json()["specimens"][0]
+    r = client.post(f"/api/specimens/{sheet['short_id']}/split", json={"count": 1, "start": 2})
+    mark = r.json()["children"][0]["short_id"]                                # 예: AB1-A02
+    for typed in (mark.replace("-", ""), mark.replace("-", " ").lower()):
+        r = client.get(f"/go?q={typed}", follow_redirects=False)
+        assert r.status_code == 303 and r.headers["location"] == f"/specimens/{mark}", typed
+    assert any(i["label"] == mark for i in client.get(f"/search/suggest?q={mark.replace('-', '')}").json())
+
+
 def test_shear_menu(client):
     """시편 › 전단: 전폭 고르기(전체번호로도) → 10장 → 블랭크 01~10, 모시편에 CUT 이력, 공정런 미리채움."""
     r = client.post("/api/specimens/intake", json={"coil_no": new_coil(), "project_code": "A6", "count": 1})
